@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/ontology/buyer-ops/0.1.0",
+  "title": "Buyer Operations Ontology v0 Core Records",
+  "description": "Executable structural schemas for canonical records required by OT-01 and Texas agreement admission. Transition, temporal, authority, and cross-record invariants in ONTOLOGY-V0-CONTRACT.md remain mandatory.",
+  "oneOf": [
+    { "$ref": "#/$defs/Person" },
+    { "$ref": "#/$defs/BuyingParty" },
+    { "$ref": "#/$defs/BuyerJourney" },
+    { "$ref": "#/$defs/ConsentGrant" },
+    { "$ref": "#/$defs/Suppression" },
+    { "$ref": "#/$defs/QualificationObservation" },
+    { "$ref": "#/$defs/Appointment" },
+    { "$ref": "#/$defs/Commitment" },
+    { "$ref": "#/$defs/PropertyReference" },
+    { "$ref": "#/$defs/IabsDelivery" },
+    { "$ref": "#/$defs/WrittenBuyerAgreement" },
+    { "$ref": "#/$defs/AgreementQualification" },
+    { "$ref": "#/$defs/RepresentationRelationship" },
+    { "$ref": "#/$defs/EpistemicItem" },
+    { "$ref": "#/$defs/EffectAttempt" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" },
+    "ActorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorType", "actorId"],
+      "properties": {
+        "actorType": { "enum": ["person", "license_holder", "service_principal", "system_migration"] },
+        "actorId": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "CanonicalFields": {
+      "type": "object",
+      "required": [
+        "id", "tenantId", "schemaVersion", "recordType", "version", "createdAt", "updatedAt",
+        "effectiveFrom", "createdBy", "sourceEvidenceIds", "status"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "schemaVersion": { "const": "buyer-ops/0.1.0" },
+        "recordType": { "$ref": "#/$defs/Id" },
+        "version": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "effectiveFrom": { "$ref": "#/$defs/Timestamp" },
+        "effectiveTo": { "$ref": "#/$defs/Timestamp" },
+        "createdBy": { "$ref": "#/$defs/ActorRef" },
+        "sourceEvidenceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Id" }
+        },
+        "supersedesId": { "$ref": "#/$defs/Id" },
+        "status": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "ContactEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpointId", "type", "normalizedValue", "verificationState", "status"],
+      "properties": {
+        "endpointId": { "$ref": "#/$defs/Id" },
+        "type": { "enum": ["email", "phone"] },
+        "normalizedValue": { "type": "string", "minLength": 3 },
+        "verificationState": { "enum": ["unverified", "provider_observed", "verified", "disputed"] },
+        "status": { "enum": ["active", "temporarily_unavailable", "invalid", "suppressed"] }
+      }
+    },
+    "Person": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["recordType", "identityState", "displayName", "endpoints"],
+          "properties": {
+            "recordType": { "const": "Person" },
+            "identityState": { "enum": ["provisional", "resolved", "ambiguous", "conflict"] },
+            "displayName": { "type": "string" },
+            "endpoints": { "type": "array", "items": { "$ref": "#/$defs/ContactEndpoint" } }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "BuyingParty": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "members"],
+          "properties": {
+            "recordType": { "const": "BuyingParty" },
+            "members": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["personId", "role"],
+                "properties": {
+                  "personId": { "$ref": "#/$defs/Id" },
+                  "role": { "enum": ["buyer", "co_buyer", "decision_participant", "observer"] }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "BuyerJourney": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "buyingPartyId", "ownerLicenseHolderId", "journeyState", "qualificationState", "representationState"],
+          "properties": {
+            "recordType": { "const": "BuyerJourney" },
+            "buyingPartyId": { "$ref": "#/$defs/Id" },
+            "ownerLicenseHolderId": { "$ref": "#/$defs/Id" },
+            "journeyState": {
+              "enum": ["captured", "contacted", "qualifying", "nurture", "consultation_ready", "consultation_booked", "representation_pending", "represented", "searching", "under_contract", "closed", "suppressed", "ineligible", "released", "dormant", "blocked"]
+            },
+            "qualificationState": { "enum": ["not_started", "collecting", "sufficient_for_consult", "stale", "contradicted", "declined"] },
+            "representationState": { "enum": ["unconfirmed", "not_represented", "agreement_pending", "represented", "non_representation_showing_only", "expired", "terminated", "conflict"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ConsentGrant": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "personId", "channel", "purpose", "principalId", "basis", "grantedAt", "validityState"],
+          "properties": {
+            "recordType": { "const": "ConsentGrant" },
+            "personId": { "$ref": "#/$defs/Id" },
+            "endpointId": { "$ref": "#/$defs/Id" },
+            "channel": { "enum": ["email", "sms", "phone", "form"] },
+            "purpose": { "$ref": "#/$defs/Id" },
+            "principalId": { "$ref": "#/$defs/Id" },
+            "basis": { "enum": ["affirmative", "inbound_response_policy", "contractual", "other_approved"] },
+            "grantedAt": { "$ref": "#/$defs/Timestamp" },
+            "expiresAt": { "$ref": "#/$defs/Timestamp" },
+            "presentationEvidenceId": { "$ref": "#/$defs/Id" },
+            "validityState": { "enum": ["active", "expired", "revoked", "superseded", "disputed"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Suppression": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "subjectId", "scope", "reason", "suppressedAt", "validityState"],
+          "properties": {
+            "recordType": { "const": "Suppression" },
+            "subjectId": { "$ref": "#/$defs/Id" },
+            "endpointId": { "$ref": "#/$defs/Id" },
+            "scope": { "enum": ["channel_purpose", "channel_all", "all_marketing", "all_non_required_contact"] },
+            "reason": { "enum": ["opt_out", "invalid_endpoint", "policy", "legal", "agent_hold"] },
+            "suppressedAt": { "$ref": "#/$defs/Timestamp" },
+            "validityState": { "enum": ["active", "lifted", "superseded"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "QualificationObservation": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "journeyId", "criterionId", "epistemicItemId", "observationState"],
+          "properties": {
+            "recordType": { "const": "QualificationObservation" },
+            "journeyId": { "$ref": "#/$defs/Id" },
+            "criterionId": { "$ref": "#/$defs/Id" },
+            "epistemicItemId": { "$ref": "#/$defs/Id" },
+            "observationState": { "enum": ["unknown", "buyer_declined", "asserted", "verified", "inferred", "stale", "contradicted", "not_applicable"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Appointment": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "journeyId", "appointmentType", "participantIds", "startsAt", "endsAt", "timeZone", "appointmentState"],
+          "properties": {
+            "recordType": { "const": "Appointment" },
+            "journeyId": { "$ref": "#/$defs/Id" },
+            "appointmentType": { "$ref": "#/$defs/Id" },
+            "participantIds": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/Id" } },
+            "startsAt": { "$ref": "#/$defs/Timestamp" },
+            "endsAt": { "$ref": "#/$defs/Timestamp" },
+            "timeZone": { "$ref": "#/$defs/Id" },
+            "locationOrMode": { "$ref": "#/$defs/Id" },
+            "providerEventId": { "$ref": "#/$defs/Id" },
+            "providerVersion": { "$ref": "#/$defs/Id" },
+            "appointmentState": { "enum": ["proposed", "held", "provider_pending", "confirmed", "completed", "cancelled", "no_show", "unknown_outcome"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Commitment": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "journeyId", "obligorId", "beneficiaryIds", "description", "dueAt", "commitmentState"],
+          "properties": {
+            "recordType": { "const": "Commitment" },
+            "journeyId": { "$ref": "#/$defs/Id" },
+            "obligorId": { "$ref": "#/$defs/Id" },
+            "beneficiaryIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Id" } },
+            "description": { "type": "string", "minLength": 1 },
+            "dueAt": { "$ref": "#/$defs/Timestamp" },
+            "commitmentState": { "enum": ["open", "in_progress", "blocked", "fulfilled", "failed", "cancelled", "superseded"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "PropertyReference": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "addressText", "suppliedBy", "suppliedAt", "sourceType"],
+          "properties": {
+            "recordType": { "const": "PropertyReference" },
+            "addressText": { "type": "string", "minLength": 1 },
+            "suppliedBy": { "$ref": "#/$defs/ActorRef" },
+            "suppliedAt": { "$ref": "#/$defs/Timestamp" },
+            "sourceType": { "enum": ["buyer", "agent", "document", "other_manual"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "IabsDelivery": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "formId", "formVersion", "jurisdiction", "responsibleLicenseHolderId", "brokerageId", "recipientPersonId", "deliveryChannel", "deliveredAt", "trigger", "artifactId", "artifactDigest", "evidenceIds", "validityState"],
+          "properties": {
+            "recordType": { "const": "IabsDelivery" },
+            "formId": { "$ref": "#/$defs/Id" },
+            "formVersion": { "$ref": "#/$defs/Id" },
+            "jurisdiction": { "const": "TX" },
+            "responsibleLicenseHolderId": { "$ref": "#/$defs/Id" },
+            "brokerageId": { "$ref": "#/$defs/Id" },
+            "recipientPersonId": { "$ref": "#/$defs/Id" },
+            "deliveryChannel": { "enum": ["email_attachment", "email_link", "in_person", "document_portal", "other_approved"] },
+            "deliveredAt": { "$ref": "#/$defs/Timestamp" },
+            "trigger": { "enum": ["first_substantive_specific_property_communication", "showing_prerequisite", "brokerage_earlier_delivery"] },
+            "propertyReferenceId": { "$ref": "#/$defs/Id" },
+            "artifactId": { "$ref": "#/$defs/Id" },
+            "artifactDigest": { "$ref": "#/$defs/Digest" },
+            "providerReceiptId": { "$ref": "#/$defs/Id" },
+            "evidenceIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Id" } },
+            "validityState": { "enum": ["delivered", "delivery_unknown", "superseded", "invalid"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ServiceDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceCode", "allowed"],
+      "properties": {
+        "serviceCode": { "enum": ["showing_access", "property_advice", "transaction_advice", "property_search", "offer_presentation", "negotiation", "transaction_coordination"] },
+        "allowed": { "type": "boolean" }
+      }
+    },
+    "SignatureEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signerPartyId", "signedAt", "evidenceId"],
+      "properties": {
+        "signerPartyId": { "$ref": "#/$defs/Id" },
+        "signedAt": { "$ref": "#/$defs/Timestamp" },
+        "evidenceId": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "WrittenBuyerAgreement": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "agreementType", "jurisdiction", "brokerPartyId", "responsibleLicenseHolderId", "buyerPartyIds", "serviceDefinitions", "exclusivity", "effectiveAt", "terminatesAt", "compensation", "signatureEvidence", "executedArtifactId", "executedArtifactDigest", "executionState"],
+          "properties": {
+            "recordType": { "const": "WrittenBuyerAgreement" },
+            "agreementType": { "enum": ["representation", "non_representation_showing"] },
+            "jurisdiction": { "const": "TX" },
+            "brokerPartyId": { "$ref": "#/$defs/Id" },
+            "responsibleLicenseHolderId": { "$ref": "#/$defs/Id" },
+            "buyerPartyIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "serviceDefinitions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ServiceDefinition" } },
+            "propertyScope": { "type": "object" },
+            "exclusivity": { "enum": ["exclusive", "non_exclusive"] },
+            "effectiveAt": { "$ref": "#/$defs/Timestamp" },
+            "terminatesAt": { "$ref": "#/$defs/Timestamp" },
+            "compensation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["objectivelyAscertainable", "negotiabilityDisclosurePresent"],
+              "properties": {
+                "amountOrRate": { "type": "string" },
+                "determinationMethod": { "type": "string" },
+                "objectivelyAscertainable": { "type": "boolean" },
+                "negotiabilityDisclosurePresent": { "type": "boolean" }
+              },
+              "anyOf": [
+                { "required": ["amountOrRate"] },
+                { "required": ["determinationMethod"] }
+              ]
+            },
+            "signatureEvidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/SignatureEvidence" } },
+            "executedArtifactId": { "$ref": "#/$defs/Id" },
+            "executedArtifactDigest": { "$ref": "#/$defs/Digest" },
+            "executionState": { "enum": ["draft", "agent_approved", "presented", "partially_signed", "executed", "effective", "expired", "terminated", "superseded", "void"] },
+            "terminationReason": { "type": "string" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "agreementType": { "const": "non_representation_showing" } }, "required": ["agreementType"] },
+              "then": {
+                "properties": {
+                  "exclusivity": { "const": "non_exclusive" },
+                  "serviceDefinitions": {
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": { "serviceCode": { "const": "showing_access" }, "allowed": { "const": true } },
+                          "required": ["serviceCode", "allowed"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "serviceCode": { "enum": ["property_advice", "transaction_advice", "property_search", "offer_presentation", "negotiation", "transaction_coordination"] },
+                            "allowed": { "const": false }
+                          },
+                          "required": ["serviceCode", "allowed"]
+                        }
+                      ]
+                    },
+                    "contains": {
+                      "type": "object",
+                      "properties": { "serviceCode": { "const": "showing_access" }, "allowed": { "const": true } },
+                      "required": ["serviceCode", "allowed"]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "AgreementQualification": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "actionType", "actionIntentId", "actionPayloadDigest", "buyerPartyId", "responsibleLicenseHolderId", "brokerageId", "propertyReferenceId", "evaluatedAt", "policyVersion", "result", "reasons", "expiresAt"],
+          "properties": {
+            "recordType": { "const": "AgreementQualification" },
+            "actionType": { "enum": ["residential_showing", "residential_offer_presentation"] },
+            "actionIntentId": { "$ref": "#/$defs/Id" },
+            "actionPayloadDigest": { "$ref": "#/$defs/Digest" },
+            "buyerPartyId": { "$ref": "#/$defs/Id" },
+            "responsibleLicenseHolderId": { "$ref": "#/$defs/Id" },
+            "brokerageId": { "$ref": "#/$defs/Id" },
+            "propertyReferenceId": { "$ref": "#/$defs/Id" },
+            "evaluatedAt": { "$ref": "#/$defs/Timestamp" },
+            "policyVersion": { "$ref": "#/$defs/Id" },
+            "agreementId": { "$ref": "#/$defs/Id" },
+            "agreementVersion": { "type": "integer", "minimum": 1 },
+            "iabsDeliveryId": { "$ref": "#/$defs/Id" },
+            "exceptionCode": { "enum": ["listing_brokerage_open_house", "other_approved_statutory_exception"] },
+            "result": { "enum": ["qualified", "denied", "requires_resolution"] },
+            "reasons": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "expiresAt": { "$ref": "#/$defs/Timestamp" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "RepresentationRelationship": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "brokerageId", "buyingPartyId", "agreementId", "relationshipState"],
+          "properties": {
+            "recordType": { "const": "RepresentationRelationship" },
+            "brokerageId": { "$ref": "#/$defs/Id" },
+            "buyingPartyId": { "$ref": "#/$defs/Id" },
+            "agreementId": { "$ref": "#/$defs/Id" },
+            "relationshipState": { "enum": ["active", "expired", "terminated", "conflict", "superseded"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Proposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subjectRef", "predicate", "value", "validFrom"],
+      "properties": {
+        "subjectRef": { "$ref": "#/$defs/Id" },
+        "predicate": { "$ref": "#/$defs/Id" },
+        "value": {},
+        "applicableJourneyId": { "$ref": "#/$defs/Id" },
+        "validFrom": { "$ref": "#/$defs/Timestamp" },
+        "validTo": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "EpistemicItem": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "epistemicType", "proposition", "validityState"],
+          "properties": {
+            "recordType": { "const": "EpistemicItem" },
+            "epistemicType": { "enum": ["evidence", "assertion", "verified_fact", "inference", "memory"] },
+            "proposition": { "$ref": "#/$defs/Proposition" },
+            "speakerOrMethodRef": { "$ref": "#/$defs/Id" },
+            "inputItemIds": { "type": "array", "items": { "$ref": "#/$defs/Id" } },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "validityState": { "enum": ["current", "stale", "contradicted", "superseded", "revoked", "invalid"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "EffectAttempt": {
+      "allOf": [
+        { "$ref": "#/$defs/CanonicalFields" },
+        {
+          "type": "object",
+          "required": ["recordType", "intentId", "actionClass", "payloadDigest", "permitDigest", "idempotencyKey", "attemptState"],
+          "properties": {
+            "recordType": { "const": "EffectAttempt" },
+            "intentId": { "$ref": "#/$defs/Id" },
+            "actionClass": { "$ref": "#/$defs/Id" },
+            "payloadDigest": { "$ref": "#/$defs/Digest" },
+            "permitDigest": { "$ref": "#/$defs/Digest" },
+            "idempotencyKey": { "$ref": "#/$defs/Id" },
+            "providerReceiptId": { "$ref": "#/$defs/Id" },
+            "attemptState": { "enum": ["registered", "dispatching", "accepted", "confirmed", "rejected", "unknown_outcome", "reconciled_failed", "reconciled_succeeded"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
+
