@@ -1,0 +1,411 @@
+registry_version: "1.0.0"
+prd_version: "7.1"
+status: "governing"
+
+classes:
+  platform_invariant:
+    code: "PI"
+    blocking_point: "Before any live external effect or live processing that depends on the invariant."
+  operational_thread:
+    code: "OT"
+    blocking_point: "Before the named end-to-end workflow receives live authority."
+  capability:
+    code: "CAP"
+    blocking_point: "Before the named capability is enabled."
+  complete_product:
+    code: "CP"
+    blocking_point: "Before the full specified product release is declared complete."
+
+activation_rules:
+  - "A gate is never deleted because its capability is not yet enabled."
+  - "An activation request computes all directly applicable gates plus every dependency gate."
+  - "Platform invariants dominate thread, capability, tenant, brokerage, agent, and buyer configuration."
+  - "A gate passes only from independently reconstructable evidence produced by production code and production-equivalent dependencies."
+  - "A previously passing gate returns to blocked when its evidence expires or an affected artifact, policy, schema, model, connector, workflow, or runtime changes."
+
+gates:
+  - id: "GATE-001"
+    title: "Inbound identity and attribution"
+    class: "operational_thread"
+    scope: "ingress"
+    source: "PRD-11.1"
+    applies_when: "Any acquisition or inbound channel is enabled."
+    blocks: ["ingress_activation"]
+    dependencies: ["GATE-002", "GATE-004", "GATE-010", "GATE-011", "GATE-026"]
+    evidence: ["live_channel_ingress_trace", "identity_resolution_record", "attribution_record"]
+    pass_condition: "Every enabled channel creates or resolves exactly one correctly attributed canonical Person and BuyerJourney."
+
+  - id: "GATE-002"
+    title: "Effect and record idempotency"
+    class: "platform_invariant"
+    scope: "all_live_effects"
+    source: "PRD-11.2"
+    applies_when: "Any live external effect or replayable event is enabled."
+    blocks: ["all_external_effects"]
+    dependencies: []
+    evidence: ["retry_test", "webhook_replay_test", "restart_test", "provider_timeout_reconciliation_test"]
+    pass_condition: "No duplicate record, message, booking, task, or provider-changing effect occurs under the fault corpus."
+
+  - id: "GATE-003"
+    title: "Qualification epistemic integrity"
+    class: "operational_thread"
+    scope: "qualification"
+    source: "PRD-11.3"
+    applies_when: "Qualification collection or scoring is enabled."
+    blocks: ["qualification_activation"]
+    dependencies: ["GATE-008", "GATE-021", "GATE-026"]
+    evidence: ["qualification_state_suite", "contradiction_suite", "staleness_suite"]
+    pass_condition: "Fact, assertion, inference, contradiction, staleness, declined, and unknown remain distinct in canonical state and UI."
+
+  - id: "GATE-004"
+    title: "Immediate suppression"
+    class: "platform_invariant"
+    scope: "communications"
+    source: "PRD-11.4"
+    applies_when: "Any communication channel is enabled."
+    blocks: ["all_outbound_communications"]
+    dependencies: ["GATE-029"]
+    evidence: ["cross_channel_opt_out_test", "concurrent_send_opt_out_race", "suppression_readback"]
+    pass_condition: "Every applicable opt-out suppresses prohibited future contact before the next outbound admission."
+
+  - id: "GATE-005"
+    title: "Calendar lifecycle reconciliation"
+    class: "operational_thread"
+    scope: "consultation_scheduling"
+    source: "PRD-11.5"
+    applies_when: "Consultation booking is enabled."
+    blocks: ["consultation_scheduling_activation"]
+    dependencies: ["GATE-002", "GATE-006", "GATE-010", "GATE-016", "GATE-018", "GATE-025", "GATE-029", "GATE-033"]
+    evidence: ["live_book_test", "live_reschedule_test", "live_cancel_test", "calendar_reconciliation_test"]
+    pass_condition: "Real calendar events are booked, rescheduled, cancelled, and reconciled exactly once with canonical state."
+
+  - id: "GATE-006"
+    title: "Approval scope and expiry"
+    class: "platform_invariant"
+    scope: "authority"
+    source: "PRD-11.6"
+    applies_when: "Any approval-bound action exists."
+    blocks: ["approval_bound_effects"]
+    dependencies: []
+    evidence: ["preapproval_denial_test", "approval_expiry_test", "payload_mutation_test", "approval_replay_test"]
+    pass_condition: "No effect executes before approval, after expiry, after material mutation, or outside the approved scope."
+
+  - id: "GATE-007"
+    title: "Mechanical fair-housing controls"
+    class: "platform_invariant"
+    scope: "optimization_and_service"
+    source: "PRD-11.7"
+    applies_when: "Any lead prioritization, targeting, messaging, scheduling, or optimization behavior is enabled."
+    blocks: ["optimization_activation", "lead_prioritization_activation"]
+    dependencies: []
+    evidence: ["feature_allowlist_audit", "prohibited_proxy_test", "counterfactual_trait_test", "service_parity_report", "minimum_service_boundary_test", "promotion_provenance"]
+    pass_condition: "No protected trait or prohibited proxy causes targeting, steering, suppression, inferior service, cadence, availability, response, or escalation differences."
+
+  - id: "GATE-008"
+    title: "No invented material facts"
+    class: "platform_invariant"
+    scope: "all_answers_and_state"
+    source: "PRD-11.8"
+    applies_when: "Any buyer-facing answer, cognitive proposal, extraction, or state transition is enabled."
+    blocks: ["buyer_facing_cognition", "cognitive_fact_transition"]
+    dependencies: ["GATE-021"]
+    evidence: ["unsupported_fact_suite", "false_completion_suite", "grounding_rejection_trace"]
+    pass_condition: "Listing, contract, consent, representation, appointment, and completion claims are sourced or explicitly unknown."
+
+  - id: "GATE-009"
+    title: "Confirmed transaction dates"
+    class: "capability"
+    scope: "transaction_coordination"
+    source: "PRD-11.9"
+    applies_when: "Transaction-document extraction or deadline coordination is enabled."
+    blocks: ["transaction_coordination_activation"]
+    dependencies: ["GATE-006", "GATE-008", "GATE-010", "GATE-011", "GATE-033"]
+    evidence: ["contract_date_extraction_test", "unconfirmed_deadline_denial", "confirmed_deadline_activation"]
+    pass_condition: "Extracted dates remain proposed until agent confirmation; no dependent external workflow activates beforehand."
+
+  - id: "GATE-010"
+    title: "Durable failure recovery"
+    class: "platform_invariant"
+    scope: "all_workflows"
+    source: "PRD-11.10"
+    applies_when: "Any durable workflow or external dependency is enabled."
+    blocks: ["all_operational_threads"]
+    dependencies: []
+    evidence: ["provider_outage_test", "runtime_failure_test", "process_restart_test", "delayed_webhook_test", "deadline_preservation_trace"]
+    pass_condition: "No prospect, deadline, commitment, approval, provider result, or evidence disappears or completes falsely under the fault corpus."
+
+  - id: "GATE-011"
+    title: "Audit reconstruction"
+    class: "platform_invariant"
+    scope: "evidence"
+    source: "PRD-11.11"
+    applies_when: "Any canonical mutation or external communication/effect is enabled."
+    blocks: ["all_external_effects"]
+    dependencies: ["GATE-028"]
+    evidence: ["audit_package", "source_artifact_digest_check", "provider_receipt_reconciliation"]
+    pass_condition: "Every external communication, approval, canonical mutation, and workflow transition is reconstructable without hidden chain-of-thought."
+
+  - id: "GATE-012"
+    title: "Closed-transaction attribution"
+    class: "complete_product"
+    scope: "outcomes"
+    source: "PRD-11.12"
+    applies_when: "The complete specified release is declared complete."
+    blocks: ["complete_product_declaration"]
+    dependencies: ["GATE-001", "GATE-003", "GATE-005", "GATE-026"]
+    evidence: ["closing_lineage_report", "funnel_reconciliation", "campaign_cost_reconciliation"]
+    pass_condition: "Every closing traces through representation, consultation, qualification, contact, source, and available campaign cost with cohort uncertainty."
+
+  - id: "GATE-013"
+    title: "Cognitive credential identity"
+    class: "capability"
+    scope: "cognition"
+    source: "PRD-11.13"
+    applies_when: "Any cognitive route is enabled."
+    blocks: ["cognition_activation"]
+    dependencies: ["GATE-035"]
+    evidence: ["credential_identity_readback", "unsupported_credential_rejection", "auth_class_evidence", "billing_class_evidence"]
+    pass_condition: "Every route uses a configured provider-supported identity and records explicit authentication and billing classes."
+
+  - id: "GATE-014"
+    title: "Cognitive runtime recovery"
+    class: "capability"
+    scope: "cognition"
+    source: "PRD-11.14"
+    applies_when: "Any cognitive route is enabled."
+    blocks: ["cognition_activation"]
+    dependencies: ["GATE-002", "GATE-010", "GATE-019", "GATE-025", "GATE-035"]
+    evidence: ["throttle_test", "worker_restart_test", "auth_expiry_test", "route_transition_test", "context_recompile_trace"]
+    pass_condition: "Runtime failure and authorized transition lose no work, duplicate no effect, and reuse no stale context."
+
+  - id: "GATE-015"
+    title: "MCP and tool inventory"
+    class: "capability"
+    scope: "connector"
+    source: "PRD-11.15"
+    applies_when: "An MCP server, plugin, or model-facing capability is enabled."
+    blocks: ["connector_capability_activation"]
+    dependencies: ["GATE-017", "GATE-018", "GATE-029"]
+    evidence: ["tool_inventory", "server_identity_readback", "scope_readback", "side_effect_classification", "approval_mode_readback"]
+    pass_condition: "Every enabled tool has attributable server identity, auth state, scopes, effect class, and approval mode."
+
+  - id: "GATE-016"
+    title: "Live email and calendar operation"
+    class: "capability"
+    scope: "email_calendar"
+    source: "PRD-11.16"
+    applies_when: "Email or calendar is enabled."
+    blocks: ["email_activation", "calendar_activation"]
+    dependencies: ["GATE-002", "GATE-006", "GATE-010", "GATE-015", "GATE-017", "GATE-018", "GATE-029", "GATE-033"]
+    evidence: ["live_read_test", "live_event_ingestion", "draft_preview_test", "governed_write_test", "provider_confirmation", "reconciliation_test"]
+    pass_condition: "Selected connectors pass read, events, draft, governed write, confirmation, revocation, and reconciliation end to end."
+
+  - id: "GATE-017"
+    title: "Prompt-injection containment"
+    class: "platform_invariant"
+    scope: "untrusted_content"
+    source: "PRD-11.17"
+    applies_when: "Any untrusted connected content can enter context or deterministic processing."
+    blocks: ["connected_content_activation", "buyer_facing_cognition"]
+    dependencies: ["GATE-021"]
+    evidence: ["email_injection_suite", "calendar_injection_suite", "crm_injection_suite", "document_injection_suite", "web_injection_suite"]
+    pass_condition: "Untrusted content cannot widen data scope, alter policy, replace recipients, access credentials, or create unauthorized tool/effect use."
+
+  - id: "GATE-018"
+    title: "Connector revocation and recovery"
+    class: "platform_invariant"
+    scope: "connectors"
+    source: "PRD-11.18"
+    applies_when: "Any external connector is enabled."
+    blocks: ["connector_effects"]
+    dependencies: ["GATE-029", "GATE-033"]
+    evidence: ["disconnect_test", "scope_revocation_test", "blocked_workflow_inventory", "safe_reconnect_test"]
+    pass_condition: "Revocation immediately blocks dependent effects, preserves unrelated work, exposes blockers, and resumes without duplicates."
+
+  - id: "GATE-019"
+    title: "Context reconstruction"
+    class: "capability"
+    scope: "cognition"
+    source: "PRD-11.19"
+    applies_when: "Live cognition is enabled."
+    blocks: ["cognition_activation"]
+    dependencies: ["GATE-021", "GATE-026"]
+    evidence: ["thread_loss_rebuild", "model_replacement_rebuild", "canonical_context_diff"]
+    pass_condition: "Rebuild preserves all material facts, unknowns, constraints, commitments, authority, and permitted next actions."
+
+  - id: "GATE-020"
+    title: "Conversation compaction fidelity"
+    class: "capability"
+    scope: "conversation_memory"
+    source: "PRD-11.20"
+    applies_when: "Conversation compaction or long-horizon memory is enabled."
+    blocks: ["conversation_memory_activation"]
+    dependencies: ["GATE-019", "GATE-021", "GATE-027"]
+    evidence: ["long_conversation_suite", "correction_after_compaction", "revocation_after_compaction", "contradiction_after_compaction"]
+    pass_condition: "Corrected, revoked, superseded, stale, and contradictory information cannot reappear as current fact."
+
+  - id: "GATE-021"
+    title: "Context and tenant isolation"
+    class: "platform_invariant"
+    scope: "data_isolation"
+    source: "PRD-11.21"
+    applies_when: "Any tenant, buyer, retrieval, context, or connected-content processing exists."
+    blocks: ["all_live_processing"]
+    dependencies: []
+    evidence: ["cross_tenant_suite", "cross_buyer_suite", "purpose_scope_suite", "concurrency_isolation_suite"]
+    pass_condition: "No unauthorized tenant, buyer, person, purpose, or workflow data is disclosed or influences output."
+
+  - id: "GATE-022"
+    title: "Real-estate cognition qualification"
+    class: "capability"
+    scope: "cognition"
+    source: "PRD-11.22"
+    applies_when: "Substantive real-estate cognition is enabled."
+    blocks: ["substantive_cognition_activation"]
+    dependencies: ["GATE-008", "GATE-019", "GATE-021", "GATE-024"]
+    evidence: ["ontology_eval", "grounding_eval", "source_precedence_eval", "abstention_eval", "stale_contradictory_eval"]
+    pass_condition: "The qualified route correctly interprets ontology and sources and fails to bounded unknown when unsupported."
+
+  - id: "GATE-023"
+    title: "Behavior promotion regression block"
+    class: "platform_invariant"
+    scope: "self_change"
+    source: "PRD-11.23"
+    applies_when: "Any model, harness, prompt, retrieval, embedding, ontology, knowledge, optimizer, or policy change can be promoted."
+    blocks: ["behavior_promotion"]
+    dependencies: ["GATE-007", "GATE-008", "GATE-017", "GATE-021"]
+    evidence: ["promotion_gate_record", "critical_regression_suite", "rollback_proof", "independent_evaluation"]
+    pass_condition: "Any critical context, grounding, consent, authority, fair-housing, or policy regression blocks promotion mechanically."
+
+  - id: "GATE-024"
+    title: "Cognitive context trace"
+    class: "capability"
+    scope: "cognition"
+    source: "PRD-11.24"
+    applies_when: "Any externally consequential cognitive proposal is enabled."
+    blocks: ["externally_consequential_cognition"]
+    dependencies: ["GATE-011", "GATE-019", "GATE-021"]
+    evidence: ["context_manifest", "source_selection_trace", "policy_version_trace", "compiler_version_trace"]
+    pass_condition: "Every consequential run identifies supplied facts, assertions, knowledge, retrievals, conversation sources, policies, and compiler version."
+
+  - id: "GATE-025"
+    title: "Temporal replay and reconciliation"
+    class: "platform_invariant"
+    scope: "durable_execution"
+    source: "PRD-11.25"
+    applies_when: "Any durable workflow is enabled."
+    blocks: ["all_operational_threads"]
+    dependencies: ["GATE-002", "GATE-010"]
+    evidence: ["workflow_replay_test", "worker_restart_test", "duplicate_event_test", "unknown_outcome_test"]
+    pass_condition: "Replay preserves one journey workflow, duplicates no effect, and reconciles canonical PostgreSQL state."
+
+  - id: "GATE-026"
+    title: "Canonical CRM reconstruction"
+    class: "platform_invariant"
+    scope: "canonical_crm"
+    source: "PRD-11.26"
+    applies_when: "Any buyer record or journey is processed."
+    blocks: ["all_operational_threads"]
+    dependencies: ["GATE-021"]
+    evidence: ["buying_party_reconstruction", "multi_journey_test", "participant_conversation_test", "orthogonal_state_test"]
+    pass_condition: "Canonical CRM reconstructs parties, journeys, conversations, representation, commitments, and orthogonal state without external CRM."
+
+  - id: "GATE-027"
+    title: "Derived-memory retention propagation"
+    class: "capability"
+    scope: "semantic_memory"
+    source: "PRD-11.27"
+    applies_when: "Any object index, vector, graph, summary, cache, or associative memory is enabled."
+    blocks: ["semantic_memory_activation"]
+    dependencies: ["GATE-034"]
+    evidence: ["source_expiry_test", "deletion_propagation_test", "future_context_exclusion", "tombstone_verification"]
+    pass_condition: "Deleted or expired evidence is removed or invalidated everywhere within SLO and cannot re-enter future context."
+
+  - id: "GATE-028"
+    title: "Evidence tamper detection"
+    class: "platform_invariant"
+    scope: "evidence_integrity"
+    source: "PRD-11.28"
+    applies_when: "Any material evidence or externally consequential action is retained."
+    blocks: ["all_external_effects", "production_audit_claims"]
+    dependencies: []
+    evidence: ["hash_chain_verification", "checkpoint_signature_verification", "artifact_digest_verification", "tamper_fault_injection"]
+    pass_condition: "Alteration, removal, insertion, or reordering of material evidence is detected."
+
+  - id: "GATE-029"
+    title: "Delegated identity revocation"
+    class: "platform_invariant"
+    scope: "connector_identity"
+    source: "PRD-11.29"
+    applies_when: "Any delegated user or service connector identity is enabled."
+    blocks: ["connector_effects"]
+    dependencies: ["GATE-033"]
+    evidence: ["user_grant_revocation_test", "service_identity_revocation_test", "unrelated_workflow_continuity"]
+    pass_condition: "Revocation blocks all new dependent effects immediately while unrelated workflows continue."
+
+  - id: "GATE-030"
+    title: "Native iOS offline authority"
+    class: "capability"
+    scope: "native_ios"
+    source: "PRD-11.30"
+    applies_when: "Native iOS offline cache or mutation queue is enabled."
+    blocks: ["native_ios_offline_activation"]
+    dependencies: ["GATE-006", "GATE-021", "GATE-026", "GATE-029", "GATE-033"]
+    evidence: ["encrypted_cache_test", "offline_queue_scope_test", "reconnect_reauthorization_test", "conflict_resolution_test"]
+    pass_condition: "Offline changes cannot grant authority and every queued mutation is revalidated against current canonical state."
+
+  - id: "GATE-031"
+    title: "Inbound AI voice disclosure and escalation"
+    class: "capability"
+    scope: "inbound_ai_voice"
+    source: "PRD-11.31"
+    applies_when: "Inbound AI voice is enabled."
+    blocks: ["inbound_ai_voice_activation"]
+    dependencies: ["GATE-004", "GATE-010", "GATE-011", "GATE-017", "GATE-018", "GATE-029", "GATE-032", "GATE-033"]
+    evidence: ["ai_identity_disclosure_test", "recording_refusal_test", "non_recorded_continue_test", "escalation_handoff_test"]
+    pass_condition: "Every call identifies the AI and responsible brokerage, enforces recording choice, and completes defined escalation handling."
+
+  - id: "GATE-032"
+    title: "Outbound AI voice prohibition"
+    class: "platform_invariant"
+    scope: "voice"
+    source: "PRD-11.32"
+    applies_when: "Any phone, voice, campaign, proposal, connector, or route configuration exists."
+    blocks: ["all_live_processing"]
+    dependencies: []
+    evidence: ["action_schema_negative_test", "tool_inventory_negative_test", "route_negative_test", "configuration_negative_test"]
+    pass_condition: "No production or test path can originate an outbound AI-generated voice call in the initial release."
+
+  - id: "GATE-033"
+    title: "Just-in-time effect authority"
+    class: "platform_invariant"
+    scope: "effect_admission"
+    source: "PRD-11.33"
+    applies_when: "Any external provider-changing effect is enabled."
+    blocks: ["all_external_effects"]
+    dependencies: ["GATE-002", "GATE-006", "GATE-011", "GATE-028"]
+    evidence: ["dw2_c1_suite", "authority_expiry_race", "consent_revocation_race", "payload_change_race", "permit_replay_test"]
+    pass_condition: "Every effect re-enters Habitat immediately before dispatch and has one attributable order relative to revocation or material mutation."
+
+  - id: "GATE-034"
+    title: "Projection fence and epoch safety"
+    class: "capability"
+    scope: "neo4j_projection"
+    source: "PRD-11.34"
+    applies_when: "Neo4j or an epoch-built semantic projection is enabled."
+    blocks: ["neo4j_projection_activation"]
+    dependencies: ["GATE-021", "GATE-026", "GATE-028"]
+    evidence: ["dw2_c2_suite", "deletion_during_snapshot", "deletion_during_catchup", "competing_rebuild_test", "stale_cutover_test"]
+    pass_condition: "Fenced data is immediately non-retrievable, never re-derived, and no stale epoch can cut over."
+
+  - id: "GATE-035"
+    title: "Authorized cognitive routing and degradation"
+    class: "capability"
+    scope: "cognition"
+    source: "PRD-11.35"
+    applies_when: "Any cognitive route is enabled."
+    blocks: ["cognition_activation"]
+    dependencies: ["GATE-008", "GATE-010", "GATE-017", "GATE-021", "GATE-023", "GATE-024"]
+    evidence: ["dw2_c3_suite", "unauthorized_route_rejection", "subscription_api_transition_trace", "capacity_degradation_test", "auth_degradation_test"]
+    pass_condition: "Only preauthorized qualified routes execute; every transition is evidenced; absence of a compatible route degrades deterministically without hidden fallback."
+
