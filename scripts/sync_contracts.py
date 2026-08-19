@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "buyer_ops_contracts"
 MAPPINGS = {
+    "closure": (ROOT / "OPEN-019-024.schema.json", PACKAGE / "schemas/closure.schema.json"),
     "gateway": (
         ROOT / "COGNITIVE-RUNTIME-GATEWAY.schema.json",
         PACKAGE / "schemas/gateway.schema.json",
