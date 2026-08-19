@@ -2,7 +2,7 @@
 
 **Verified:** 2026-08-19  
 **Contract version:** 1.0.0  
-**Schema SHA-256:** `99c0c2d5ee6a226ee038492ca28418d5b1b9559c06fe9e880b483e182d6b6b3a`
+**Schema SHA-256:** `33c17a8d70cb1f50c5d1836a7bb1297bc8f0b40cb6f2fc91502d08170f2b87e0`
 
 ## Result
 
@@ -17,4 +17,4 @@ The specification-owner closure for canonical actor/tenant authorization, signed
 
 ## Admission consequence
 
-OPEN-025, OPEN-026, and OPEN-027 are no longer specification gaps. Implementation may resume against `open-025-027/1.0.0`. Production activation remains fail-closed until runtime evidence satisfies each contract's acceptance rules and all applicable gates.
+OPEN-025, OPEN-026, and OPEN-027 are resolved in the corrected 13-family `buyer-ops/0.3.0` candidate on PR #2. Implementation may resume against that candidate after review/merge into the authority branch. Production activation remains fail-closed until runtime evidence satisfies each contract's acceptance rules and all applicable gates.
