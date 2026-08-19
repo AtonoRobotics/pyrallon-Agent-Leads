@@ -2,6 +2,15 @@
   "manifestVersion": "1.0.0",
   "contracts": [
     {
+      "name": "closure",
+      "resource": "schemas/closure.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/open-019-024-closure/1.0.0",
+      "schemaVersion": "1.0.0",
+      "sha256": "00760f5156a9ec67fb79611d8c01d3d8e22a63dd16a2667529f81ec2903a9564",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
       "name": "gateway",
       "resource": "schemas/gateway.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/cognitive-runtime-gateway/1.1.0",
@@ -21,5 +30,4 @@
     }
   ]
 }
-
 
