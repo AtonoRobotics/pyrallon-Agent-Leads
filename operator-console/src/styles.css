@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --color-bg: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-raised: #e9ebef;
+  --color-fg: #14181f;
+  --color-muted: #5b6573;
+  --color-subtle: #8b939e;
+  --color-accent: #1e3f5f;
+  --color-accent-hover: #274e73;
+  --color-accent-fg: #f7f9fb;
+  --color-border: #d8dce3;
+  --color-danger: #b42318;
+  --color-warn: #b54708;
+  --color-ok: #067647;
+  --color-info: #175cd3;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+
+  --shadow-border:
+    0 0 0 1px rgb(20 24 31 / 0.06),
+    0 1px 2px -1px rgb(20 24 31 / 0.06),
+    0 2px 4px 0 rgb(20 24 31 / 0.04);
+  --shadow-panel:
+    0 0 0 1px rgb(20 24 31 / 0.06),
+    0 8px 24px -16px rgb(20 24 31 / 0.18);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 18%, transparent);
+    color: var(--color-fg);
+  }
+}
+
+@layer components {
+  .field {
+    width: 100%;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: var(--color-fg);
+    box-shadow: var(--shadow-border);
+    transition:
+      border-color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out);
+  }
+
+  input.field,
+  select.field {
+    height: 2.5rem;
+  }
+
+  .field:focus-visible {
+    outline: none;
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 16%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

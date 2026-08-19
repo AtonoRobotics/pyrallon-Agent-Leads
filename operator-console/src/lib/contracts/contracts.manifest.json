@@ -1,0 +1,23 @@
+{
+  "manifestVersion": "1.0.0",
+  "contracts": [
+    {
+      "name": "gateway",
+      "resource": "gateway.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/cognitive-runtime-gateway/1.1.0",
+      "schemaVersion": "1.1.0",
+      "sha256": "52d80302f683fc7d15206e25819416542a3d4e56f8698392755eda431362b136",
+      "readerRange": ">=1.1.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "ontology",
+      "resource": "ontology.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/ontology/buyer-ops/0.1.0",
+      "schemaVersion": "0.1.0",
+      "sha256": "cd6c8b12393e586919322e9b8e876eb05be2b7f1a3590dd6b014f2f44bf089bb",
+      "readerRange": ">=0.1.0,<0.2.0",
+      "writerVersion": "0.1.0"
+    }
+  ]
+}

@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/cognitive-runtime-gateway/1.1.0",
+  "title": "Cognitive Runtime Gateway Schemas",
+  "description": "Executable boundary schemas for CognitiveWorkRequest and CognitiveProposal. Semantic and policy validation remains required after structural validation.",
+  "oneOf": [
+    { "$ref": "#/$defs/CognitiveWorkRequest" },
+    { "$ref": "#/$defs/CognitiveProposal" }
+  ],
+  "$defs": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$"
+    },
+    "AuthClass": {
+      "enum": [
+        "subscription_oauth",
+        "workspace_access_token",
+        "service_account",
+        "metered_api",
+        "cloud_iam",
+        "local_endpoint"
+      ]
+    },
+    "BillingClass": {
+      "enum": ["subscription", "metered", "internal"]
+    },
+    "RetryBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxAttempts", "maxElapsedMs"],
+      "properties": {
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "maxElapsedMs": { "type": "integer", "minimum": 1 },
+        "retryableErrorCodes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        }
+      }
+    },
+    "ContextSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sectionId", "purpose", "sourceRecordIds", "contentDigest"],
+      "properties": {
+        "sectionId": { "$ref": "#/$defs/NonEmptyString" },
+        "purpose": { "$ref": "#/$defs/NonEmptyString" },
+        "sourceRecordIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "contentDigest": { "$ref": "#/$defs/Digest" },
+        "content": {}
+      }
+    },
+    "ContextPacket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "manifestId", "ontologyVersion", "compiledAt", "expiresAt", "sections"],
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "manifestId": { "$ref": "#/$defs/NonEmptyString" },
+        "ontologyVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "compiledAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ContextSection" }
+        }
+      }
+    },
+    "CognitiveWorkRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "recordType",
+        "workId",
+        "tenantId",
+        "principalId",
+        "buyerJourneyId",
+        "workflowId",
+        "actionClass",
+        "objective",
+        "contextManifestId",
+        "contextPacket",
+        "contextSufficiencyContractVersion",
+        "requiredProposalSchemaVersion",
+        "routePolicyVersion",
+        "retryBudget",
+        "degradationPolicyVersion",
+        "traceId"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "cognitive-work/1.1.0" },
+        "recordType": { "const": "CognitiveWorkRequest" },
+        "workId": { "$ref": "#/$defs/NonEmptyString" },
+        "tenantId": { "$ref": "#/$defs/NonEmptyString" },
+        "principalId": { "$ref": "#/$defs/NonEmptyString" },
+        "buyerJourneyId": { "$ref": "#/$defs/NonEmptyString" },
+        "workflowId": { "$ref": "#/$defs/NonEmptyString" },
+        "actionClass": { "$ref": "#/$defs/NonEmptyString" },
+        "objective": { "$ref": "#/$defs/NonEmptyString" },
+        "contextManifestId": { "$ref": "#/$defs/NonEmptyString" },
+        "contextPacket": { "$ref": "#/$defs/ContextPacket" },
+        "contextSufficiencyContractVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "requiredProposalSchemaVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "routePolicyVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "deadline": { "$ref": "#/$defs/Timestamp" },
+        "retryBudget": { "$ref": "#/$defs/RetryBudget" },
+        "degradationPolicyVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "traceId": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "BoundedUnknown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unknownId", "description", "blocking", "permittedResolution"],
+      "properties": {
+        "unknownId": { "$ref": "#/$defs/NonEmptyString" },
+        "description": { "$ref": "#/$defs/NonEmptyString" },
+        "blocking": { "type": "boolean" },
+        "permittedResolution": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "GroundedClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claimId", "subjectRef", "predicate", "value", "epistemicType", "sourceIds", "freshnessAt"],
+      "properties": {
+        "claimId": { "$ref": "#/$defs/NonEmptyString" },
+        "subjectRef": { "$ref": "#/$defs/NonEmptyString" },
+        "predicate": { "$ref": "#/$defs/NonEmptyString" },
+        "value": {},
+        "epistemicType": { "enum": ["assertion", "verified_fact", "inference"] },
+        "sourceIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "freshnessAt": { "$ref": "#/$defs/Timestamp" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "ExecutionWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expiresAt"],
+      "properties": {
+        "notBefore": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ProposedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proposalId",
+        "actionClass",
+        "targetRefs",
+        "recipientRefs",
+        "normalizedPayload",
+        "sourceClaimIds",
+        "requestedExecutionWindow",
+        "idempotencySeed"
+      ],
+      "properties": {
+        "proposalId": { "$ref": "#/$defs/NonEmptyString" },
+        "actionClass": { "$ref": "#/$defs/NonEmptyString" },
+        "targetRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "recipientRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "normalizedPayload": {},
+        "sourceClaimIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "requestedExecutionWindow": { "$ref": "#/$defs/ExecutionWindow" },
+        "idempotencySeed": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "UsageRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputUnits", "outputUnits", "unitType"],
+      "properties": {
+        "inputUnits": { "type": "number", "minimum": 0 },
+        "outputUnits": { "type": "number", "minimum": 0 },
+        "unitType": { "enum": ["tokens", "provider_units", "unknown"] },
+        "providerReportedCost": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+      }
+    },
+    "RuntimeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invocationId",
+        "attempt",
+        "routePolicyVersion",
+        "routeId",
+        "providerId",
+        "adapterId",
+        "adapterVersion",
+        "transport",
+        "credentialIdentityRef",
+        "authClass",
+        "billingClass",
+        "modelFamily",
+        "resolvedModelId",
+        "capabilityProfileVersion",
+        "evaluationQualificationId",
+        "startedAt",
+        "completedAt",
+        "usage"
+      ],
+      "properties": {
+        "invocationId": { "$ref": "#/$defs/NonEmptyString" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "routePolicyVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "routeId": { "$ref": "#/$defs/NonEmptyString" },
+        "providerId": { "$ref": "#/$defs/NonEmptyString" },
+        "adapterId": { "$ref": "#/$defs/NonEmptyString" },
+        "adapterVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "transport": { "$ref": "#/$defs/NonEmptyString" },
+        "credentialIdentityRef": { "$ref": "#/$defs/NonEmptyString" },
+        "authClass": { "$ref": "#/$defs/AuthClass" },
+        "billingClass": { "$ref": "#/$defs/BillingClass" },
+        "modelFamily": { "$ref": "#/$defs/NonEmptyString" },
+        "resolvedModelId": { "$ref": "#/$defs/NonEmptyString" },
+        "capabilityProfileVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "evaluationQualificationId": { "$ref": "#/$defs/NonEmptyString" },
+        "providerRunId": { "$ref": "#/$defs/NonEmptyString" },
+        "startedAt": { "$ref": "#/$defs/Timestamp" },
+        "completedAt": { "$ref": "#/$defs/Timestamp" },
+        "usage": { "$ref": "#/$defs/UsageRecord" }
+      }
+    },
+    "CognitiveProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "recordType",
+        "workId",
+        "actionClass",
+        "proposedActions",
+        "claims",
+        "unknowns",
+        "assumptions",
+        "risks",
+        "confidence",
+        "requiredApproval",
+        "policyDisposition",
+        "proposedAt",
+        "expiresAt",
+        "contextManifestId",
+        "runtimeEvidence"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "cognitive-proposal/1.1.0" },
+        "recordType": { "const": "CognitiveProposal" },
+        "workId": { "$ref": "#/$defs/NonEmptyString" },
+        "actionClass": { "$ref": "#/$defs/NonEmptyString" },
+        "proposedActions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProposedAction" }
+        },
+        "claims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GroundedClaim" }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BoundedUnknown" }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "risks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "requiredApproval": { "enum": ["none", "agent", "broker"] },
+        "policyDisposition": { "enum": ["eligible", "approval_required", "prohibited"] },
+        "proposedAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" },
+        "contextManifestId": { "$ref": "#/$defs/NonEmptyString" },
+        "runtimeEvidence": { "$ref": "#/$defs/RuntimeEvidence" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "policyDisposition": { "const": "eligible" } },
+            "required": ["policyDisposition"]
+          },
+          "then": {
+            "properties": { "requiredApproval": { "const": "none" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "policyDisposition": { "const": "approval_required" } },
+            "required": ["policyDisposition"]
+          },
+          "then": {
+            "properties": { "requiredApproval": { "enum": ["agent", "broker"] } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "policyDisposition": { "const": "prohibited" } },
+            "required": ["policyDisposition"]
+          },
+          "then": {
+            "properties": { "requiredApproval": { "const": "none" } }
+          }
+        }
+      ]
+    }
+  }
+}

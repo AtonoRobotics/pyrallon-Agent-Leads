@@ -1,0 +1,50 @@
+import { Badge } from "@/components/ui/badge";
+import { prettyState } from "@/lib/ops/format";
+
+const TONE: Record<string, "neutral" | "accent" | "ok" | "warn" | "danger" | "info"> = {
+  contactable: "ok",
+  suppressed: "danger",
+  invalid: "danger",
+  temporarily_unavailable: "warn",
+  unknown: "neutral",
+  delivered: "ok",
+  sent: "info",
+  pending: "warn",
+  failed: "danger",
+  unknown_outcome: "warn",
+  sufficient_for_consult: "ok",
+  collecting: "info",
+  contradicted: "warn",
+  stale: "warn",
+  declined: "neutral",
+  not_started: "neutral",
+  ready: "ok",
+  offering: "info",
+  booked: "accent",
+  confirmed: "ok",
+  blocked: "danger",
+  cancelled: "neutral",
+  not_ready: "neutral",
+  consultation_ready: "ok",
+  consultation_booked: "accent",
+  qualifying: "info",
+  contacted: "info",
+  captured: "neutral",
+  nurture: "info",
+  represented: "ok",
+  not_represented: "neutral",
+  unconfirmed: "neutral",
+  conflict: "danger",
+  agreement_pending: "warn",
+  resolved: "ok",
+  open: "warn",
+  paused: "warn",
+  assertion: "info",
+  verified_fact: "ok",
+  inference: "neutral",
+  evidence: "accent",
+};
+
+export function StateChip({ value }: { value: string }) {
+  return <Badge tone={TONE[value] ?? "neutral"}>{prettyState(value)}</Badge>;
+}
