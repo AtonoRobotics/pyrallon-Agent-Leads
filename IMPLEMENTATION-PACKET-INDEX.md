@@ -205,17 +205,19 @@ remain owned by their governing downstream contracts and configuration; Temporal
 
 ### PKT-05 — Deterministic ingress, identity, consent, and acknowledgment
 
-**Execution status (2026-08-19): In progress; acknowledgment/opt-out design-blocked by GAP-ACKNOWLEDGMENT.** OPEN-011 is resolved by the closed,
-versioned OT-01 ingress contract and fixtures. Existing identity-resolution and evidence work remains
-preserved. Provider-neutral envelope validation, injected destination/signature authentication,
-artifact-digest verification, and an append-only tenant-RLS exact provider-event replay registry pass
-unit and PostgreSQL reconstruction tests. OPEN-019 is resolved by closure 1.1.0. The runtime now
-deduplicates on tenant, connector, provider account, and stable external message ID across changing
-event IDs; digest conflicts are persisted and enter `reconciliation_required`. Provider-neutral
-capture and identity work may continue. Locally authored lexicon/policy, template-selection,
-synchronous-suppression, decision/outcome, idempotency, and rollback code passes tests but is
-provisional and non-governing because no published GitHub revision contains its semantics. PKT-05
-must not execute that path until a specification owner publishes and approves the contract.
+**Execution status (2026-08-19): In progress; no governing-contract block.** OPEN-011 is resolved by the closed,
+versioned OT-01 ingress contract and fixtures. OPEN-027 and OT-01 Ingress Contract 1.1 with
+`OT01-INGRESS.schema.json` govern deterministic opt-out recognition, acknowledgment policy and
+selection, immutable template/substitution boundaries, suppression-first atomicity, attributable
+outcomes, expiry, idempotency, typed failure, and 1.0-to-1.1 compatibility. Existing
+identity-resolution and evidence work remains preserved. Provider-neutral envelope validation,
+injected destination/signature authentication, artifact-digest verification, and an append-only
+tenant-RLS exact provider-event replay registry pass unit and PostgreSQL reconstruction tests.
+OPEN-019 is resolved by closure 1.1.0. The runtime deduplicates on tenant, connector, provider
+account, and stable external message ID across changing event IDs; digest conflicts are persisted and
+enter `reconciliation_required`. PKT-05 may resume against the published 1.1.0 contract. Live
+acknowledgment remains activation-blocked by OPEN-001 and selected sender/ingress configuration and
+must traverse Habitat and connector permit redemption.
 
 **Objective:** Activate the non-cognitive OT-01 ingress path.
 
