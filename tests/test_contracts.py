@@ -18,7 +18,7 @@ from buyer_ops_contracts.compatibility import compare_schemas
 
 def test_packaged_schemas_are_valid_and_hash_pinned() -> None:
     registry = ContractRegistry()
-    assert registry.names == ("gateway", "ontology")
+    assert registry.names == ("closure", "gateway", "ontology")
     for name in registry.names:
         Draft202012Validator.check_schema(registry.get(name).schema)
 
