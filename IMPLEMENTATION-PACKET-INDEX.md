@@ -64,6 +64,11 @@ flowchart TD
 `PKT-00-VERIFICATION-REPORT.md`. Completion remains subject to repository CI reproducing the
 recorded commands from a clean checkout.
 
+**OPEN-019–024 closure (2026-08-19):** Governing schemas and semantic rules are defined in
+`OPEN-019-024.schema.json` and `OPEN-019-024-CONTRACT-CLOSURE.md`; verification is recorded in
+`OPEN-019-024-VERIFICATION-REPORT.md`. Runtime acceptance remains an evidence obligation, not an
+unresolved canonical-semantics blocker.
+
 ### PKT-01 — PostgreSQL canonical CRM and ontology
 
 **Objective:** Implement the canonical records and orthogonal state machines required by ontology v0 and OT-01.
