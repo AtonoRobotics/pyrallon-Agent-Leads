@@ -38,6 +38,7 @@ def _generate(schema: Path, output: Path) -> None:
 def main() -> None:
     manifest = json.loads((PACKAGE / "contracts.manifest.json").read_text())
     sources = {
+        "closure": ROOT / "OPEN-019-024.schema.json",
         "gateway": ROOT / "COGNITIVE-RUNTIME-GATEWAY.schema.json",
         "ontology": ROOT / "ONTOLOGY-V0.schema.json",
     }
@@ -55,6 +56,8 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as directory:
         temporary = Path(directory)
         for name, source in sources.items():
+            if name == "closure":
+                continue
             generated = temporary / f"{name}.py"
             _generate(source, generated)
             committed = PACKAGE / "generated" / f"{name}.py"
