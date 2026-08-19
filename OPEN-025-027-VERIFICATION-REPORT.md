@@ -1,6 +1,6 @@
 # OPEN-025–027 Verification Report
 
-**Verified:** 2026-08-19  
+**Verified:** 2026-08-19 (corrected authority candidate)  
 **Contract version:** 1.0.0  
 **Schema SHA-256:** `99c0c2d5ee6a226ee038492ca28418d5b1b9559c06fe9e880b483e182d6b6b3a`
 
@@ -12,7 +12,7 @@ The specification-owner closure for canonical actor/tenant authorization, signed
 
 - `uv run ruff check .` — passed
 - `uv run mypy --strict src` — passed
-- `uv run python scripts/verify_contracts.py` — passed
+- `uv run --extra dev python scripts/verify_contracts.py` — passed
 - `uv run pytest -q` — 21 passed
 
 ## Admission consequence
