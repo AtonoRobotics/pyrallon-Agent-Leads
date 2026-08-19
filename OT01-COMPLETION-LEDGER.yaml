@@ -41,7 +41,7 @@ sections:
     title: Consent contactability and acknowledgment
     status: in_progress
     evidence: [OT01-INGRESS-CONTRACT.md, OT01-INGRESS.schema.json, src/buyer_ops_contracts/acknowledgment.py, src/buyer_ops_contracts/acknowledgment_repository.py, migrations/0012_ot01_acknowledgment.sql, tests/test_acknowledgment.py, tests/test_postgres_integration.py, src/buyer_ops_contracts/habitat.py, src/buyer_ops_contracts/connector_gateway.py]
-    blockers: [GAP-ACKNOWLEDGMENT]
+    blockers: []
   - id: "9"
     title: Buyer Journey Workflow state
     status: in_progress
