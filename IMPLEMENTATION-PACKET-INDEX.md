@@ -69,6 +69,11 @@ recorded commands from a clean checkout.
 `OPEN-019-024-VERIFICATION-REPORT.md`. Runtime acceptance remains an evidence obligation, not an
 unresolved canonical-semantics blocker.
 
+**OPEN-025–027 closure (2026-08-19):** Canonical actor/tenant authorization, signed capability
+activation, and deterministic fair-housing compiler/counterfactual semantics are governed by
+`OPEN-025-027.schema.json` and `OPEN-025-027-CONTRACT-CLOSURE.md`. Provisional local behavior is
+non-governing until it synchronizes to the hash-pinned schema and passes its acceptance suite.
+
 ### PKT-01 — PostgreSQL canonical CRM and ontology
 
 **Objective:** Implement the canonical records and orthogonal state machines required by ontology v0 and OT-01.
@@ -274,4 +279,3 @@ CI and deployment tooling must derive activation from the gate registry and immu
 - migrations and runtime versions match;
 - provider identities/scopes read back correctly; and
 - the activation decision is recorded with rollback state.
-

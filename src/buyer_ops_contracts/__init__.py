@@ -1,5 +1,8 @@
 """Executable contracts for the Buyer Operations control plane."""
 
+from .authority_activation_fair_housing import (
+    validate_authority_activation_fair_housing_semantics,
+)
 from .closure import validate_closure_semantics
 from .errors import ContractViolation
 from .registry import ContractRegistry
@@ -10,9 +13,9 @@ __all__ = [
     "ContractRegistry",
     "ContractViolation",
     "validate_closure_semantics",
+    "validate_authority_activation_fair_housing_semantics",
     "SemanticPolicy",
     "validate_gateway_pair",
     "validate_record",
     "validate_semantics",
 ]
-

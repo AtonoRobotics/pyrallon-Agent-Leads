@@ -38,6 +38,7 @@ def _generate(schema: Path, output: Path) -> None:
 def main() -> None:
     manifest = json.loads((PACKAGE / "contracts.manifest.json").read_text())
     sources = {
+        "authority_activation_fair_housing": ROOT / "OPEN-025-027.schema.json",
         "closure": ROOT / "OPEN-019-024.schema.json",
         "gateway": ROOT / "COGNITIVE-RUNTIME-GATEWAY.schema.json",
         "ontology": ROOT / "ONTOLOGY-V0.schema.json",
@@ -68,4 +69,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

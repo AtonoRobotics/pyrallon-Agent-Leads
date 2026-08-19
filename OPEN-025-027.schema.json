@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/open-025-027-closure/1.0.0",
+  "title": "OPEN-025–027 governing closure records",
+  "oneOf": [
+    { "$ref": "#/$defs/ActorTenantAuthorization" },
+    { "$ref": "#/$defs/ReleaseActivation" },
+    { "$ref": "#/$defs/FairHousingControlProfile" },
+    { "$ref": "#/$defs/FairHousingCounterfactualCase" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._:/-]+$" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "Base": {
+      "type": "object",
+      "required": ["schemaVersion", "tenantId", "recordId", "observedAt"],
+      "properties": {
+        "schemaVersion": { "const": "open-025-027/1.0.0" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "recordId": { "$ref": "#/$defs/Id" },
+        "observedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ActorTenantAuthorization": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["recordType", "actorId", "principalId", "role", "allowedCommands", "recordScopes", "policyVersion", "authorizationVersion", "effectiveAt", "expiresAt", "status"],
+          "properties": {
+            "recordType": { "const": "ActorTenantAuthorization" },
+            "actorId": { "$ref": "#/$defs/Id" },
+            "principalId": { "$ref": "#/$defs/Id" },
+            "role": { "$ref": "#/$defs/Id" },
+            "allowedCommands": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "recordScopes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "policyVersion": { "$ref": "#/$defs/Id" },
+            "authorizationVersion": { "type": "integer", "minimum": 1 },
+            "effectiveAt": { "$ref": "#/$defs/Timestamp" },
+            "expiresAt": { "$ref": "#/$defs/Timestamp" },
+            "revokedAt": { "$ref": "#/$defs/Timestamp" },
+            "supersedesId": { "$ref": "#/$defs/Id" },
+            "status": { "enum": ["active", "expired", "revoked", "superseded"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "GateEvidenceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateId", "applicability", "outcome", "evidenceId", "evidenceDigest", "expiresAt"],
+      "properties": {
+        "gateId": { "$ref": "#/$defs/Id" },
+        "applicability": { "enum": ["platform_invariant", "operational_thread", "capability", "complete_product"] },
+        "outcome": { "enum": ["pass", "fail", "blocked", "not_applicable"] },
+        "evidenceId": { "$ref": "#/$defs/Id" },
+        "evidenceDigest": { "$ref": "#/$defs/Digest" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ReleaseActivation": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["recordType", "environment", "releaseId", "buildDigest", "contractManifestDigest", "policyVersion", "enabledCapabilities", "requiredGateIds", "gateEvidence", "signerActorId", "signature", "effectiveAt", "expiresAt", "status"],
+          "properties": {
+            "recordType": { "const": "ReleaseActivation" },
+            "environment": { "enum": ["development", "staging", "production"] },
+            "releaseId": { "$ref": "#/$defs/Id" },
+            "buildDigest": { "$ref": "#/$defs/Digest" },
+            "contractManifestDigest": { "$ref": "#/$defs/Digest" },
+            "policyVersion": { "$ref": "#/$defs/Id" },
+            "enabledCapabilities": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "requiredGateIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "gateEvidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/GateEvidenceBinding" } },
+            "signerActorId": { "$ref": "#/$defs/Id" },
+            "signature": { "$ref": "#/$defs/Digest" },
+            "effectiveAt": { "$ref": "#/$defs/Timestamp" },
+            "expiresAt": { "$ref": "#/$defs/Timestamp" },
+            "revokedAt": { "$ref": "#/$defs/Timestamp" },
+            "status": { "enum": ["active", "expired", "revoked", "superseded"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "AllowedFeature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["featureId", "sourceClass", "allowedPurposes", "allowedActionClasses"],
+      "properties": {
+        "featureId": { "$ref": "#/$defs/Id" },
+        "sourceClass": { "enum": ["buyer_stated", "canonical_operational", "provider_operational"] },
+        "allowedPurposes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "allowedActionClasses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }
+      }
+    },
+    "PromotionCriterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metricId", "sliceDefinition", "minimumSample", "parityThreshold", "confidenceMethod", "rollbackTrigger"],
+      "properties": {
+        "metricId": { "$ref": "#/$defs/Id" },
+        "sliceDefinition": { "type": "string", "minLength": 1 },
+        "minimumSample": { "type": "integer", "minimum": 1 },
+        "parityThreshold": { "type": "number", "minimum": 0 },
+        "confidenceMethod": { "$ref": "#/$defs/Id" },
+        "rollbackTrigger": { "type": "string", "minLength": 1 }
+      }
+    },
+    "FairHousingControlProfile": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["recordType", "profileVersion", "normalization", "matchMode", "protectedTokens", "protectedPhrases", "allowedFeatures", "prohibitedProxyRules", "immutableServiceGuarantees", "optimizerBounds", "promotionCriteria", "effectiveAt"],
+          "properties": {
+            "recordType": { "const": "FairHousingControlProfile" },
+            "profileVersion": { "$ref": "#/$defs/Id" },
+            "normalization": { "const": "unicode_nfkc_casefold_whitespace_v1" },
+            "matchMode": { "const": "unicode_token_and_phrase_boundary" },
+            "protectedTokens": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+            "protectedPhrases": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+            "allowedFeatures": { "type": "array", "items": { "$ref": "#/$defs/AllowedFeature" } },
+            "prohibitedProxyRules": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "immutableServiceGuarantees": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "optimizerBounds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "promotionCriteria": { "type": "array", "items": { "$ref": "#/$defs/PromotionCriterion" } },
+            "effectiveAt": { "$ref": "#/$defs/Timestamp" },
+            "supersedesId": { "$ref": "#/$defs/Id" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "FairHousingCounterfactualCase": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["recordType", "profileVersion", "caseId", "actionClass", "protectedDimension", "baselineInputDigest", "counterfactualInputDigest", "onlyDifferenceAttestation", "invariantFields", "baselineOutcomeDigest", "counterfactualOutcomeDigest", "outcome"],
+          "properties": {
+            "recordType": { "const": "FairHousingCounterfactualCase" },
+            "profileVersion": { "$ref": "#/$defs/Id" },
+            "caseId": { "$ref": "#/$defs/Id" },
+            "actionClass": { "$ref": "#/$defs/Id" },
+            "protectedDimension": { "$ref": "#/$defs/Id" },
+            "baselineInputDigest": { "$ref": "#/$defs/Digest" },
+            "counterfactualInputDigest": { "$ref": "#/$defs/Digest" },
+            "onlyDifferenceAttestation": { "const": true },
+            "invariantFields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "baselineOutcomeDigest": { "$ref": "#/$defs/Digest" },
+            "counterfactualOutcomeDigest": { "$ref": "#/$defs/Digest" },
+            "outcome": { "enum": ["pass", "fail"] }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

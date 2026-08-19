@@ -2,6 +2,15 @@
   "manifestVersion": "1.0.0",
   "contracts": [
     {
+      "name": "authority_activation_fair_housing",
+      "resource": "schemas/authority-activation-fair-housing.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/open-025-027-closure/1.0.0",
+      "schemaVersion": "1.0.0",
+      "sha256": "99c0c2d5ee6a226ee038492ca28418d5b1b9559c06fe9e880b483e182d6b6b3a",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
       "name": "closure",
       "resource": "schemas/closure.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/open-019-024-closure/1.0.0",
@@ -30,4 +39,3 @@
     }
   ]
 }
-
