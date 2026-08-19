@@ -173,67 +173,19 @@ These do not block canonical non-cognitive implementation but block the named ac
 | OPEN-008 | Approved English/Spanish knowledge corpus, owners, effective dates, supersession process | Broker/product | Substantive live cognition |
 | OPEN-009 | Retention periods, legal-hold authority, deletion SLO, object-lock selection | Broker/product | Production retention activation |
 
-### 13.1 Resolved governing-contract defects
+## 14. Authority closure
 
-OPEN-010 through OPEN-018 are resolved by SCP-01 as of 2026-08-19. The authoritative mapping is
-`SPECIFICATION-CLOSURE-PACKET.md`; version and reader/writer compatibility is
-`SCP-01-COMPATIBILITY.json`. Resolution evidence is the 13-family hash-pinned manifest, generated
-models, valid/invalid fixtures, ontology 0.3 migration and executable lifecycle/reference admission,
-167 passing tests (including 21 PostgreSQL and 7 Temporal tests), static/format checks, secret scan,
-package build, and drift verifiers. These IDs no longer block implementation admission. Deployment
-OPEN-001 through OPEN-009 continue to block only the activations named above.
+PR #1 and commit `8f528d9` are closed and superseded; they targeted the obsolete four-family
+`buyer-ops/0.1.0` package. The corrected candidate is PR #2 on
+`spec/kernel-0.3.0-authority-corrected`, based on the 13-family `buyer-ops/0.3.0` authority review
+branch. Its packaged/root schema bytes, manifest digests, and generated Pydantic models are
+synchronized, and `uv run --extra dev python scripts/verify_contracts.py` passes locally.
 
-OPEN-019 through OPEN-024 have a published governing closure revision 1.0.0. The local closure
-revision 1.1.0 and Context/Release Activation 1.1.0 bindings are provisional because they are not
-published by the governing GitHub branch. Local evidence includes stable external-message
-identity, signed capability inventory and bound previews, signed source freshness/output routes,
-event-set-derived ratio observations, registry/release-bound gate evidence, deployed-build-bound
-WCAG evidence, versioned append-only closure persistence, generated models, complete valid/invalid
-record fixtures, and unit/PostgreSQL/Temporal verification. That evidence does not resolve the
-unpublished revision delta, complete implementation packets, or authorize deployment.
+OPEN-025–027 are therefore resolved by the candidate. Default-branch authority and repository CI
+remain review/merge evidence, not reasons to describe the candidate as semantically missing. Runtime
+activation remains separately gated by deployment decisions and capability-specific evidence.
 
-Local Operator Surface 1.1.0 work provisionally explores complete
-ontology-valid correction and revocation records, an owner-supplied versioned `OperatorPolicy`, exact
-authorization/policy references and scope, RFC 8785 payload binding, and one PostgreSQL transaction
-for canonical mutation plus command result. Version 1.0 commands remain audit-only. Resolution
-evidence includes valid/invalid fixtures, generated models, compatibility declaration, migration and
-rollback refusal, atomic success/forced-result-failure tests, and the full local gate suite. No
-governing GitHub branch publishes this family, so it does not resolve OPEN-028 or authorize execution.
-
-Provisional, locally authored OT-01 Ingress 1.1.0 artifacts explore owner-versioned opt-out
-lexicons and acknowledgment policies, exact normalization and ordered selection, immutable template
-and substitution boundaries, exact current external-message identity and capture bindings,
-caller-supplied decision/idempotency identities, complete ontology Suppression candidates, typed
-outcomes, configuration lifecycle/temporal rules, and fail-closed missing-configuration behavior.
-Migration 0012 persists append-only configuration history, decisions, and outcomes with tenant RLS;
-PostgreSQL tests prove internal implementation behavior, including synchronous suppression plus
-decision atomicity and forced-write rollback. These artifacts are not present in either published
-GitHub branch and therefore do not close the unnumbered acknowledgment contract gap or authorize execution. They remain
-non-governing pending specification-owner publication and review.
-
-OPEN-025 through OPEN-027 had a premature closure revision 1.0.0 proposed in PR #1.
-Their authoritative meanings are canonical actor/tenant authorization, signed release and
-capability activation, and deterministic fair-housing controls respectively. Resolution evidence
-includes the hash-pinned candidate schema, generated models, append-only persistence, exact-payload activation
-readback, command-admission authority checks, connector activation/permit conjunction, deterministic
-Unicode matching, purpose-bound features, counterfactual invariance, and unit/PostgreSQL evidence.
-PR #1 is based on the obsolete four-family ontology 0.1.0 package and is closed. The corrected 13-family 0.3.0 candidate is in PR #2. The specification owner has
-superseded it and directed that it must not be merged. These IDs are not governingly resolved and
-must not be reused for unrelated implementation-discovered gaps.
-
-### 13.2 Unresolved governing-contract defects discovered during implementation
-
-| Local tracking label (non-governing) | Missing governing contract | Blocks |
-|---|---|---|
-| GAP-QUALIFICATION-READINESS | Versioned qualification-policy and deterministic consultation-readiness inputs, outputs, ownership, thresholds, reason/evidence bindings, and transition/admission rules | PKT-08 readiness implementation and activation |
-| GAP-AVAILABILITY-BOOKING | Versioned calendar snapshot, availability policy, `SlotSet`, booking/reschedule/cancel command, provider-result, and reconciliation contracts | PKT-09 implementation and activation |
-| GAP-ACKNOWLEDGMENT | Versioned deterministic acknowledgment policy, template-selection inputs/result, approved payload boundary, opt-out lexicon, and follow-up disposition records | PKT-05 acknowledgment and synchronous opt-out implementation and activation |
-
-The required closure contents and the current packet evidence are recorded in
-`IMPLEMENTATION-COMPLETION-AUDIT.md`. These defects were entered before implementation-defined
-semantics were introduced.
-
-## 14. Implementation admission rule
+## 15. Implementation admission rule
 
 An implementation packet may begin only when:
 
