@@ -1,0 +1,99 @@
+contract: ot01/1.0.0
+as_of: 2026-08-19
+activatable: false
+sections:
+  - id: "1"
+    title: Objective
+    status: complete
+    evidence: [OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md]
+    blockers: []
+  - id: "2"
+    title: Scope
+    status: complete
+    evidence: [OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md]
+    blockers: []
+  - id: "3"
+    title: Activation prerequisites
+    status: blocked
+    evidence: [DESIGN-TRUTH-LEDGER.md, PRODUCTION-GATE-REGISTRY.yaml]
+    blockers: [OPEN-001, OPEN-002, OPEN-003, OPEN-005, OPEN-006, OPEN-008, OPEN-009]
+  - id: "4"
+    title: Component ownership
+    status: in_progress
+    evidence: [src/buyer_ops_contracts/canonical_repository.py, src/buyer_ops_contracts/habitat.py, src/buyer_ops_contracts/temporal_workflows.py]
+    blockers: []
+  - id: "5"
+    title: Durable workflow topology
+    status: in_progress
+    evidence: [src/buyer_ops_contracts/temporal_workflows.py, tests/test_temporal_workflow.py]
+    blockers: []
+  - id: "6"
+    title: Ingress contract
+    status: in_progress
+    evidence: [OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md, OT01-INGRESS.schema.json, OPEN-019-024.schema.json, src/buyer_ops_contracts/ingress.py, migrations/0007_inbound_events.sql, migrations/0009_control_plane.sql]
+    blockers: []
+  - id: "7"
+    title: Identity-resolution contract
+    status: in_progress
+    evidence: [src/buyer_ops_contracts/identity.py, tests/test_postgres_integration.py]
+    blockers: []
+  - id: "8"
+    title: Consent contactability and acknowledgment
+    status: in_progress
+    evidence: [OT01-INGRESS-CONTRACT.md, OT01-INGRESS.schema.json, src/buyer_ops_contracts/acknowledgment.py, src/buyer_ops_contracts/acknowledgment_repository.py, migrations/0012_ot01_acknowledgment.sql, tests/test_acknowledgment.py, tests/test_postgres_integration.py, src/buyer_ops_contracts/habitat.py, src/buyer_ops_contracts/connector_gateway.py]
+    blockers: [GAP-ACKNOWLEDGMENT]
+  - id: "9"
+    title: Buyer Journey Workflow state
+    status: in_progress
+    evidence: [TEMPORAL-WORKFLOW.schema.json, src/buyer_ops_contracts/temporal_workflows.py, tests/test_temporal_workflow.py]
+    blockers: []
+  - id: "10"
+    title: Progressive qualification contract
+    status: in_progress
+    evidence: [COGNITIVE-RUNTIME-GATEWAY-CONTRACT.md, CONTEXT-COMPILER.schema.json, OPEN-019-024.schema.json, src/buyer_ops_contracts/context_compiler.py, tests/test_context_compiler.py]
+    blockers: []
+  - id: "11"
+    title: Consultation-readiness predicate
+    status: in_progress
+    evidence: [OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md]
+    blockers: []
+  - id: "12"
+    title: Consultation scheduling contract
+    status: blocked
+    evidence: [OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md, src/buyer_ops_contracts/habitat.py]
+    blockers: [OPEN-003, OPEN-006]
+  - id: "13"
+    title: Agent briefing and exception surface
+    status: in_progress
+    evidence: [IMPLEMENTATION-PACKET-INDEX.md, OPERATOR-SURFACE.schema.json, OPEN-019-024.schema.json, src/buyer_ops_contracts/release_evidence.py, tests/test_release_evidence.py]
+    blockers: []
+  - id: "14"
+    title: Concurrency and ordering
+    status: in_progress
+    evidence: [src/buyer_ops_contracts/canonical_repository.py, tests/test_postgres_integration.py]
+    blockers: []
+  - id: "15"
+    title: Failure taxonomy and recovery
+    status: in_progress
+    evidence: [src/buyer_ops_contracts/gateway_routing.py, src/buyer_ops_contracts/temporal_workflows.py]
+    blockers: []
+  - id: "16"
+    title: Observability
+    status: in_progress
+    evidence: [OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md, TELEMETRY-SLO.schema.json, TELEMETRY-SLO-CATALOG.json, OPEN-019-024.schema.json, src/buyer_ops_contracts/telemetry.py, tests/test_ratio_telemetry.py]
+    blockers: []
+  - id: "17"
+    title: Gate mapping
+    status: blocked
+    evidence: [PRODUCTION-GATE-REGISTRY.yaml, scripts/verify_gate_registry.py]
+    blockers: [OPEN-001, OPEN-002, OPEN-003, OPEN-005, OPEN-006, OPEN-008, OPEN-009]
+  - id: "18"
+    title: Acceptance scenarios
+    status: blocked
+    evidence: [tests/test_postgres_integration.py, tests/test_temporal_workflow.py, tests/test_habitat.py]
+    blockers: [OPEN-001, OPEN-002, OPEN-003, OPEN-005, OPEN-006, OPEN-008]
+  - id: "19"
+    title: Completion evidence
+    status: in_progress
+    evidence: [OT01-COMPLETION-LEDGER.yaml, PKT-00-VERIFICATION-REPORT.md]
+    blockers: [OPEN-001, OPEN-002, OPEN-003, OPEN-005, OPEN-006, OPEN-008, OPEN-009]

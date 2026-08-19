@@ -1,0 +1,55 @@
+{
+  "AttributionInput": {
+    "removedField": "schemaVersion",
+    "record": {
+      "messageType": "attribution_input",
+      "attributionId": "value",
+      "tenantId": "tenantId-1",
+      "sourceType": "web_form",
+      "sourceInstanceId": "value",
+      "receivedAt": "2030-01-01T00:00:00Z",
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "provenanceEvidenceId": "value",
+      "retentionClass": "operational_90d",
+      "version": 1
+    }
+  },
+  "ConsentPresentationEvidence": {
+    "removedField": "schemaVersion",
+    "record": {
+      "messageType": "consent_presentation_evidence",
+      "evidenceId": "value",
+      "tenantId": "tenantId-1",
+      "subjectPersonId": "value",
+      "surface": "web",
+      "disclosureArtifactId": "value",
+      "disclosureVersion": "value",
+      "presentedAt": "2030-01-01T00:00:00Z",
+      "locale": "en-US",
+      "interaction": "presented",
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "retentionClass": "audit_7y",
+      "version": 1
+    }
+  },
+  "OptOutLexicon": {
+    "removedField": "schemaVersion",
+    "record": {"messageType": "opt_out_lexicon"}
+  },
+  "AcknowledgmentPolicy": {
+    "removedField": "schemaVersion",
+    "record": {"messageType": "acknowledgment_policy"}
+  },
+  "AcknowledgmentDecisionRequest": {
+    "removedField": "schemaVersion",
+    "record": {"messageType": "acknowledgment_decision_request"}
+  },
+  "AcknowledgmentDecision": {
+    "removedField": "schemaVersion",
+    "record": {"messageType": "acknowledgment_decision"}
+  },
+  "AcknowledgmentOutcome": {
+    "removedField": "schemaVersion",
+    "record": {"messageType": "acknowledgment_outcome"}
+  }
+}

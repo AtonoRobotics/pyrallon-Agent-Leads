@@ -1,0 +1,80 @@
+"""Provider-neutral connector gateway. Permit redemption is required; live invoke is activation-gated."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .activation import ActivationController
+from .canonical_repository import CanonicalRepository
+from .structural import validate_record
+
+
+class ConnectorDenied(RuntimeError):
+    def __init__(self, code: str, detail: str) -> None:
+        self.code = code
+        self.detail = detail
+        super().__init__(detail)
+
+
+class ConnectorGateway:
+    def __init__(
+        self,
+        repository: CanonicalRepository,
+        activation: ActivationController,
+        *,
+        tenant_id: str,
+    ) -> None:
+        self._repository = repository
+        self._activation = activation
+        self._tenant_id = tenant_id
+
+    def inventory(self) -> list[dict[str, Any]]:
+        grants = self._repository.list_by_type("ConnectorGrant")
+        rows = []
+        for grant in grants:
+            capability_id = f"connector:{grant.get('connectorId')}"
+            rows.append(
+                {
+                    "connector_id": grant.get("connectorId"),
+                    "grant_id": grant["id"],
+                    "grant_state": grant.get("grantState"),
+                    "delegated_principal_id": grant.get("delegatedPrincipalId"),
+                    "capabilities": grant.get("capabilities"),
+                    "scopes": grant.get("scopes"),
+                    "activation": "active"
+                    if self._activation.capability_activated(capability_id)
+                    else "inactive",
+                }
+            )
+        return rows
+
+    def invoke(self, request: dict[str, Any], *, permit_digest: str) -> dict[str, Any]:
+        validate_record(request, "connector_gateway")
+        if request.get("messageType") != "connector_request":
+            raise ConnectorDenied("validation_failed", "not a connector_request")
+        if request["tenantId"] != self._tenant_id:
+            raise ConnectorDenied("authority_denied", "tenant mismatch")
+        connector_id = str(request["connectorId"])
+        if "voice" in connector_id.lower():
+            raise ConnectorDenied("policy_denied", "outbound AI voice is prohibited")
+        if not permit_digest:
+            raise ConnectorDenied("authority_denied", "permit digest required")
+        grant = self._repository.get(str(request["grantId"]))
+        if grant is None or grant.get("recordType") != "ConnectorGrant":
+            raise ConnectorDenied("connector_revoked", "connector grant missing")
+        if grant.get("grantState") != "active":
+            raise ConnectorDenied("connector_revoked", "connector grant is not active")
+        if int(grant["version"]) != int(request["grantVersion"]):
+            raise ConnectorDenied("version_conflict", "grant version mismatch")
+        if request["capability"] not in [str(item) for item in grant.get("capabilities", [])]:
+            raise ConnectorDenied("authority_denied", "grant lacks required capability")
+        capability_id = f"connector:{grant.get('connectorId')}"
+        if not self._activation.capability_activated(capability_id):
+            raise ConnectorDenied(
+                "connector_revoked",
+                "capability is not activated; no provider call is made",
+            )
+        raise ConnectorDenied(
+            "connector_revoked",
+            "live provider adapters are not activated for this environment",
+        )

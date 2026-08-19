@@ -1,0 +1,64 @@
+{
+  "MetricObservation": {
+    "messageType": "metric_observation",
+    "schemaVersion": "telemetry-slo/1.0.0",
+    "observationId": "value",
+    "metricId": "value",
+    "value": 0,
+    "unit": "seconds",
+    "eventStartedAt": "2030-01-01T00:00:00Z",
+    "eventEndedAt": "2030-01-01T00:00:00Z",
+    "observedAt": "2030-01-01T00:00:00Z",
+    "dimensions": {},
+    "sourceEventIds": [
+      "value"
+    ],
+    "producerId": "value",
+    "retentionClass": "operational_90d"
+  },
+  "SloEvaluation": {
+    "messageType": "slo_evaluation",
+    "schemaVersion": "telemetry-slo/1.0.0",
+    "evaluationId": "value",
+    "sloId": "value",
+    "catalogVersion": "telemetry-slo-catalog/1.0.0",
+    "windowStartedAt": "2030-01-01T00:00:00Z",
+    "windowEndedAt": "2030-01-01T00:00:00Z",
+    "sampleCount": 1,
+    "objective": 0,
+    "actual": 0,
+    "comparator": "lte",
+    "status": "pass",
+    "errorBudgetConsumed": 0,
+    "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "evaluatedAt": "2030-01-01T00:00:00Z"
+  },
+  "DashboardDefinition": {
+    "messageType": "dashboard_definition",
+    "schemaVersion": "telemetry-slo/1.0.0",
+    "dashboardId": "value",
+    "version": 1,
+    "owner": "product_operations",
+    "metricIds": [
+      "value"
+    ],
+    "sloIds": [
+      "value"
+    ],
+    "refreshSeconds": 30,
+    "retentionClass": "audit_7y"
+  },
+  "AlertEvent": {
+    "messageType": "alert_event",
+    "schemaVersion": "telemetry-slo/1.0.0",
+    "alertId": "value",
+    "policyId": "value",
+    "sloEvaluationId": "value",
+    "severity": "warning",
+    "owner": "product_operations",
+    "route": "pager",
+    "openedAt": "2030-01-01T00:00:00Z",
+    "state": "open",
+    "retentionClass": "audit_7y"
+  }
+}

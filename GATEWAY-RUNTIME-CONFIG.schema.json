@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/gateway-runtime-config/1.1.0",
+  "title": "GatewayRuntimeConfiguration",
+  "description": "Closed operational records for Cognitive Runtime Gateway 1.1 route eligibility. These records contain opaque credential references only, never credential material.",
+  "oneOf": [
+    { "$ref": "#/$defs/CredentialIdentity" },
+    { "$ref": "#/$defs/CapabilityProfile" },
+    { "$ref": "#/$defs/RoutePolicy" },
+    { "$ref": "#/$defs/GatewayFailure" },
+    { "$ref": "#/$defs/ContextSufficiencyPolicy" },
+    { "$ref": "#/$defs/ActionOutputSafetyPolicy" },
+    { "$ref": "#/$defs/DegradationPolicy" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "AuthClass": { "enum": ["subscription_oauth", "workspace_access_token", "service_account", "metered_api", "cloud_iam", "local_endpoint"] },
+    "BillingClass": { "enum": ["subscription", "metered", "internal"] },
+    "CredentialIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identityRef", "tenantId", "providerId", "authClass", "billingClass", "subjectType", "subjectRef", "allowedActionClasses", "allowedModelFamilies", "concurrencyLimit", "dataPolicyVersion", "state"],
+      "properties": {
+        "identityRef": { "$ref": "#/$defs/Id" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "providerId": { "$ref": "#/$defs/Id" },
+        "authClass": { "$ref": "#/$defs/AuthClass" },
+        "billingClass": { "$ref": "#/$defs/BillingClass" },
+        "subjectType": { "enum": ["entitled_user", "workspace_agent", "service_identity", "workload"] },
+        "subjectRef": { "$ref": "#/$defs/Id" },
+        "allowedActionClasses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "allowedModelFamilies": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "concurrencyLimit": { "type": "integer", "minimum": 1 },
+        "dataPolicyVersion": { "$ref": "#/$defs/Id" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" },
+        "state": { "enum": ["active", "expiring", "blocked_auth", "revoked"] }
+      }
+    },
+    "CapabilityProfile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profileVersion", "providerId", "adapterId", "adapterVersion", "transport", "modelFamily", "resolvedModelIds", "supportedInputSchemaVersions", "supportedOutputSchemaVersions", "structuredOutput", "allowedToolClasses", "writeCapabilitiesMechanicallyExcluded", "maximumEffectiveContextUnits", "maximumOutputUnits", "unitType", "streamingSupported", "cancellationSupported", "timeoutMaximumMs", "dataRetentionPolicyVersion", "promptInjectionIsolationVersion", "supportedLanguages", "latencyEnvelopeMs", "concurrencyEnvelope", "quotaSemantics", "usageSemantics", "knownNondeterminism", "unavailableFeatures", "qualifiedActionClasses", "evaluationQualificationId", "dataPolicyVersions", "failureMappings", "unmappedProviderErrorState", "state"],
+      "properties": {
+        "profileVersion": { "$ref": "#/$defs/Id" },
+        "providerId": { "$ref": "#/$defs/Id" },
+        "adapterId": { "$ref": "#/$defs/Id" },
+        "adapterVersion": { "$ref": "#/$defs/Id" },
+        "transport": { "$ref": "#/$defs/Id" },
+        "modelFamily": { "$ref": "#/$defs/Id" },
+        "resolvedModelIds": { "type": "array", "minItems": 1, "maxItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "supportedInputSchemaVersions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "supportedOutputSchemaVersions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "structuredOutput": { "type": "boolean" },
+        "allowedToolClasses": { "type": "array", "uniqueItems": true, "items": { "enum": ["read", "retrieval", "draft"] } },
+        "writeCapabilitiesMechanicallyExcluded": { "type": "boolean" },
+        "maximumEffectiveContextUnits": { "type": "integer", "minimum": 1 },
+        "maximumOutputUnits": { "type": "integer", "minimum": 1 },
+        "unitType": { "enum": ["tokens", "provider_units"] },
+        "streamingSupported": { "type": "boolean" },
+        "cancellationSupported": { "type": "boolean" },
+        "timeoutMaximumMs": { "type": "integer", "minimum": 1 },
+        "dataRetentionPolicyVersion": { "$ref": "#/$defs/Id" },
+        "promptInjectionIsolationVersion": { "$ref": "#/$defs/Id" },
+        "supportedLanguages": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "latencyEnvelopeMs": {
+          "type": "object", "additionalProperties": false, "required": ["p95", "maximum"],
+          "properties": { "p95": { "type": "integer", "minimum": 1 }, "maximum": { "type": "integer", "minimum": 1 } }
+        },
+        "concurrencyEnvelope": { "type": "integer", "minimum": 1 },
+        "quotaSemantics": { "$ref": "#/$defs/Id" },
+        "usageSemantics": { "$ref": "#/$defs/Id" },
+        "knownNondeterminism": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "unavailableFeatures": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "qualifiedActionClasses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "evaluationQualificationId": { "$ref": "#/$defs/Id" },
+        "dataPolicyVersions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "failureMappings": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["providerErrorCode", "state", "diagnosticCode"],
+            "properties": {
+              "providerErrorCode": { "$ref": "#/$defs/Id" },
+              "state": { "enum": ["blocked_auth", "blocked_capacity", "blocked_policy", "provider_unavailable", "schema_rejected"] },
+              "diagnosticCode": { "$ref": "#/$defs/Id" }
+            }
+          }
+        },
+        "unmappedProviderErrorState": { "const": "provider_unavailable" },
+        "state": { "enum": ["qualified", "suspended", "retired"] }
+      }
+    },
+    "Route": {
+      "type": "object", "additionalProperties": false,
+      "required": ["routeId", "adapterId", "transportSelection", "credentialIdentityRef", "authClass", "billingClass", "modelFamily", "capabilityProfile", "evaluationQualification"],
+      "properties": {
+        "routeId": { "$ref": "#/$defs/Id" },
+        "adapterId": { "$ref": "#/$defs/Id" },
+        "transportSelection": { "const": "fixed" },
+        "credentialIdentityRef": { "$ref": "#/$defs/Id" },
+        "authClass": { "$ref": "#/$defs/AuthClass" },
+        "billingClass": { "$ref": "#/$defs/BillingClass" },
+        "modelFamily": { "$ref": "#/$defs/Id" },
+        "capabilityProfile": { "$ref": "#/$defs/Id" },
+        "evaluationQualification": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "RouteTransition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["from", "to", "allowedCauses", "requiresOperatorAtRuntime", "evidenceRequired"],
+      "properties": {
+        "from": { "$ref": "#/$defs/Id" },
+        "to": { "$ref": "#/$defs/Id" },
+        "allowedCauses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["blocked_capacity", "blocked_auth", "provider_unavailable", "schema_rejected"] } },
+        "requiresOperatorAtRuntime": { "type": "boolean" },
+        "evidenceRequired": { "type": "boolean" }
+      }
+    },
+    "RoutePolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "tenantId", "actionClass", "routes", "transitions", "otherwise"],
+      "properties": {
+        "version": { "$ref": "#/$defs/Id" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "actionClass": { "$ref": "#/$defs/Id" },
+        "routes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Route" } },
+        "transitions": { "type": "array", "items": { "$ref": "#/$defs/RouteTransition" } },
+        "otherwise": { "const": "deterministic_degradation" }
+      }
+    },
+    "GatewayFailure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "workId", "attempt", "state", "routePolicyVersion", "contextManifestId", "occurredAt", "diagnosticCode", "diagnosticEvidenceIds", "substantiveWorkPending", "traceId"],
+      "properties": {
+        "schemaVersion": { "const": "cognitive-failure/1.0.0" },
+        "recordType": { "const": "GatewayFailure" },
+        "workId": { "$ref": "#/$defs/Id" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "state": { "enum": ["blocked_auth", "blocked_capacity", "blocked_policy", "provider_unavailable", "context_insufficient", "schema_rejected", "degraded_acknowledged", "expired"] },
+        "routePolicyVersion": { "$ref": "#/$defs/Id" },
+        "routeId": { "$ref": "#/$defs/Id" },
+        "contextManifestId": { "$ref": "#/$defs/Id" },
+        "occurredAt": { "$ref": "#/$defs/Timestamp" },
+        "deadline": { "$ref": "#/$defs/Timestamp" },
+        "diagnosticCode": { "$ref": "#/$defs/Id" },
+        "diagnosticEvidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "substantiveWorkPending": { "type": "boolean" },
+        "traceId": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "ContextSufficiencyPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recordType", "schemaVersion", "policyVersion", "actionClass", "requiredContextClasses", "minimumSourceCount", "maximumSourceAgeSeconds", "onInsufficient", "evidenceRequired", "state"],
+      "properties": {
+        "recordType": { "const": "ContextSufficiencyPolicy" }, "schemaVersion": { "const": "gateway-runtime-config/1.1.0" }, "policyVersion": { "$ref": "#/$defs/Id" }, "actionClass": { "$ref": "#/$defs/Id" },
+        "requiredContextClasses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "minimumSourceCount": { "type": "integer", "minimum": 1 }, "maximumSourceAgeSeconds": { "type": "integer", "minimum": 1 },
+        "onInsufficient": { "enum": ["block", "acknowledge_only"] }, "evidenceRequired": { "const": true }, "state": { "enum": ["draft", "active", "retired"] }
+      }
+    },
+    "ActionOutputSafetyPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recordType", "schemaVersion", "policyVersion", "actionClass", "allowedOutputClasses", "prohibitedOutputClasses", "requiredApproval", "templateVersion", "evidenceRequired", "state"],
+      "properties": {
+        "recordType": { "const": "ActionOutputSafetyPolicy" }, "schemaVersion": { "const": "gateway-runtime-config/1.1.0" }, "policyVersion": { "$ref": "#/$defs/Id" }, "actionClass": { "$ref": "#/$defs/Id" },
+        "allowedOutputClasses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "prohibitedOutputClasses": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "requiredApproval": { "enum": ["none", "agent", "broker"] }, "templateVersion": { "$ref": "#/$defs/Id" }, "evidenceRequired": { "const": true }, "state": { "enum": ["draft", "active", "retired"] }
+      }
+    },
+    "DegradationPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recordType", "schemaVersion", "policyVersion", "fromState", "cause", "toState", "allowedAction", "templateVersion", "substantiveWorkPending", "evidenceRequired", "state"],
+      "properties": {
+        "recordType": { "const": "DegradationPolicy" }, "schemaVersion": { "const": "gateway-runtime-config/1.1.0" }, "policyVersion": { "$ref": "#/$defs/Id" }, "fromState": { "$ref": "#/$defs/Id" },
+        "cause": { "enum": ["blocked_auth", "blocked_capacity", "blocked_policy", "provider_unavailable", "context_insufficient", "schema_rejected"] }, "toState": { "enum": ["blocked", "degraded_acknowledged", "expired"] },
+        "allowedAction": { "enum": ["none", "send_acknowledgment_template"] }, "templateVersion": { "$ref": "#/$defs/Id" }, "substantiveWorkPending": { "const": true }, "evidenceRequired": { "const": true }, "state": { "enum": ["draft", "active", "retired"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "message_type": "domain_child_input",
+  "schema_version": "ot01-domain-child/1.0.0",
+  "child_type": "qualification",
+  "tenant_id": "tenant-1",
+  "journey_id": "journey-1",
+  "parent_workflow_id": "parent-1",
+  "workflow_code_version": 1,
+  "runtime_policy": {
+    "start_to_close_seconds": 30,
+    "initial_retry_seconds": 1,
+    "backoff_coefficient": 2,
+    "maximum_retry_seconds": 10,
+    "maximum_attempts": 5
+  }
+}

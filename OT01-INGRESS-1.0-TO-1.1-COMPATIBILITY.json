@@ -1,0 +1,21 @@
+{
+  "contract": "ot01_ingress",
+  "fromVersion": "1.0.0",
+  "toVersion": "1.1.0",
+  "readerRange": ">=1.1.0,<2.0.0",
+  "writerVersion": "1.1.0",
+  "classification": "minor_additive_with_strict_writer",
+  "auditRead": {
+    "ot01-ingress/1.0.0": true,
+    "ot01-ingress/1.1.0": true
+  },
+  "executableWrite": {
+    "ot01-ingress/1.0.0": false,
+    "ot01-ingress/1.1.0": true
+  },
+  "changes": [
+    "Adds versioned owner-supplied opt-out lexicons and acknowledgment policies.",
+    "Adds exact selection requests, decisions, suppression binding, and attributable outcomes.",
+    "Preserves 1.0 attribution and consent records for audit only."
+  ]
+}

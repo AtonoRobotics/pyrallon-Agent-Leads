@@ -1,0 +1,39 @@
+{
+  "version": "cognitive-route/1",
+  "tenantId": "tenant-1",
+  "actionClass": "lead_qualification",
+  "routes": [
+    {
+      "routeId": "codex-subscription-primary",
+      "adapterId": "openai-codex-sdk",
+      "transportSelection": "fixed",
+      "credentialIdentityRef": "cred-subscription-1",
+      "authClass": "subscription_oauth",
+      "billingClass": "subscription",
+      "modelFamily": "approved-codex-family",
+      "capabilityProfile": "codex-lead-qualification/3",
+      "evaluationQualification": "eval-2026-08-17-a"
+    },
+    {
+      "routeId": "openai-api-secondary",
+      "adapterId": "openai-responses-api",
+      "transportSelection": "fixed",
+      "credentialIdentityRef": "cred-api-1",
+      "authClass": "metered_api",
+      "billingClass": "metered",
+      "modelFamily": "approved-openai-family",
+      "capabilityProfile": "responses-lead-qualification/2",
+      "evaluationQualification": "eval-2026-08-17-b"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "codex-subscription-primary",
+      "to": "openai-api-secondary",
+      "allowedCauses": ["blocked_capacity", "blocked_auth", "provider_unavailable"],
+      "requiresOperatorAtRuntime": false,
+      "evidenceRequired": true
+    }
+  ],
+  "otherwise": "deterministic_degradation"
+}

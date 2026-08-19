@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/operator-surface/1.1.0",
+  "title": "OperatorSurfaceMessage",
+  "oneOf": [
+    { "$ref": "#/$defs/JourneyView" },
+    { "$ref": "#/$defs/OperatorCommand" },
+    { "$ref": "#/$defs/OperatorPolicy" },
+    { "$ref": "#/$defs/CommandResult" },
+    { "$ref": "#/$defs/OperatorError" },
+    { "$ref": "#/$defs/AccessibilityAcceptance" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" },
+    "RecordRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "record_type", "version", "status"],
+      "properties": {
+        "record_id": { "$ref": "#/$defs/Id" },
+        "record_type": { "$ref": "#/$defs/Id" },
+        "version": { "type": "integer", "minimum": 1 },
+        "status": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "record_type", "version", "digest", "captured_at"],
+      "properties": {
+        "record_id": { "$ref": "#/$defs/Id" },
+        "record_type": { "enum": ["Evidence", "Assertion", "VerifiedFact", "Inference", "Memory", "DocumentArtifact"] },
+        "version": { "type": "integer", "minimum": 1 },
+        "digest": { "$ref": "#/$defs/Digest" },
+        "captured_at": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "Blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "category", "recovery_owner", "evidence_refs"],
+      "properties": {
+        "code": { "$ref": "#/$defs/Id" },
+        "category": { "enum": ["identity", "representation", "consent", "connector", "cognition", "workflow", "calendar", "policy", "authority", "evidence"] },
+        "recovery_owner": { "enum": ["system", "agent", "brokerage", "deployment_operator", "buyer"] },
+        "evidence_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/SourceRef" } },
+        "recoverable_after": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "EpistemicBriefingItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "label", "epistemic_state", "summary", "source_refs", "time_sensitivity"],
+      "properties": {
+        "item_id": { "$ref": "#/$defs/Id" },
+        "label": { "type": "string", "minLength": 1 },
+        "epistemic_state": { "enum": ["evidence", "assertion", "verified_fact", "inference", "memory", "unknown", "contradicted", "stale"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "source_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/SourceRef" } },
+        "time_sensitivity": { "enum": ["none", "informational", "due", "overdue", "expires_soon"] },
+        "due_at": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "OrthogonalStates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["journey", "contactability", "acknowledgment", "qualification", "consultation", "nurture", "representation"],
+      "properties": {
+        "journey": { "$ref": "#/$defs/Id" },
+        "contactability": { "$ref": "#/$defs/Id" },
+        "acknowledgment": { "$ref": "#/$defs/Id" },
+        "qualification": { "$ref": "#/$defs/Id" },
+        "consultation": { "$ref": "#/$defs/Id" },
+        "nurture": { "$ref": "#/$defs/Id" },
+        "representation": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "JourneyView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "tenant_id", "principal_id", "journey_id",
+        "canonical_version", "etag", "generated_at", "orthogonal_states", "blockers",
+        "next_action_refs", "commitment_refs", "qualification_refs", "consent_refs",
+        "representation_refs", "appointment_refs", "effect_attempt_refs", "briefing_items"
+      ],
+      "properties": {
+        "message_type": { "const": "operator_journey_view" },
+        "schema_version": { "const": "operator-surface/1.1.0" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "principal_id": { "$ref": "#/$defs/Id" },
+        "journey_id": { "$ref": "#/$defs/Id" },
+        "canonical_version": { "type": "integer", "minimum": 1 },
+        "etag": { "$ref": "#/$defs/Digest" },
+        "generated_at": { "$ref": "#/$defs/Timestamp" },
+        "orthogonal_states": { "$ref": "#/$defs/OrthogonalStates" },
+        "blockers": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Blocker" } },
+        "next_action_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "commitment_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "qualification_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "consent_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "representation_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "appointment_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "effect_attempt_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "briefing_items": { "type": "array", "items": { "$ref": "#/$defs/EpistemicBriefingItem" } }
+      }
+    },
+    "AuthorityBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_id", "actor_type", "authorization_refs", "policy_ref", "action_class", "resource_type", "resource_id", "authenticated_at"],
+      "properties": {
+        "actor_id": { "$ref": "#/$defs/Id" },
+        "actor_type": { "enum": ["person", "license_holder", "service_principal"] },
+        "authorization_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "policy_ref": { "$ref": "#/$defs/RecordRef" },
+        "action_class": { "$ref": "#/$defs/Id" },
+        "resource_type": { "$ref": "#/$defs/Id" },
+        "resource_id": { "$ref": "#/$defs/Id" },
+        "authenticated_at": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "OperatorCommandRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command_type", "action_class", "target_record_types", "actor_types"],
+      "properties": {
+        "command_type": { "enum": ["approve", "deny", "correct_replace", "correct_invalidate", "revoke_authorization", "revoke_approval", "pause_workflow", "resume_workflow", "request_reconciliation"] },
+        "action_class": { "$ref": "#/$defs/Id" },
+        "target_record_types": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["Approval", "Authorization", "Assertion", "VerifiedFact", "Inference", "Memory", "WorkflowReference", "EffectAttempt"] } },
+        "actor_types": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["person", "license_holder", "service_principal"] } }
+      }
+    },
+    "OperatorPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_type", "schema_version", "policy_id", "tenant_id", "record_version", "effective_from", "status", "command_rules", "evidence_refs"],
+      "properties": {
+        "message_type": { "const": "operator_policy" },
+        "schema_version": { "const": "operator-surface/1.1.0" },
+        "policy_id": { "$ref": "#/$defs/Id" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "record_version": { "type": "integer", "minimum": 1 },
+        "effective_from": { "$ref": "#/$defs/Timestamp" },
+        "effective_to": { "$ref": "#/$defs/Timestamp" },
+        "status": { "enum": ["draft", "active", "superseded", "retired"] },
+        "supersedes_policy_id": { "$ref": "#/$defs/Id" },
+        "command_rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/OperatorCommandRule" } },
+        "evidence_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/SourceRef" } }
+      }
+    },
+    "CanonicalRecordPayload": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "A complete ontology buyer-ops/0.3.0 record. Semantic admission validates it against the ontology and current same-tenant state."
+    },
+    "CorrectionMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "correction_record", "corrected_item_update"],
+      "properties": {
+        "kind": { "const": "correction" },
+        "correction_record": { "$ref": "#/$defs/CanonicalRecordPayload" },
+        "corrected_item_update": { "$ref": "#/$defs/CanonicalRecordPayload" },
+        "replacement_record": { "$ref": "#/$defs/CanonicalRecordPayload" }
+      }
+    },
+    "AuthorizationRevocationMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "authorization_update"],
+      "properties": {
+        "kind": { "const": "authorization_revocation" },
+        "authorization_update": { "$ref": "#/$defs/CanonicalRecordPayload" }
+      }
+    },
+    "ApprovalRevocationMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "prior_approval_update", "revoked_approval_record"],
+      "properties": {
+        "kind": { "const": "approval_revocation" },
+        "prior_approval_update": { "$ref": "#/$defs/CanonicalRecordPayload" },
+        "revoked_approval_record": { "$ref": "#/$defs/CanonicalRecordPayload" }
+      }
+    },
+    "CanonicalMutation": {
+      "oneOf": [
+        { "$ref": "#/$defs/CorrectionMutation" },
+        { "$ref": "#/$defs/AuthorizationRevocationMutation" },
+        { "$ref": "#/$defs/ApprovalRevocationMutation" }
+      ]
+    },
+    "OfflineBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queue_entry_id", "captured_at", "captured_canonical_version", "revalidate_on_reconnect"],
+      "properties": {
+        "queue_entry_id": { "$ref": "#/$defs/Id" },
+        "captured_at": { "$ref": "#/$defs/Timestamp" },
+        "captured_canonical_version": { "type": "integer", "minimum": 1 },
+        "revalidate_on_reconnect": { "const": true }
+      }
+    },
+    "OperatorCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "command_id", "tenant_id", "journey_id",
+        "command_type", "target_record_id", "target_record_type", "expected_version",
+        "authority", "payload_digest", "idempotency_key", "issued_at", "expires_at", "reason"
+      ],
+      "properties": {
+        "message_type": { "const": "operator_command" },
+        "schema_version": { "const": "operator-surface/1.1.0" },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "journey_id": { "$ref": "#/$defs/Id" },
+        "command_type": { "enum": ["approve", "deny", "correct_replace", "correct_invalidate", "revoke_authorization", "revoke_approval", "pause_workflow", "resume_workflow", "request_reconciliation"] },
+        "target_record_id": { "$ref": "#/$defs/Id" },
+        "target_record_type": { "enum": ["Approval", "Authorization", "Assertion", "VerifiedFact", "Inference", "Memory", "WorkflowReference", "EffectAttempt"] },
+        "expected_version": { "type": "integer", "minimum": 1 },
+        "authority": { "$ref": "#/$defs/AuthorityBinding" },
+        "payload_digest": { "$ref": "#/$defs/Digest" },
+        "idempotency_key": { "$ref": "#/$defs/Id" },
+        "issued_at": { "$ref": "#/$defs/Timestamp" },
+        "expires_at": { "$ref": "#/$defs/Timestamp" },
+        "reason": { "type": "string", "minLength": 1 },
+        "mutation": { "$ref": "#/$defs/CanonicalMutation" },
+        "offline": { "$ref": "#/$defs/OfflineBinding" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "command_type": { "enum": ["correct_replace", "correct_invalidate"] } }, "required": ["command_type"] },
+          "then": { "required": ["mutation"], "properties": { "mutation": { "$ref": "#/$defs/CorrectionMutation" } } }
+        },
+        {
+          "if": { "properties": { "command_type": { "const": "revoke_authorization" } }, "required": ["command_type"] },
+          "then": { "required": ["mutation"], "properties": { "mutation": { "$ref": "#/$defs/AuthorizationRevocationMutation" } } }
+        },
+        {
+          "if": { "properties": { "command_type": { "const": "revoke_approval" } }, "required": ["command_type"] },
+          "then": { "required": ["mutation"], "properties": { "mutation": { "$ref": "#/$defs/ApprovalRevocationMutation" } } }
+        },
+        {
+          "if": { "properties": { "command_type": { "enum": ["approve", "deny", "pause_workflow", "resume_workflow", "request_reconciliation"] } }, "required": ["command_type"] },
+          "then": { "properties": { "mutation": false } }
+        }
+      ]
+    },
+    "CommandResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_type", "schema_version", "command_id", "tenant_id", "status", "decided_at", "decision_evidence_id", "current_version", "result_refs"],
+      "properties": {
+        "message_type": { "const": "operator_command_result" },
+        "schema_version": { "const": "operator-surface/1.1.0" },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "status": { "enum": ["applied", "denied", "conflict", "blocked", "expired", "duplicate"] },
+        "decided_at": { "$ref": "#/$defs/Timestamp" },
+        "decision_evidence_id": { "$ref": "#/$defs/Id" },
+        "current_version": { "type": "integer", "minimum": 1 },
+        "result_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/RecordRef" } },
+        "error": { "$ref": "#/$defs/OperatorError" }
+      }
+    },
+    "OperatorError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_type", "schema_version", "error_id", "tenant_id", "code", "retryable", "occurred_at", "correlation_id"],
+      "properties": {
+        "message_type": { "const": "operator_error" },
+        "schema_version": { "const": "operator-surface/1.1.0" },
+        "error_id": { "$ref": "#/$defs/Id" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "code": { "enum": ["authentication_required", "authority_denied", "version_conflict", "payload_mismatch", "approval_expired", "policy_denied", "connector_revoked", "workflow_conflict", "evidence_unavailable", "validation_failed", "offline_revalidation_failed"] },
+        "retryable": { "type": "boolean" },
+        "occurred_at": { "$ref": "#/$defs/Timestamp" },
+        "correlation_id": { "$ref": "#/$defs/Id" },
+        "safe_detail": { "type": "string" }
+      }
+    },
+    "AccessibilityAcceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_type", "schema_version", "artifact_id", "surface", "build_version", "standard", "level", "test_suites", "assistive_technologies", "blocking_violations", "artifact_digest", "evaluated_at", "evaluator_id"],
+      "properties": {
+        "message_type": { "const": "accessibility_acceptance" },
+        "schema_version": { "const": "operator-surface/1.1.0" },
+        "artifact_id": { "$ref": "#/$defs/Id" },
+        "surface": { "enum": ["web", "ios"] },
+        "build_version": { "$ref": "#/$defs/Id" },
+        "standard": { "const": "WCAG 2.2" },
+        "level": { "const": "AA" },
+        "test_suites": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "assistive_technologies": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "blocking_violations": { "type": "integer", "const": 0 },
+        "artifact_digest": { "$ref": "#/$defs/Digest" },
+        "evaluated_at": { "$ref": "#/$defs/Timestamp" },
+        "evaluator_id": { "$ref": "#/$defs/Id" }
+      }
+    }
+  }
+}

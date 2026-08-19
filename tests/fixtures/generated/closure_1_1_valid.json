@@ -1,0 +1,248 @@
+{
+  "ExternalMessageIdentity": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "externalmessageidentity",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "ExternalMessageIdentity",
+    "connectorId": "connector-1",
+    "provider": "provider-1",
+    "providerAccountRef": "account-1",
+    "externalMessageId": "message-1",
+    "externalEventId": "event-1",
+    "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "CapabilityInventory": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "capabilityinventory",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "CapabilityInventory",
+    "expiresAt": "2030-02-01T00:00:00Z",
+    "connectorId": "connector-1",
+    "connectorVersion": "1.0.0",
+    "capabilities": [
+      "read",
+      "send"
+    ],
+    "effectClasses": [
+      "send_message"
+    ],
+    "capabilityEffects": [
+      {
+        "capability": "send",
+        "actionClasses": [
+          "send_message"
+        ],
+        "constraintDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ],
+    "canonicalizationVersion": "jcs-rfc8785/1",
+    "inventoryDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "signature": {
+      "algorithm": "Ed25519",
+      "keyId": "key-1",
+      "value": "signature"
+    }
+  },
+  "EffectDraftPreview": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "effectdraftpreview",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "EffectDraftPreview",
+    "connectorId": "connector-1",
+    "inventoryRecordId": "capabilityinventory",
+    "inventoryRecordVersion": 1,
+    "inventoryDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "grantId": "grant-1",
+    "grantVersion": 1,
+    "delegatedPrincipalId": "principal-1",
+    "capability": "send",
+    "actionClass": "send_message",
+    "payloadCanonicalizationVersion": "message/1",
+    "payloadDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "idempotencyKey": "send-1",
+    "targetRefs": [
+      "conversation-1"
+    ],
+    "recipientRefs": [
+      "endpoint-1"
+    ],
+    "requestedExecutionWindow": {
+      "notBefore": "2030-01-01T00:00:00Z",
+      "expiresAt": "2030-01-01T00:05:00Z"
+    },
+    "authorityClass": "effect",
+    "reversible": false
+  },
+  "ContextSourceFreshness": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "contextsourcefreshness",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "ContextSourceFreshness",
+    "sourceRecordId": "person-1",
+    "epistemicType": "verified_fact",
+    "freshnessAt": "2030-01-01T00:00:00Z",
+    "freshUntil": "2030-01-02T00:00:00Z"
+  },
+  "OutputClassMapping": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "outputclassmapping",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "OutputClassMapping",
+    "expiresAt": "2030-02-01T00:00:00Z",
+    "actionClass": "lead_qualification",
+    "outputClass": "qualification_advice",
+    "policyVersion": "route-policy/1",
+    "allowedArtifactTypes": [
+      "qualification_summary"
+    ],
+    "requiredAuthorityClasses": [
+      "read_buyer_context"
+    ],
+    "allowedEpistemicTypes": [
+      "verified_fact"
+    ],
+    "staleEvidencePolicy": "reject",
+    "groundingMode": "all_claims_grounded",
+    "effectEligibility": "none"
+  },
+  "MetricDefinition": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "metricdefinition",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "MetricDefinition",
+    "metricId": "qualification_completion_ratio",
+    "unit": "ratio",
+    "numeratorEvent": "qualification_completed",
+    "denominatorEvent": "qualification_started",
+    "correlationKey": "journey_id",
+    "dimensions": [
+      "channel"
+    ],
+    "window": "rolling_24h",
+    "minimumDenominator": 1,
+    "zeroDenominatorBehavior": "unknown"
+  },
+  "MetricObservation": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "metricobservation",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "MetricObservation",
+    "metricId": "qualification_completion_ratio",
+    "metricDefinitionRecordId": "metricdefinition",
+    "metricDefinitionRecordVersion": 1,
+    "window": "rolling_24h",
+    "windowStart": "2030-01-01T00:00:00Z",
+    "windowEnd": "2030-01-01T01:00:00Z",
+    "numerator": 1,
+    "denominator": 2,
+    "numeratorEvent": "qualification_completed",
+    "denominatorEvent": "qualification_started",
+    "correlationKey": "journey_id",
+    "correlationDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "numeratorEventDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "denominatorEventDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "dimensionValues": {
+      "channel": "web"
+    },
+    "calculationState": "value",
+    "value": 0.5
+  },
+  "ReleaseEvidence": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "releaseevidence",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "ReleaseEvidence",
+    "expiresAt": "2030-02-01T00:00:00Z",
+    "gateId": "GATE-002",
+    "gateRegistryVersion": "1.0.0",
+    "gateRegistryDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "applicability": "platform_invariant",
+    "scope": "all_live_effects",
+    "releaseDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "testVersion": "fault-suite/1",
+    "outcome": "pass",
+    "ownerId": "platform-operations"
+  },
+  "AccessibilityEvidence": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "accessibilityevidence",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "AccessibilityEvidence",
+    "expiresAt": "2030-02-01T00:00:00Z",
+    "standard": "WCAG 2.2 AA",
+    "suiteVersion": "a11y-suite/1",
+    "surface": "web",
+    "buildDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "releaseDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "assistiveTechnologies": [
+      "keyboard",
+      "screen-reader"
+    ],
+    "knownExceptions": [],
+    "outcome": "current",
+    "ownerId": "accessibility-owner"
+  }
+}

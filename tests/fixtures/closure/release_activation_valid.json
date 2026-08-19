@@ -1,0 +1,55 @@
+{
+  "GateEvidence": {
+    "messageType": "gate_evidence",
+    "schemaVersion": "release-activation/1.0.0",
+    "evidenceId": "value",
+    "gateId": "value",
+    "producerId": "value",
+    "producerVersion": "value",
+    "scope": "contract",
+    "artifactUri": "https://buyer-ops.example/artifacts/test",
+    "artifactVersion": "value",
+    "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "observedAt": "2030-01-01T00:00:00Z",
+    "expiresAt": "2030-01-01T00:00:00Z",
+    "invalidationInputs": [
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "signature": {
+      "keyId": "value",
+      "algorithm": "ed25519",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "ActivationDecision": {
+    "messageType": "activation_decision",
+    "schemaVersion": "release-activation/1.1.0",
+    "decisionId": "value",
+    "capabilityId": "value",
+    "tenantId": "tenantId-1",
+    "environment": "staging",
+    "releaseDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "gateRegistryVersion": "1.0.0",
+    "gateRegistryDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "directlyApplicableGateIds": ["GATE-001"],
+    "requiredGateIds": ["GATE-001"],
+    "deployedBuildDigests": {"web": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+    "expectedActivationVersion": 1,
+    "decision": "activate",
+    "evidenceIds": [
+      "value"
+    ],
+    "accessibilityEvidenceIds": ["a11y-web"],
+    "evidenceSetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "authorizedBy": "value",
+    "authorizationId": "value",
+    "decidedAt": "2030-01-01T00:00:00Z",
+    "rollbackState": "not_required",
+    "readbackRequired": true,
+    "signature": {
+      "keyId": "value",
+      "algorithm": "ed25519",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+}

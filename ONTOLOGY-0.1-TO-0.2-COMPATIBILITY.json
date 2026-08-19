@@ -1,0 +1,55 @@
+{
+  "previousVersion": "buyer-ops/0.1.0",
+  "currentVersion": "buyer-ops/0.2.0",
+  "classification": "minor_with_explicit_migration",
+  "rootRecordTypeCount": {
+    "previous": 15,
+    "current": 38
+  },
+  "addedRecordTypes": [
+    "Approval",
+    "Assertion",
+    "Authorization",
+    "Brokerage",
+    "BuyerRequirement",
+    "ContactEndpoint",
+    "Contradiction",
+    "Conversation",
+    "Correction",
+    "DocumentArtifact",
+    "Evidence",
+    "FinancingReadiness",
+    "Inference",
+    "LeadSource",
+    "LicenseHolder",
+    "Memory",
+    "Message",
+    "QualificationCriterion",
+    "ServicePrincipal",
+    "Tenant",
+    "Transaction",
+    "TransactionMilestone",
+    "VerifiedFact",
+    "WorkflowReference"
+  ],
+  "removedRootShapes": [
+    "EpistemicItem"
+  ],
+  "declaredDefaults": {
+    "BuyingParty": {
+      "decisionAuthorityState": "unconfirmed"
+    },
+    "BuyerJourney": {
+      "territory": "unspecified"
+    }
+  },
+  "compatibilityRules": {
+    "legacyPersonEndpoints": "accepted as deprecated input during 0.2 backfill",
+    "legacyEnvelopeStatus": "normalized to the universal lifecycle",
+    "legacyEpistemicItem": "fail-closed typed forward repair required",
+    "storedRows": "envelope schemaVersion is migrated atomically",
+    "rollback": "automatic semantic rollback prohibited"
+  },
+  "migration": "migrations/0004_ontology_0_2.sql",
+  "forwardRepair": "migrations/ONTOLOGY-0.2-FORWARD-REPAIR.md"
+}

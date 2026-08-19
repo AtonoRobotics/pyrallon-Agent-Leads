@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "context-compile/1.1.0",
+  "recordType": "ContextCompileRequest",
+  "requestId": "context-request-1",
+  "tenantId": "tenant-1",
+  "principalId": "principal-1",
+  "buyerJourneyId": "journey-1",
+  "workflowId": "workflow-1",
+  "actionClass": "lead_qualification",
+  "purpose": "buyer_qualification",
+  "compileAt": "2030-01-01T00:00:00Z",
+  "expiresAt": "2030-01-01T00:05:00Z",
+  "ontologyVersion": "buyer-ops/0.3.0",
+  "policyVersions": {
+    "qualification": "qualification-policy/3",
+    "context": "context-policy/2"
+  },
+  "knowledgeVersions": ["tx-buyer-knowledge/5"],
+  "compilerVersion": "context-compiler/1.1.0",
+  "requiredRecordTypes": ["BuyerJourney", "Person"],
+  "outputPolicyVersion": "route-policy/1",
+  "requestedArtifactType": "qualification_summary",
+  "authorityClasses": ["read_buyer_context"]
+}

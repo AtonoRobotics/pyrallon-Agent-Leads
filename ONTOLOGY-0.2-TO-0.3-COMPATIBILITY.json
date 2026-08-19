@@ -1,0 +1,11 @@
+{
+  "from":"buyer-ops/0.2.0",
+  "to":"buyer-ops/0.3.0",
+  "classification":"minor-additive-with-explicit-writer-cutover",
+  "readerCompatibility":"0.3 readers accept migrated 0.2 records after schemaVersion rewrite; 0.2 readers must reject 0.3 records",
+  "writerCompatibility":"writers cut over atomically to 0.3.0; ConnectorGrant and ConfirmedTransactionDate have no 0.2 representation",
+  "addedRootTypes":["ConnectorGrant","ConfirmedTransactionDate"],
+  "changedBindings":["Transaction.confirmedDateIds -> ConfirmedTransactionDate.id (same tenant, matching transactionId, active/confirmed, source bound)"],
+  "migration":"migrations/0006_ontology_0_3.sql",
+  "rollback":"migrations/0006_ontology_0_3.rollback.sql"
+}

@@ -1,0 +1,9 @@
+{
+  "message_type": "worker_configuration",
+  "schema_version": "buyer-ops-temporal-worker/1.0.0",
+  "task_queue": "buyer-operations",
+  "max_concurrent_workflow_tasks": 100,
+  "max_concurrent_activities": 100,
+  "max_cached_workflows": 1000,
+  "graceful_shutdown_seconds": 30
+}

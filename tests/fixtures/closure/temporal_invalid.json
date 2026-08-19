@@ -1,0 +1,137 @@
+{
+  "WorkflowInput": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "workflow_input",
+      "tenant_id": "value",
+      "journey_id": "value",
+      "workflow_code_version": 1,
+      "runtime_policy": {
+        "start_to_close_seconds": 1,
+        "initial_retry_seconds": 1,
+        "backoff_coefficient": 1,
+        "maximum_retry_seconds": 1,
+        "maximum_attempts": 1
+      }
+    }
+  },
+  "CanonicalChangedSignal": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "canonical_changed",
+      "tenant_id": "value",
+      "journey_id": "value",
+      "event_id": "value",
+      "observed_canonical_version": 1
+    }
+  },
+  "JourneyState": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "journey_state",
+      "journey_id": "value",
+      "canonical_version": 1,
+      "ingress_state": "captured",
+      "contactability_state": "unknown",
+      "acknowledgment_state": "not_required",
+      "qualification_state": "not_started",
+      "consultation_state": "not_ready",
+      "nurture_state": "inactive",
+      "blocker_codes": [
+        "value"
+      ]
+    }
+  },
+  "ConnectorReconciliationInput": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "connector_reconciliation_input",
+      "tenant_id": "value",
+      "journey_id": "value",
+      "parent_workflow_id": "value",
+      "effect_attempt_id": "value",
+      "workflow_code_version": 1,
+      "runtime_policy": {
+        "start_to_close_seconds": 1,
+        "initial_retry_seconds": 1,
+        "backoff_coefficient": 1,
+        "maximum_retry_seconds": 1,
+        "maximum_attempts": 1
+      },
+      "reconciliation_interval_seconds": 1
+    }
+  },
+  "EffectReconciliationState": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "effect_reconciliation_state",
+      "effect_attempt_id": "value",
+      "attempt_state": "unknown_outcome"
+    }
+  },
+  "DomainChildInput": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "domain_child_input",
+      "child_type": "qualification",
+      "tenant_id": "value",
+      "journey_id": "value",
+      "parent_workflow_id": "value",
+      "workflow_code_version": 1,
+      "runtime_policy": {
+        "start_to_close_seconds": 1,
+        "initial_retry_seconds": 1,
+        "backoff_coefficient": 1,
+        "maximum_retry_seconds": 1,
+        "maximum_attempts": 1
+      }
+    }
+  },
+  "WorkerConfiguration": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "worker_configuration",
+      "task_queue": "value",
+      "max_concurrent_workflow_tasks": 1,
+      "max_concurrent_activities": 1,
+      "max_cached_workflows": 1,
+      "graceful_shutdown_seconds": 1
+    }
+  },
+  "CompensationCommand": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "compensation_command",
+      "command_id": "value",
+      "tenant_id": "value",
+      "journey_id": "value",
+      "workflow_id": "value",
+      "effect_attempt_id": "value",
+      "expected_effect_version": 1,
+      "eligible_attempt_states": [
+        "confirmed"
+      ],
+      "compensation_action": "cancel",
+      "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "habitat_permit_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "authorization_id": "value",
+      "idempotency_key": "value",
+      "issued_at": "2030-01-01T00:00:00Z",
+      "expires_at": "2030-01-01T00:00:00Z"
+    }
+  },
+  "CompensationResult": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "compensation_result",
+      "command_id": "value",
+      "effect_attempt_id": "value",
+      "state": "registered",
+      "attempt": 1,
+      "decided_at": "2030-01-01T00:00:00Z",
+      "evidence_ids": [
+        "value"
+      ]
+    }
+  }
+}

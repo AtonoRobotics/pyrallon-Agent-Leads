@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "buyer-ops/0.1.0",
+  "rootRecordTypes": [
+    "Person", "BuyingParty", "BuyerJourney", "ConsentGrant", "Suppression",
+    "QualificationObservation", "Appointment", "Commitment", "PropertyReference",
+    "IabsDelivery", "WrittenBuyerAgreement", "AgreementQualification",
+    "RepresentationRelationship", "EpistemicItem", "EffectAttempt"
+  ],
+  "migrationRequiredFields": {
+    "BuyingParty": {"decisionAuthorityState": "unconfirmed"},
+    "BuyerJourney": {"territory": "unspecified"}
+  },
+  "legacyAbstractRecord": "EpistemicItem"
+}
+

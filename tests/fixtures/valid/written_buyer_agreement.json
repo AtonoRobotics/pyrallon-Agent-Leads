@@ -1,0 +1,11 @@
+{
+  "id": "agreement-1", "tenantId": "tenant-1", "schemaVersion": "buyer-ops/0.3.0", "recordType": "WrittenBuyerAgreement", "version": 1,
+  "createdAt": "2030-01-01T00:00:00Z", "updatedAt": "2030-01-01T00:00:00Z", "effectiveFrom": "2030-01-02T00:00:00Z",
+  "createdBy": {"actorType": "license_holder", "actorId": "agent-1"}, "sourceEvidenceIds": ["evidence-1"], "status": "active",
+  "agreementType": "non_representation_showing", "jurisdiction": "TX", "brokerPartyId": "broker-1", "responsibleLicenseHolderId": "agent-1",
+  "buyerPartyIds": ["party-1"], "serviceDefinitions": [{"serviceCode": "showing_access", "allowed": true}], "exclusivity": "non_exclusive",
+  "effectiveAt": "2030-01-02T00:00:00Z", "terminatesAt": "2030-01-15T00:00:00Z",
+  "compensation": {"determinationMethod": "none for showing-only access", "objectivelyAscertainable": true, "negotiabilityDisclosurePresent": true},
+  "signatureEvidence": [{"signerPartyId": "party-1", "signedAt": "2030-01-01T23:00:00Z", "evidenceId": "evidence-1"}],
+  "executedArtifactId": "artifact-1", "executedArtifactDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "executionState": "effective"
+}

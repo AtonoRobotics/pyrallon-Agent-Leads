@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/context-compiler/1.1.0",
+  "title": "ContextCompilerMessage",
+  "oneOf": [
+    { "$ref": "#/$defs/CompileRequest" },
+    { "$ref": "#/$defs/ContextManifest" },
+    { "$ref": "#/$defs/ContextFailure" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" },
+    "CompileRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "recordType", "requestId", "tenantId", "principalId",
+        "buyerJourneyId", "workflowId", "actionClass", "purpose", "compileAt", "expiresAt",
+        "ontologyVersion", "policyVersions", "knowledgeVersions", "compilerVersion",
+        "requiredRecordTypes", "outputPolicyVersion", "requestedArtifactType", "authorityClasses"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "context-compile/1.1.0" },
+        "recordType": { "const": "ContextCompileRequest" },
+        "requestId": { "$ref": "#/$defs/Id" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "principalId": { "$ref": "#/$defs/Id" },
+        "buyerJourneyId": { "$ref": "#/$defs/Id" },
+        "workflowId": { "$ref": "#/$defs/Id" },
+        "actionClass": { "$ref": "#/$defs/Id" },
+        "purpose": { "$ref": "#/$defs/Id" },
+        "compileAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" },
+        "ontologyVersion": { "const": "buyer-ops/0.3.0" },
+        "policyVersions": {
+          "type": "object", "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/Id" }
+        },
+        "knowledgeVersions": {
+          "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" }
+        },
+        "compilerVersion": { "$ref": "#/$defs/Id" },
+        "requiredRecordTypes": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Id" }
+        },
+        "outputPolicyVersion": { "$ref": "#/$defs/Id" },
+        "requestedArtifactType": { "$ref": "#/$defs/Id" },
+        "authorityClasses": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }
+      }
+    },
+    "SourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sectionId", "sourceRecordId", "recordType", "version", "contentDigest", "freshnessRecordId", "freshnessRecordVersion", "observedAt", "freshnessAt", "freshUntil", "epistemicType", "stale"],
+      "properties": {
+        "sectionId": { "$ref": "#/$defs/Id" },
+        "sourceRecordId": { "$ref": "#/$defs/Id" },
+        "recordType": { "$ref": "#/$defs/Id" },
+        "version": { "type": "integer", "minimum": 1 },
+        "contentDigest": { "$ref": "#/$defs/Digest" },
+        "freshnessRecordId": { "$ref": "#/$defs/Id" },
+        "freshnessRecordVersion": { "type": "integer", "minimum": 1 },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "freshnessAt": { "$ref": "#/$defs/Timestamp" },
+        "freshUntil": { "$ref": "#/$defs/Timestamp" },
+        "epistemicType": { "enum": ["evidence", "assertion", "verified_fact", "inference", "memory"] },
+        "stale": { "type": "boolean" },
+        "staleLabel": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "ExclusionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceRecordId", "reason"],
+      "properties": {
+        "sourceRecordId": { "$ref": "#/$defs/Id" },
+        "reason": {
+          "enum": [
+            "cross_tenant", "cross_buyer", "purpose_denied", "action_denied", "expired",
+            "principal_denied", "workflow_denied", "not_yet_effective", "inactive",
+            "superseded", "record_type_not_requested", "stale", "epistemic_denied"
+          ]
+        }
+      }
+    },
+    "ManifestSignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "keyId", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "keyId": { "$ref": "#/$defs/Id" },
+        "value": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }
+      }
+    },
+    "OutputRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mappingRecordId", "mappingRecordVersion", "outputClass", "policyVersion", "requestedArtifactType", "requiredAuthorityClasses", "groundingMode", "effectEligibility", "staleEvidencePolicy"],
+      "properties": {
+        "mappingRecordId": { "$ref": "#/$defs/Id" },
+        "mappingRecordVersion": { "type": "integer", "minimum": 1 },
+        "outputClass": { "$ref": "#/$defs/Id" },
+        "policyVersion": { "$ref": "#/$defs/Id" },
+        "requestedArtifactType": { "$ref": "#/$defs/Id" },
+        "requiredAuthorityClasses": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "groundingMode": { "enum": ["all_claims_grounded", "bounded_unknowns_allowed", "acknowledgment_only"] },
+        "effectEligibility": { "enum": ["none", "draft_only", "permit_eligible"] },
+        "staleEvidencePolicy": { "enum": ["reject", "allow_labeled"] },
+        "staleLabel": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "ContextManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "recordType", "manifestId", "requestId", "tenantId", "principalId",
+        "buyerJourneyId", "workflowId", "actionClass", "purpose", "compiledAt", "expiresAt",
+        "ontologyVersion", "policyVersions", "knowledgeVersions", "compilerVersion", "requiredRecordTypes", "sources",
+        "exclusions", "outputRoute", "packetDigest", "signature"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "context-manifest/1.1.0" },
+        "recordType": { "const": "ContextManifest" },
+        "manifestId": { "$ref": "#/$defs/Digest" },
+        "requestId": { "$ref": "#/$defs/Id" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "principalId": { "$ref": "#/$defs/Id" },
+        "buyerJourneyId": { "$ref": "#/$defs/Id" },
+        "workflowId": { "$ref": "#/$defs/Id" },
+        "actionClass": { "$ref": "#/$defs/Id" },
+        "purpose": { "$ref": "#/$defs/Id" },
+        "compiledAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" },
+        "ontologyVersion": { "const": "buyer-ops/0.3.0" },
+        "policyVersions": { "type": "object", "additionalProperties": { "$ref": "#/$defs/Id" } },
+        "knowledgeVersions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "compilerVersion": { "$ref": "#/$defs/Id" },
+        "requiredRecordTypes": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Id" }
+        },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/SourceEntry" } },
+        "exclusions": { "type": "array", "items": { "$ref": "#/$defs/ExclusionEntry" } },
+        "outputRoute": { "$ref": "#/$defs/OutputRoute" },
+        "packetDigest": { "$ref": "#/$defs/Digest" },
+        "signature": { "$ref": "#/$defs/ManifestSignature" }
+      }
+    },
+    "ContextFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "recordType", "requestId", "state", "missingRecordTypes"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "context-failure/1.1.0" },
+        "recordType": { "const": "ContextFailure" },
+        "requestId": { "$ref": "#/$defs/Id" },
+        "state": { "const": "context_insufficient" },
+        "missingRecordTypes": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Id" }
+        }
+      }
+    }
+  }
+}

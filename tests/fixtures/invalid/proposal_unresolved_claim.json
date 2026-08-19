@@ -1,0 +1,7 @@
+{
+  "fixtureBase": "valid/cognitive_proposal.json",
+  "mutation": {"path": "proposedActions.0.sourceClaimIds.0", "value": "missing-claim"},
+  "expectedCode": "UNRESOLVED_SOURCE_CLAIM"
+}
+
+

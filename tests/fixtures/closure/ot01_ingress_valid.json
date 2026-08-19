@@ -1,0 +1,94 @@
+{
+  "AttributionInput": {
+    "messageType": "attribution_input",
+    "schemaVersion": "ot01-ingress/1.1.0",
+    "attributionId": "value",
+    "tenantId": "tenantId-1",
+    "sourceType": "web_form",
+    "sourceInstanceId": "value",
+    "receivedAt": "2030-01-01T00:00:00Z",
+    "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "provenanceEvidenceId": "value",
+    "retentionClass": "operational_90d",
+    "version": 1
+  },
+  "ConsentPresentationEvidence": {
+    "messageType": "consent_presentation_evidence",
+    "schemaVersion": "ot01-ingress/1.1.0",
+    "evidenceId": "value",
+    "tenantId": "tenantId-1",
+    "subjectPersonId": "value",
+    "surface": "web",
+    "disclosureArtifactId": "value",
+    "disclosureVersion": "value",
+    "presentedAt": "2030-01-01T00:00:00Z",
+    "locale": "en-US",
+    "interaction": "presented",
+    "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "retentionClass": "audit_7y",
+    "version": 1
+  },
+  "OptOutLexicon": {
+    "messageType": "opt_out_lexicon", "schemaVersion": "ot01-ingress/1.1.0",
+    "lexiconId": "lexicon-1", "tenantId": "tenantId-1", "recordVersion": 1,
+    "effectiveFrom": "2030-01-01T00:00:00Z", "status": "active", "evidenceIds": ["evidence-1"],
+    "channels": ["sms"], "locale": "en-US",
+    "normalization": "unicode_nfkc_casefold_trim_collapse_whitespace",
+    "matchMode": "exact_normalized", "expressions": ["stop", "unsubscribe"],
+    "suppressionScope": "channel_all"
+  },
+  "AcknowledgmentPolicy": {
+    "messageType": "acknowledgment_policy", "schemaVersion": "ot01-ingress/1.1.0",
+    "policyId": "policy-1", "tenantId": "tenantId-1", "recordVersion": 1,
+    "effectiveFrom": "2030-01-01T00:00:00Z", "status": "active", "evidenceIds": ["evidence-1"],
+    "selectionOrder": ["rule-1"], "noMatchDisposition": "configuration_incomplete",
+    "failureDisposition": "follow_up_required",
+    "rules": [{
+      "ruleId": "rule-1", "channels": ["sms"], "locales": ["en-US"],
+      "operatingHourStates": ["open", "closed"], "contactabilityStates": ["contactable"],
+      "inboundPurposes": ["buyer_inquiry"], "optOutStates": ["matched", "not_matched"],
+      "templateArtifactId": "template-1", "templateVersion": "v1",
+      "templateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "templateSyntax": "mustache_keys_v1", "senderPrincipalId": "principal-1",
+      "senderEndpointId": "endpoint-1", "allowedSubstitutionKeys": ["first_name"],
+      "effectPurpose": "acknowledgment", "expiresInSeconds": 300
+    }]
+  },
+  "AcknowledgmentDecisionRequest": {
+    "messageType": "acknowledgment_decision_request", "schemaVersion": "ot01-ingress/1.1.0",
+    "requestId": "request-1", "decisionId": "decision-1", "idempotencyKey": "idem-1",
+    "tenantId": "tenantId-1",
+    "externalMessageIdentityRef": {"recordId":"external-1","recordType":"ExternalMessageIdentity","version":1,"status":"active"},
+    "capturedAt": "2030-01-01T00:00:00Z", "channel": "sms", "locale": "en-US",
+    "operatingHourState": "open", "contactabilityState": "contactable",
+    "inboundPurpose": "buyer_inquiry", "subjectId": "person-1", "recipientEndpointId": "recipient-1",
+    "acknowledgmentPolicyRef": {"recordId":"policy-1","recordType":"AcknowledgmentPolicy","version":1,"status":"active"},
+    "optOutLexiconRef": {"recordId":"lexicon-1","recordType":"OptOutLexicon","version":1,"status":"active"},
+    "substitutions": {"first_name":"Avery"}, "sourceEvidenceIds": ["evidence-1"],
+    "requestedAt": "2030-01-01T00:00:01Z"
+  },
+  "AcknowledgmentDecision": {
+    "messageType": "acknowledgment_decision", "schemaVersion": "ot01-ingress/1.1.0",
+    "decisionId": "decision-1", "requestId": "request-1", "tenantId": "tenantId-1",
+    "externalMessageIdentityRef": {"recordId":"external-1","recordType":"ExternalMessageIdentity","version":1,"status":"current"},
+    "capturedAt": "2030-01-01T00:00:00Z",
+    "disposition": "send_template",
+    "policyRef": {"recordId":"policy-1","recordType":"AcknowledgmentPolicy","version":1,"status":"active"},
+    "lexiconRef": {"recordId":"lexicon-1","recordType":"OptOutLexicon","version":1,"status":"active"},
+    "optOutMatched": false, "selectedRuleId": "rule-1", "templateArtifactId": "template-1",
+    "templateVersion": "v1", "templateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "senderPrincipalId": "principal-1", "senderEndpointId": "endpoint-1", "recipientEndpointId": "recipient-1",
+    "effectPurpose": "acknowledgment", "normalizedPayloadDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "idempotencyKey": "idem-1", "expiresAt": "2030-01-01T00:05:01Z",
+    "failureDisposition": "follow_up_required", "decidedAt": "2030-01-01T00:00:01Z",
+    "sourceEvidenceIds": ["evidence-1"]
+  },
+  "AcknowledgmentOutcome": {
+    "messageType": "acknowledgment_outcome", "schemaVersion": "ot01-ingress/1.1.0",
+    "outcomeId": "outcome-1", "tenantId": "tenantId-1", "decisionId": "decision-1",
+    "state": "delivered", "captureEventId": "capture-1", "captureCommittedAt": "2030-01-01T00:00:00Z",
+    "outcomeEventId": "event-1", "observedAt": "2030-01-01T00:00:02Z",
+    "providerReceiptId": "receipt-1", "attributionOwner": "provider",
+    "sourceEvidenceIds": ["evidence-1"], "retentionClass": "audit_7y"
+  }
+}

@@ -1,0 +1,185 @@
+{
+  "CredentialIdentity": {
+    "removedField": "identityRef",
+    "record": {
+      "tenantId": "tenantId-1",
+      "providerId": "value",
+      "authClass": "subscription_oauth",
+      "billingClass": "subscription",
+      "subjectType": "entitled_user",
+      "subjectRef": "value",
+      "allowedActionClasses": [
+        "value"
+      ],
+      "allowedModelFamilies": [
+        "value"
+      ],
+      "concurrencyLimit": 1,
+      "dataPolicyVersion": "value",
+      "state": "active"
+    }
+  },
+  "CapabilityProfile": {
+    "removedField": "profileVersion",
+    "record": {
+      "providerId": "value",
+      "adapterId": "value",
+      "adapterVersion": "value",
+      "transport": "value",
+      "modelFamily": "value",
+      "resolvedModelIds": [
+        "value"
+      ],
+      "supportedInputSchemaVersions": [
+        "value"
+      ],
+      "supportedOutputSchemaVersions": [
+        "value"
+      ],
+      "structuredOutput": true,
+      "allowedToolClasses": [
+        "read"
+      ],
+      "writeCapabilitiesMechanicallyExcluded": true,
+      "maximumEffectiveContextUnits": 1,
+      "maximumOutputUnits": 1,
+      "unitType": "tokens",
+      "streamingSupported": true,
+      "cancellationSupported": true,
+      "timeoutMaximumMs": 1,
+      "dataRetentionPolicyVersion": "value",
+      "promptInjectionIsolationVersion": "value",
+      "supportedLanguages": [
+        "value"
+      ],
+      "latencyEnvelopeMs": {
+        "p95": 1,
+        "maximum": 1
+      },
+      "concurrencyEnvelope": 1,
+      "quotaSemantics": "value",
+      "usageSemantics": "value",
+      "knownNondeterminism": [
+        "value"
+      ],
+      "unavailableFeatures": [
+        "value"
+      ],
+      "qualifiedActionClasses": [
+        "value"
+      ],
+      "evaluationQualificationId": "value",
+      "dataPolicyVersions": [
+        "value"
+      ],
+      "failureMappings": [
+        {
+          "providerErrorCode": "value",
+          "state": "blocked_auth",
+          "diagnosticCode": "value"
+        }
+      ],
+      "unmappedProviderErrorState": "provider_unavailable",
+      "state": "qualified"
+    }
+  },
+  "RoutePolicy": {
+    "removedField": "version",
+    "record": {
+      "tenantId": "tenantId-1",
+      "actionClass": "value",
+      "routes": [
+        {
+          "routeId": "value",
+          "adapterId": "value",
+          "transportSelection": "fixed",
+          "credentialIdentityRef": "value",
+          "authClass": "subscription_oauth",
+          "billingClass": "subscription",
+          "modelFamily": "value",
+          "capabilityProfile": "value",
+          "evaluationQualification": "value"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "value",
+          "to": "value",
+          "allowedCauses": [
+            "blocked_capacity"
+          ],
+          "requiresOperatorAtRuntime": true,
+          "evidenceRequired": true
+        }
+      ],
+      "otherwise": "deterministic_degradation"
+    }
+  },
+  "GatewayFailure": {
+    "removedField": "schemaVersion",
+    "record": {
+      "recordType": "GatewayFailure",
+      "workId": "value",
+      "attempt": 1,
+      "state": "blocked_auth",
+      "routePolicyVersion": "value",
+      "contextManifestId": "value",
+      "occurredAt": "2030-01-01T00:00:00Z",
+      "diagnosticCode": "value",
+      "diagnosticEvidenceIds": [
+        "value"
+      ],
+      "substantiveWorkPending": true,
+      "traceId": "value"
+    }
+  },
+  "ContextSufficiencyPolicy": {
+    "removedField": "recordType",
+    "record": {
+      "schemaVersion": "gateway-runtime-config/1.1.0",
+      "policyVersion": "value",
+      "actionClass": "value",
+      "requiredContextClasses": [
+        "value"
+      ],
+      "minimumSourceCount": 1,
+      "maximumSourceAgeSeconds": 1,
+      "onInsufficient": "block",
+      "evidenceRequired": true,
+      "state": "draft"
+    }
+  },
+  "ActionOutputSafetyPolicy": {
+    "removedField": "recordType",
+    "record": {
+      "schemaVersion": "gateway-runtime-config/1.1.0",
+      "policyVersion": "value",
+      "actionClass": "value",
+      "allowedOutputClasses": [
+        "value"
+      ],
+      "prohibitedOutputClasses": [
+        "value"
+      ],
+      "requiredApproval": "none",
+      "templateVersion": "value",
+      "evidenceRequired": true,
+      "state": "draft"
+    }
+  },
+  "DegradationPolicy": {
+    "removedField": "recordType",
+    "record": {
+      "schemaVersion": "gateway-runtime-config/1.1.0",
+      "policyVersion": "value",
+      "fromState": "value",
+      "cause": "blocked_auth",
+      "toState": "blocked",
+      "allowedAction": "none",
+      "templateVersion": "value",
+      "substantiveWorkPending": true,
+      "evidenceRequired": true,
+      "state": "draft"
+    }
+  }
+}

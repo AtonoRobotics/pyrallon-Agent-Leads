@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "cognitive-proposal/1.1.0",
+  "recordType": "CognitiveProposal",
+  "workId": "work-1",
+  "actionClass": "lead_qualification_draft",
+  "proposedActions": [{
+    "proposalId": "action-1",
+    "actionClass": "lead_qualification_draft",
+    "targetRefs": ["journey-1"],
+    "recipientRefs": ["person-1"],
+    "normalizedPayload": {"draft": "What timeline are you considering?"},
+    "sourceClaimIds": ["claim-1"],
+    "requestedExecutionWindow": {"notBefore": "2030-01-01T10:01:00Z", "expiresAt": "2030-01-01T10:08:00Z"},
+    "idempotencySeed": "work-1:action-1"
+  }],
+  "claims": [{"claimId": "claim-1", "subjectRef": "person-1", "predicate": "timeline", "value": "unknown", "epistemicType": "assertion", "sourceIds": ["evidence-1"], "freshnessAt": "2030-01-01T09:59:00Z"}],
+  "unknowns": [],
+  "assumptions": [],
+  "risks": [],
+  "confidence": 0.91,
+  "requiredApproval": "none",
+  "policyDisposition": "eligible",
+  "proposedAt": "2030-01-01T10:00:30Z",
+  "expiresAt": "2030-01-01T10:09:00Z",
+  "contextManifestId": "manifest-1",
+  "runtimeEvidence": {
+    "invocationId": "invoke-1", "attempt": 1, "routePolicyVersion": "route/1.0.0", "routeId": "route-1",
+    "providerId": "test-provider", "adapterId": "test-adapter", "adapterVersion": "1.0.0", "transport": "process",
+    "credentialIdentityRef": "credential-identity-1", "authClass": "subscription_oauth", "billingClass": "subscription",
+    "modelFamily": "test-family", "resolvedModelId": "pinned-test-model", "capabilityProfileVersion": "capability/1.0.0",
+    "evaluationQualificationId": "eval-1", "startedAt": "2030-01-01T10:00:00Z", "completedAt": "2030-01-01T10:00:30Z",
+    "usage": {"inputUnits": 100, "outputUnits": 20, "unitType": "tokens"}
+  }
+}
+

@@ -1,0 +1,21 @@
+{
+  "schema_version": "effect-intent/1.0.0",
+  "intent_id": "intent-1",
+  "tenant_id": "tenant-1",
+  "principal_id": "principal-1",
+  "buyer_journey_id": "journey-1",
+  "workflow_id": "workflow-1",
+  "activity_id": "activity-1",
+  "action_class": "send_message",
+  "connector_binding_id": "connector-1",
+  "target_resource": {"resource_type": "conversation", "resource_id": "conversation-1", "version": 4},
+  "recipient": {"recipient_type": "person", "recipient_id": "person-1"},
+  "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "canonical_version_vector": {"conversation-1": 4, "person-1": 2},
+  "proposal_id": "proposal-1",
+  "proposal_expires_at": "2030-01-01T00:05:00Z",
+  "idempotency_key": "send:conversation-1:4",
+  "purpose": "buyer_consultation",
+  "trace_id": "trace-1",
+  "evidence_correlation_ids": ["evidence-1"]
+}

@@ -1,0 +1,19 @@
+{
+  "from": "open-019-024/1.0.0",
+  "to": "open-019-024/1.1.0",
+  "classification": "minor-governing-closure-correction",
+  "backwardReadable": false,
+  "forwardWritable": false,
+  "reason": "Version 1.0.0 named the closure records but could not encode lifecycle, signature material, stale routing, event-set binding, gate-registry binding, or complete accessibility waivers. Version 1.1.0 admits those previously required governing semantics before runtime activation.",
+  "recordMigration": {
+    "requiredDefaults": {
+      "recordVersion": 1,
+      "effectiveFrom": "copy observedAt",
+      "status": "current"
+    },
+    "evidenceRefs": "must be supplied from reconstructable source evidence; no synthetic default is permitted",
+    "typeSpecificFields": "must be reconstructed from signed inventories, route policy, metric catalog/event sets, gate registry/release evidence, or accessibility suite output; records without those sources are refused"
+  },
+  "databaseMigration": "0009_control_plane.sql upgrades closure history to a versioned append-only key and adds closure_records_current as the sole mutable current projection",
+  "runtimeRule": "1.0.0 payloads may remain in immutable audit storage, but runtime contract readers refuse them; they cannot satisfy 1.1.0 scheduling, context, telemetry, release, or accessibility acceptance"
+}

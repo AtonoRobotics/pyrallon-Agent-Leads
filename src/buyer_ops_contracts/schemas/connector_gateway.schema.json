@@ -1,0 +1,296 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://buyer-ops.example/schemas/connector-gateway/1.0.0",
+    "title": "ConnectorGatewayMessage",
+    "oneOf": [
+        {
+            "$ref": "#/$defs/Request"
+        },
+        {
+            "$ref": "#/$defs/Response"
+        },
+        {
+            "$ref": "#/$defs/ChangeEvent"
+        },
+        {
+            "$ref": "#/$defs/Reconciliation"
+        }
+    ],
+    "$defs": {
+        "Id": {
+            "type": "string",
+            "minLength": 1
+        },
+        "Time": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "Digest": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$"
+        },
+        "Base": {
+            "type": "object",
+            "required": [
+                "schemaVersion",
+                "tenantId",
+                "connectorId",
+                "grantId",
+                "grantVersion",
+                "capability",
+                "delegatedPrincipalId",
+                "correlationId",
+                "occurredAt"
+            ],
+            "properties": {
+                "schemaVersion": {
+                    "const": "connector-gateway/1.0.0"
+                },
+                "tenantId": {
+                    "$ref": "#/$defs/Id"
+                },
+                "connectorId": {
+                    "$ref": "#/$defs/Id"
+                },
+                "grantId": {
+                    "$ref": "#/$defs/Id"
+                },
+                "grantVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "capability": {
+                    "enum": [
+                        "read",
+                        "create",
+                        "update",
+                        "send",
+                        "schedule",
+                        "reconcile"
+                    ]
+                },
+                "delegatedPrincipalId": {
+                    "$ref": "#/$defs/Id"
+                },
+                "correlationId": {
+                    "$ref": "#/$defs/Id"
+                },
+                "occurredAt": {
+                    "$ref": "#/$defs/Time"
+                }
+            }
+        },
+        "Request": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Base"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "messageType",
+                        "requestId",
+                        "idempotencyKey",
+                        "payloadDigest",
+                        "expectedProviderVersion",
+                        "schemaVersion",
+                        "tenantId",
+                        "connectorId",
+                        "grantId",
+                        "grantVersion",
+                        "capability",
+                        "delegatedPrincipalId",
+                        "correlationId",
+                        "occurredAt"
+                    ],
+                    "properties": {
+                        "messageType": {
+                            "const": "connector_request"
+                        },
+                        "requestId": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "idempotencyKey": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "payloadDigest": {
+                            "$ref": "#/$defs/Digest"
+                        },
+                        "expectedProviderVersion": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                }
+            ],
+            "unevaluatedProperties": false
+        },
+        "Response": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Base"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "messageType",
+                        "requestId",
+                        "receiptId",
+                        "outcome",
+                        "providerVersion",
+                        "payloadDigest",
+                        "schemaVersion",
+                        "tenantId",
+                        "connectorId",
+                        "grantId",
+                        "grantVersion",
+                        "capability",
+                        "delegatedPrincipalId",
+                        "correlationId",
+                        "occurredAt"
+                    ],
+                    "properties": {
+                        "messageType": {
+                            "const": "connector_response"
+                        },
+                        "requestId": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "receiptId": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "outcome": {
+                            "enum": [
+                                "confirmed",
+                                "rejected",
+                                "conflict",
+                                "unknown",
+                                "revoked"
+                            ]
+                        },
+                        "providerVersion": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "payloadDigest": {
+                            "$ref": "#/$defs/Digest"
+                        }
+                    }
+                }
+            ],
+            "unevaluatedProperties": false
+        },
+        "ChangeEvent": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Base"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "messageType",
+                        "eventId",
+                        "providerObjectId",
+                        "providerVersion",
+                        "changeType",
+                        "payloadDigest",
+                        "schemaVersion",
+                        "tenantId",
+                        "connectorId",
+                        "grantId",
+                        "grantVersion",
+                        "capability",
+                        "delegatedPrincipalId",
+                        "correlationId",
+                        "occurredAt"
+                    ],
+                    "properties": {
+                        "messageType": {
+                            "const": "connector_change_event"
+                        },
+                        "eventId": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "providerObjectId": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "providerVersion": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "changeType": {
+                            "enum": [
+                                "created",
+                                "updated",
+                                "deleted",
+                                "permission_revoked"
+                            ]
+                        },
+                        "payloadDigest": {
+                            "$ref": "#/$defs/Digest"
+                        }
+                    }
+                }
+            ],
+            "unevaluatedProperties": false
+        },
+        "Reconciliation": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Base"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "messageType",
+                        "reconciliationId",
+                        "requestId",
+                        "attempt",
+                        "state",
+                        "notBefore",
+                        "schemaVersion",
+                        "tenantId",
+                        "connectorId",
+                        "grantId",
+                        "grantVersion",
+                        "capability",
+                        "delegatedPrincipalId",
+                        "correlationId",
+                        "occurredAt"
+                    ],
+                    "properties": {
+                        "messageType": {
+                            "const": "connector_reconciliation"
+                        },
+                        "reconciliationId": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "requestId": {
+                            "$ref": "#/$defs/Id"
+                        },
+                        "attempt": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "state": {
+                            "enum": [
+                                "pending",
+                                "confirmed",
+                                "failed",
+                                "exhausted",
+                                "revoked"
+                            ]
+                        },
+                        "notBefore": {
+                            "$ref": "#/$defs/Time"
+                        }
+                    }
+                }
+            ],
+            "unevaluatedProperties": false
+        }
+    }
+}

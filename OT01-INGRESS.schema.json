@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/ot01-ingress/1.1.0",
+  "title": "Ot01IngressMessage",
+  "oneOf": [
+    { "$ref": "#/$defs/AttributionInput" },
+    { "$ref": "#/$defs/ConsentPresentationEvidence" },
+    { "$ref": "#/$defs/OptOutLexicon" },
+    { "$ref": "#/$defs/AcknowledgmentPolicy" },
+    { "$ref": "#/$defs/AcknowledgmentDecisionRequest" },
+    { "$ref": "#/$defs/AcknowledgmentDecision" },
+    { "$ref": "#/$defs/AcknowledgmentOutcome" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Time": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" },
+    "Channel": { "enum": ["form", "email", "sms"] },
+    "Locale": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$" },
+    "RecordRef": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recordId", "recordType", "version", "status"],
+      "properties": {
+        "recordId": { "$ref": "#/$defs/Id" }, "recordType": { "$ref": "#/$defs/Id" },
+        "version": { "type": "integer", "minimum": 1 }, "status": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "Lifecycle": {
+      "type": "object",
+      "required": ["tenantId", "recordVersion", "effectiveFrom", "status", "evidenceIds"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/Id" }, "recordVersion": { "type": "integer", "minimum": 1 },
+        "effectiveFrom": { "$ref": "#/$defs/Time" }, "effectiveTo": { "$ref": "#/$defs/Time" },
+        "status": { "enum": ["draft", "active", "superseded", "retired"] },
+        "supersedesRecordId": { "$ref": "#/$defs/Id" },
+        "evidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }
+      }
+    },
+    "AttributionInput": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "attributionId", "tenantId", "sourceType", "sourceInstanceId", "receivedAt", "payloadDigest", "provenanceEvidenceId", "retentionClass", "version"],
+      "properties": {
+        "messageType": { "const": "attribution_input" }, "schemaVersion": { "const": "ot01-ingress/1.1.0" },
+        "attributionId": { "$ref": "#/$defs/Id" }, "tenantId": { "$ref": "#/$defs/Id" },
+        "sourceType": { "enum": ["web_form", "referral", "crm", "email", "sms", "voice", "manual"] },
+        "sourceInstanceId": { "$ref": "#/$defs/Id" }, "campaignId": { "$ref": "#/$defs/Id" },
+        "receivedAt": { "$ref": "#/$defs/Time" }, "payloadDigest": { "$ref": "#/$defs/Digest" },
+        "provenanceEvidenceId": { "$ref": "#/$defs/Id" },
+        "retentionClass": { "enum": ["operational_90d", "audit_7y"] }, "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ConsentPresentationEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "evidenceId", "tenantId", "subjectPersonId", "surface", "disclosureArtifactId", "disclosureVersion", "presentedAt", "locale", "interaction", "payloadDigest", "retentionClass", "version"],
+      "properties": {
+        "messageType": { "const": "consent_presentation_evidence" }, "schemaVersion": { "const": "ot01-ingress/1.1.0" },
+        "evidenceId": { "$ref": "#/$defs/Id" }, "tenantId": { "$ref": "#/$defs/Id" },
+        "subjectPersonId": { "$ref": "#/$defs/Id" },
+        "surface": { "enum": ["web", "ios", "sms", "email", "voice", "agent_assisted"] },
+        "disclosureArtifactId": { "$ref": "#/$defs/Id" }, "disclosureVersion": { "$ref": "#/$defs/Id" },
+        "presentedAt": { "$ref": "#/$defs/Time" }, "locale": { "$ref": "#/$defs/Locale" },
+        "interaction": { "enum": ["presented", "accepted", "declined", "withdrawn"] },
+        "payloadDigest": { "$ref": "#/$defs/Digest" }, "retentionClass": { "const": "audit_7y" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "OptOutLexicon": {
+      "allOf": [
+        { "$ref": "#/$defs/Lifecycle" },
+        { "type": "object", "required": ["messageType", "schemaVersion", "lexiconId", "channels", "locale", "normalization", "matchMode", "expressions", "suppressionScope"],
+          "properties": {
+            "messageType": { "const": "opt_out_lexicon" }, "schemaVersion": { "const": "ot01-ingress/1.1.0" },
+            "lexiconId": { "$ref": "#/$defs/Id" },
+            "channels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["email", "sms"] } },
+            "locale": { "$ref": "#/$defs/Locale" },
+            "normalization": { "const": "unicode_nfkc_casefold_trim_collapse_whitespace" },
+            "matchMode": { "enum": ["exact_normalized", "leading_token"] },
+            "expressions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+            "suppressionScope": { "enum": ["channel_purpose", "channel_all", "all_marketing", "all_non_required_contact"] }
+          }
+        }
+      ], "unevaluatedProperties": false
+    },
+    "AcknowledgmentRule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ruleId", "channels", "locales", "operatingHourStates", "contactabilityStates", "inboundPurposes", "optOutStates", "templateArtifactId", "templateVersion", "templateDigest", "templateSyntax", "senderPrincipalId", "senderEndpointId", "allowedSubstitutionKeys", "effectPurpose", "expiresInSeconds"],
+      "properties": {
+        "ruleId": { "$ref": "#/$defs/Id" },
+        "channels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Channel" } },
+        "locales": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Locale" } },
+        "operatingHourStates": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["open", "closed", "holiday"] } },
+        "contactabilityStates": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["unknown", "contactable", "temporarily_unavailable", "suppressed", "invalid"] } },
+        "inboundPurposes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "optOutStates": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["matched", "not_matched"] } },
+        "templateArtifactId": { "$ref": "#/$defs/Id" }, "templateVersion": { "$ref": "#/$defs/Id" },
+        "templateDigest": { "$ref": "#/$defs/Digest" }, "templateSyntax": { "const": "mustache_keys_v1" },
+        "senderPrincipalId": { "$ref": "#/$defs/Id" },
+        "senderEndpointId": { "$ref": "#/$defs/Id" },
+        "allowedSubstitutionKeys": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "effectPurpose": { "$ref": "#/$defs/Id" }, "expiresInSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "AcknowledgmentPolicy": {
+      "allOf": [
+        { "$ref": "#/$defs/Lifecycle" },
+        { "type": "object", "required": ["messageType", "schemaVersion", "policyId", "selectionOrder", "rules", "noMatchDisposition", "failureDisposition"],
+          "properties": {
+            "messageType": { "const": "acknowledgment_policy" }, "schemaVersion": { "const": "ot01-ingress/1.1.0" },
+            "policyId": { "$ref": "#/$defs/Id" },
+            "selectionOrder": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/AcknowledgmentRule" } },
+            "noMatchDisposition": { "enum": ["configuration_incomplete", "no_ack_required"] },
+            "failureDisposition": { "enum": ["follow_up_required", "escalate"] }
+          }
+        }
+      ], "unevaluatedProperties": false
+    },
+    "AcknowledgmentDecisionRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "requestId", "decisionId", "idempotencyKey", "tenantId", "externalMessageIdentityRef", "capturedAt", "channel", "locale", "operatingHourState", "contactabilityState", "inboundPurpose", "subjectId", "recipientEndpointId", "acknowledgmentPolicyRef", "optOutLexiconRef", "substitutions", "sourceEvidenceIds", "requestedAt"],
+      "properties": {
+        "messageType": { "const": "acknowledgment_decision_request" }, "schemaVersion": { "const": "ot01-ingress/1.1.0" },
+        "requestId": { "$ref": "#/$defs/Id" }, "decisionId": { "$ref": "#/$defs/Id" },
+        "idempotencyKey": { "$ref": "#/$defs/Id" }, "tenantId": { "$ref": "#/$defs/Id" },
+        "externalMessageIdentityRef": { "$ref": "#/$defs/RecordRef" }, "capturedAt": { "$ref": "#/$defs/Time" },
+        "channel": { "$ref": "#/$defs/Channel" }, "locale": { "$ref": "#/$defs/Locale" },
+        "operatingHourState": { "enum": ["open", "closed", "holiday"] },
+        "contactabilityState": { "enum": ["unknown", "contactable", "temporarily_unavailable", "suppressed", "invalid"] },
+        "inboundPurpose": { "$ref": "#/$defs/Id" }, "subjectId": { "$ref": "#/$defs/Id" }, "recipientEndpointId": { "$ref": "#/$defs/Id" },
+        "acknowledgmentPolicyRef": { "$ref": "#/$defs/RecordRef" }, "optOutLexiconRef": { "$ref": "#/$defs/RecordRef" },
+        "substitutions": { "type": "object", "additionalProperties": { "type": "string" } },
+        "suppressionRecordCandidate": { "type": "object", "minProperties": 1 },
+        "sourceEvidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "requestedAt": { "$ref": "#/$defs/Time" }
+      }
+    },
+    "AcknowledgmentDecision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "decisionId", "requestId", "tenantId", "externalMessageIdentityRef", "capturedAt", "disposition", "policyRef", "lexiconRef", "optOutMatched", "decidedAt", "sourceEvidenceIds"],
+      "properties": {
+        "messageType": { "const": "acknowledgment_decision" }, "schemaVersion": { "const": "ot01-ingress/1.1.0" },
+        "decisionId": { "$ref": "#/$defs/Id" }, "requestId": { "$ref": "#/$defs/Id" }, "tenantId": { "$ref": "#/$defs/Id" },
+        "externalMessageIdentityRef": { "$ref": "#/$defs/RecordRef" }, "capturedAt": { "$ref": "#/$defs/Time" },
+        "disposition": { "enum": ["send_template", "suppress_and_acknowledge", "no_ack_required", "configuration_incomplete"] },
+        "policyRef": { "$ref": "#/$defs/RecordRef" }, "lexiconRef": { "$ref": "#/$defs/RecordRef" },
+        "optOutMatched": { "type": "boolean" }, "matchedExpressionDigest": { "$ref": "#/$defs/Digest" },
+        "suppressionRef": { "$ref": "#/$defs/RecordRef" }, "selectedRuleId": { "$ref": "#/$defs/Id" },
+        "templateArtifactId": { "$ref": "#/$defs/Id" }, "templateVersion": { "$ref": "#/$defs/Id" },
+        "templateDigest": { "$ref": "#/$defs/Digest" }, "senderPrincipalId": { "$ref": "#/$defs/Id" },
+        "senderEndpointId": { "$ref": "#/$defs/Id" }, "recipientEndpointId": { "$ref": "#/$defs/Id" },
+        "effectPurpose": { "$ref": "#/$defs/Id" }, "normalizedPayloadDigest": { "$ref": "#/$defs/Digest" },
+        "idempotencyKey": { "$ref": "#/$defs/Id" }, "expiresAt": { "$ref": "#/$defs/Time" },
+        "failureDisposition": { "enum": ["follow_up_required", "escalate"] }, "decidedAt": { "$ref": "#/$defs/Time" },
+        "sourceEvidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }
+      }
+    },
+    "AcknowledgmentOutcome": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "outcomeId", "tenantId", "decisionId", "state", "captureEventId", "captureCommittedAt", "outcomeEventId", "observedAt", "attributionOwner", "sourceEvidenceIds", "retentionClass"],
+      "properties": {
+        "messageType": { "const": "acknowledgment_outcome" }, "schemaVersion": { "const": "ot01-ingress/1.1.0" },
+        "outcomeId": { "$ref": "#/$defs/Id" }, "tenantId": { "$ref": "#/$defs/Id" }, "decisionId": { "$ref": "#/$defs/Id" },
+        "state": { "enum": ["accepted", "delivered", "failed", "unknown_outcome", "suppressed", "no_ack_required"] },
+        "captureEventId": { "$ref": "#/$defs/Id" }, "captureCommittedAt": { "$ref": "#/$defs/Time" },
+        "outcomeEventId": { "$ref": "#/$defs/Id" }, "observedAt": { "$ref": "#/$defs/Time" },
+        "providerReceiptId": { "$ref": "#/$defs/Id" }, "failureCode": { "$ref": "#/$defs/Id" },
+        "attributionOwner": { "enum": ["ingress", "habitat", "connector", "provider", "configuration", "operator"] },
+        "sourceEvidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "retentionClass": { "enum": ["operational_90d", "audit_7y"] }
+      }
+    }
+  }
+}

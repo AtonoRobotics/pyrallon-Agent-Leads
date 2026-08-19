@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "cognitive-work/1.1.0",
+  "recordType": "CognitiveWorkRequest",
+  "workId": "work-1",
+  "tenantId": "tenant-1",
+  "principalId": "agent-1",
+  "buyerJourneyId": "journey-1",
+  "workflowId": "workflow-1",
+  "actionClass": "lead_qualification_draft",
+  "objective": "Prepare a grounded qualification response",
+  "contextManifestId": "manifest-1",
+  "contextPacket": {
+    "schemaVersion": "context-packet/1.0.0",
+    "manifestId": "manifest-1",
+    "ontologyVersion": "buyer-ops/0.3.0",
+    "compiledAt": "2030-01-01T10:00:00Z",
+    "expiresAt": "2030-01-01T10:10:00Z",
+    "sections": [{"sectionId": "facts", "purpose": "Ground qualification draft", "contentDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "content": {"budget": "unknown"}, "sourceRecordIds": ["evidence-1"]}]
+  },
+  "contextSufficiencyContractVersion": "lead-qualification/1.0.0",
+  "requiredProposalSchemaVersion": "cognitive-proposal/1.1.0",
+  "routePolicyVersion": "route/1.0.0",
+  "retryBudget": {"maxAttempts": 2, "maxElapsedMs": 120000},
+  "degradationPolicyVersion": "degradation/1.0.0",
+  "traceId": "trace-1"
+}

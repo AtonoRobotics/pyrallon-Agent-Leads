@@ -1,0 +1,77 @@
+{
+  "Request": {
+    "removedField": "requestId",
+    "record": {
+      "schemaVersion": "connector-gateway/1.0.0",
+      "tenantId": "tenantId-1",
+      "connectorId": "value",
+      "grantId": "value",
+      "grantVersion": 1,
+      "capability": "read",
+      "delegatedPrincipalId": "value",
+      "correlationId": "value",
+      "occurredAt": "2030-01-01T00:00:00Z",
+      "messageType": "connector_request",
+      "idempotencyKey": "value",
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expectedProviderVersion": "value"
+    }
+  },
+  "Response": {
+    "removedField": "requestId",
+    "record": {
+      "schemaVersion": "connector-gateway/1.0.0",
+      "tenantId": "tenantId-1",
+      "connectorId": "value",
+      "grantId": "value",
+      "grantVersion": 1,
+      "capability": "read",
+      "delegatedPrincipalId": "value",
+      "correlationId": "value",
+      "occurredAt": "2030-01-01T00:00:00Z",
+      "messageType": "connector_response",
+      "receiptId": "value",
+      "outcome": "confirmed",
+      "providerVersion": "value",
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "ChangeEvent": {
+    "removedField": "eventId",
+    "record": {
+      "schemaVersion": "connector-gateway/1.0.0",
+      "tenantId": "tenantId-1",
+      "connectorId": "value",
+      "grantId": "value",
+      "grantVersion": 1,
+      "capability": "read",
+      "delegatedPrincipalId": "value",
+      "correlationId": "value",
+      "occurredAt": "2030-01-01T00:00:00Z",
+      "messageType": "connector_change_event",
+      "providerObjectId": "value",
+      "providerVersion": "value",
+      "changeType": "created",
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "Reconciliation": {
+    "removedField": "reconciliationId",
+    "record": {
+      "schemaVersion": "connector-gateway/1.0.0",
+      "tenantId": "tenantId-1",
+      "connectorId": "value",
+      "grantId": "value",
+      "grantVersion": 1,
+      "capability": "read",
+      "delegatedPrincipalId": "value",
+      "correlationId": "value",
+      "occurredAt": "2030-01-01T00:00:00Z",
+      "messageType": "connector_reconciliation",
+      "requestId": "value",
+      "attempt": 1,
+      "state": "pending",
+      "notBefore": "2030-01-01T00:00:00Z"
+    }
+  }
+}

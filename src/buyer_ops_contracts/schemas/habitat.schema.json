@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/habitat/effect-intent/1.0.0",
+  "title": "HabitatEffectIntent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "intent_id", "tenant_id", "principal_id", "buyer_journey_id",
+    "workflow_id", "activity_id", "action_class", "connector_binding_id",
+    "target_resource", "recipient", "payload_digest", "canonical_version_vector",
+    "proposal_id", "proposal_expires_at", "idempotency_key", "purpose", "trace_id",
+    "evidence_correlation_ids"
+  ],
+  "properties": {
+    "schema_version": { "const": "effect-intent/1.0.0" },
+    "intent_id": { "$ref": "#/$defs/Id" },
+    "tenant_id": { "$ref": "#/$defs/Id" },
+    "principal_id": { "$ref": "#/$defs/Id" },
+    "buyer_journey_id": { "$ref": "#/$defs/Id" },
+    "workflow_id": { "$ref": "#/$defs/Id" },
+    "activity_id": { "$ref": "#/$defs/Id" },
+    "action_class": { "$ref": "#/$defs/Id" },
+    "connector_binding_id": { "$ref": "#/$defs/Id" },
+    "target_resource": { "$ref": "#/$defs/TargetResource" },
+    "recipient": { "$ref": "#/$defs/Recipient" },
+    "payload_digest": { "$ref": "#/$defs/Digest" },
+    "canonical_version_vector": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "integer", "minimum": 1 }
+    },
+    "proposal_id": { "$ref": "#/$defs/Id" },
+    "proposal_expires_at": { "$ref": "#/$defs/Timestamp" },
+    "approval_ref": { "$ref": "#/$defs/Id" },
+    "approved_digest": { "$ref": "#/$defs/Digest" },
+    "idempotency_key": { "$ref": "#/$defs/Id" },
+    "purpose": { "$ref": "#/$defs/Id" },
+    "trace_id": { "$ref": "#/$defs/Id" },
+    "evidence_correlation_ids": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/Id" }
+    }
+  },
+  "dependentRequired": {
+    "approval_ref": ["approved_digest"],
+    "approved_digest": ["approval_ref"]
+  },
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" },
+    "TargetResource": {
+      "type": "object", "additionalProperties": false,
+      "required": ["resource_type", "resource_id", "version"],
+      "properties": {
+        "resource_type": { "$ref": "#/$defs/Id" },
+        "resource_id": { "$ref": "#/$defs/Id" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "Recipient": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recipient_type", "recipient_id"],
+      "properties": {
+        "recipient_type": { "$ref": "#/$defs/Id" },
+        "recipient_id": { "$ref": "#/$defs/Id" }
+      }
+    }
+  }
+}

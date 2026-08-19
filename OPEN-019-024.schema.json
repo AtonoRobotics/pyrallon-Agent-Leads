@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/open-019-024-closure/1.1.0",
+  "title": "OPEN-019–024 governing closure records",
+  "oneOf": [
+    { "$ref": "#/$defs/ExternalMessageIdentity" },
+    { "$ref": "#/$defs/CapabilityInventory" },
+    { "$ref": "#/$defs/EffectDraftPreview" },
+    { "$ref": "#/$defs/ContextSourceFreshness" },
+    { "$ref": "#/$defs/OutputClassMapping" },
+    { "$ref": "#/$defs/MetricDefinition" },
+    { "$ref": "#/$defs/MetricObservation" },
+    { "$ref": "#/$defs/ReleaseEvidence" },
+    { "$ref": "#/$defs/AccessibilityEvidence" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._:/-]+$" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "Version": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+$" },
+    "Signature": {
+      "type": "object", "additionalProperties": false,
+      "required": ["algorithm", "keyId", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "keyId": { "$ref": "#/$defs/Id" },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    },
+    "Base": {
+      "type": "object",
+      "required": ["schemaVersion", "tenantId", "recordId", "recordVersion", "observedAt", "effectiveFrom", "status", "evidenceRefs"],
+      "properties": {
+        "schemaVersion": { "const": "open-019-024/1.1.0" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "recordId": { "$ref": "#/$defs/Id" },
+        "recordVersion": { "type": "integer", "minimum": 1 },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "effectiveFrom": { "$ref": "#/$defs/Timestamp" },
+        "effectiveTo": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" },
+        "status": { "enum": ["current", "superseded", "expired", "revoked"] },
+        "supersedesRecordId": { "$ref": "#/$defs/Id" },
+        "evidenceRefs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }
+      }
+    },
+    "ExternalMessageIdentity": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "connectorId", "provider", "providerAccountRef", "externalMessageId", "payloadDigest"], "properties": {
+        "recordType": { "const": "ExternalMessageIdentity" }, "connectorId": { "$ref": "#/$defs/Id" }, "provider": { "$ref": "#/$defs/Id" }, "providerAccountRef": { "$ref": "#/$defs/Id" }, "externalMessageId": { "$ref": "#/$defs/Id" }, "externalEventId": { "$ref": "#/$defs/Id" }, "payloadDigest": { "$ref": "#/$defs/Digest" }
+      }}], "unevaluatedProperties": false
+    },
+    "CapabilityInventory": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "connectorId", "connectorVersion", "capabilities", "effectClasses", "capabilityEffects", "canonicalizationVersion", "inventoryDigest", "signature", "expiresAt"], "properties": {
+        "recordType": { "const": "CapabilityInventory" },
+        "connectorId": { "$ref": "#/$defs/Id" },
+        "connectorVersion": { "$ref": "#/$defs/Version" },
+        "capabilities": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "effectClasses": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "capabilityEffects": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["capability", "actionClasses", "constraintDigest"],
+            "properties": {
+              "capability": { "$ref": "#/$defs/Id" },
+              "actionClasses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+              "constraintDigest": { "$ref": "#/$defs/Digest" }
+            }
+          }
+        },
+        "canonicalizationVersion": { "const": "jcs-rfc8785/1" },
+        "inventoryDigest": { "$ref": "#/$defs/Digest" },
+        "signature": { "$ref": "#/$defs/Signature" }
+      }}], "unevaluatedProperties": false
+    },
+    "EffectDraftPreview": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "connectorId", "inventoryRecordId", "inventoryRecordVersion", "inventoryDigest", "grantId", "grantVersion", "delegatedPrincipalId", "capability", "actionClass", "payloadCanonicalizationVersion", "payloadDigest", "idempotencyKey", "targetRefs", "recipientRefs", "requestedExecutionWindow", "authorityClass", "reversible"], "properties": {
+        "recordType": { "const": "EffectDraftPreview" }, "connectorId": { "$ref": "#/$defs/Id" }, "inventoryRecordId": { "$ref": "#/$defs/Id" }, "inventoryRecordVersion": { "type": "integer", "minimum": 1 }, "inventoryDigest": { "$ref": "#/$defs/Digest" }, "grantId": { "$ref": "#/$defs/Id" }, "grantVersion": { "type": "integer", "minimum": 1 }, "delegatedPrincipalId": { "$ref": "#/$defs/Id" }, "capability": { "$ref": "#/$defs/Id" }, "actionClass": { "$ref": "#/$defs/Id" }, "payloadCanonicalizationVersion": { "$ref": "#/$defs/Version" }, "payloadDigest": { "$ref": "#/$defs/Digest" }, "idempotencyKey": { "$ref": "#/$defs/Id" }, "targetRefs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "recipientRefs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "requestedExecutionWindow": { "type": "object", "additionalProperties": false, "required": ["notBefore", "expiresAt"], "properties": { "notBefore": { "$ref": "#/$defs/Timestamp" }, "expiresAt": { "$ref": "#/$defs/Timestamp" } } }, "authorityClass": { "$ref": "#/$defs/Id" }, "reversible": { "type": "boolean" }
+      }}], "unevaluatedProperties": false
+    },
+    "ContextSourceFreshness": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "sourceRecordId", "epistemicType", "freshnessAt", "freshUntil"], "properties": {
+        "recordType": { "const": "ContextSourceFreshness" }, "sourceRecordId": { "$ref": "#/$defs/Id" }, "epistemicType": { "enum": ["evidence", "assertion", "verified_fact", "inference", "memory"] }, "freshnessAt": { "$ref": "#/$defs/Timestamp" }, "freshUntil": { "$ref": "#/$defs/Timestamp" }
+      }}], "unevaluatedProperties": false
+    },
+    "OutputClassMapping": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "actionClass", "outputClass", "policyVersion", "allowedArtifactTypes", "requiredAuthorityClasses", "allowedEpistemicTypes", "staleEvidencePolicy", "groundingMode", "effectEligibility", "expiresAt"], "properties": {
+        "recordType": { "const": "OutputClassMapping" }, "actionClass": { "$ref": "#/$defs/Id" }, "outputClass": { "$ref": "#/$defs/Id" }, "policyVersion": { "$ref": "#/$defs/Version" }, "allowedArtifactTypes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "requiredAuthorityClasses": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "allowedEpistemicTypes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["evidence", "assertion", "verified_fact", "inference", "memory"] } }, "staleEvidencePolicy": { "enum": ["reject", "allow_labeled"] }, "staleLabel": { "$ref": "#/$defs/Id" }, "groundingMode": { "enum": ["all_claims_grounded", "bounded_unknowns_allowed", "acknowledgment_only"] }, "effectEligibility": { "enum": ["none", "draft_only", "permit_eligible"] }
+      }}, { "if": { "properties": { "staleEvidencePolicy": { "const": "allow_labeled" } } }, "then": { "required": ["staleLabel"] }, "else": { "not": { "required": ["staleLabel"] } } }], "unevaluatedProperties": false
+    },
+    "MetricDefinition": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "metricId", "unit", "numeratorEvent", "denominatorEvent", "correlationKey", "dimensions", "window", "minimumDenominator", "zeroDenominatorBehavior"], "properties": {
+        "recordType": { "const": "MetricDefinition" }, "metricId": { "$ref": "#/$defs/Id" }, "unit": { "enum": ["ratio", "count", "duration_ms", "percentage"] }, "numeratorEvent": { "$ref": "#/$defs/Id" }, "denominatorEvent": { "$ref": "#/$defs/Id" }, "correlationKey": { "$ref": "#/$defs/Id" }, "dimensions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "window": { "$ref": "#/$defs/Id" }, "minimumDenominator": { "type": "integer", "minimum": 0 }, "zeroDenominatorBehavior": { "enum": ["unknown", "not_applicable", "zero"] }
+      }}], "unevaluatedProperties": false
+    },
+    "MetricObservation": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "metricId", "metricDefinitionRecordId", "metricDefinitionRecordVersion", "window", "windowStart", "windowEnd", "numerator", "denominator", "numeratorEvent", "denominatorEvent", "correlationKey", "correlationDigest", "numeratorEventDigest", "denominatorEventDigest", "dimensionValues", "calculationState"], "properties": {
+        "recordType": { "const": "MetricObservation" }, "metricId": { "$ref": "#/$defs/Id" }, "metricDefinitionRecordId": { "$ref": "#/$defs/Id" }, "metricDefinitionRecordVersion": { "type": "integer", "minimum": 1 }, "window": { "$ref": "#/$defs/Id" }, "windowStart": { "$ref": "#/$defs/Timestamp" }, "windowEnd": { "$ref": "#/$defs/Timestamp" }, "numerator": { "type": "integer", "minimum": 0 }, "denominator": { "type": "integer", "minimum": 0 }, "numeratorEvent": { "$ref": "#/$defs/Id" }, "denominatorEvent": { "$ref": "#/$defs/Id" }, "correlationKey": { "$ref": "#/$defs/Id" }, "correlationDigest": { "$ref": "#/$defs/Digest" }, "numeratorEventDigest": { "$ref": "#/$defs/Digest" }, "denominatorEventDigest": { "$ref": "#/$defs/Digest" }, "dimensionValues": { "type": "object", "additionalProperties": { "type": "string" } }, "calculationState": { "enum": ["value", "unknown", "not_applicable"] }, "value": { "type": "number", "minimum": 0 }
+      }}, { "if": { "properties": { "calculationState": { "const": "value" } } }, "then": { "required": ["value"] }, "else": { "not": { "required": ["value"] } } }], "unevaluatedProperties": false
+    },
+    "ReleaseEvidence": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "gateId", "gateRegistryVersion", "gateRegistryDigest", "applicability", "scope", "releaseDigest", "testVersion", "outcome", "ownerId", "expiresAt"], "properties": {
+        "recordType": { "const": "ReleaseEvidence" }, "gateId": { "$ref": "#/$defs/Id" }, "gateRegistryVersion": { "$ref": "#/$defs/Version" }, "gateRegistryDigest": { "$ref": "#/$defs/Digest" }, "applicability": { "enum": ["platform_invariant", "operational_thread", "capability", "complete_product"] }, "scope": { "$ref": "#/$defs/Id" }, "capabilityId": { "$ref": "#/$defs/Id" }, "releaseDigest": { "$ref": "#/$defs/Digest" }, "testVersion": { "$ref": "#/$defs/Version" }, "outcome": { "enum": ["pass", "fail", "blocked", "not_applicable"] }, "disabledCapabilityEvidenceRefs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "ownerId": { "$ref": "#/$defs/Id" }, "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      }}, { "if": { "properties": { "applicability": { "const": "capability" } } }, "then": { "required": ["capabilityId"] } }, { "if": { "properties": { "outcome": { "const": "not_applicable" } } }, "then": { "required": ["capabilityId", "disabledCapabilityEvidenceRefs"] } }], "unevaluatedProperties": false
+    },
+    "AccessibilityEvidence": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "standard", "suiteVersion", "surface", "buildDigest", "releaseDigest", "assistiveTechnologies", "knownExceptions", "outcome", "ownerId", "expiresAt"], "properties": {
+        "recordType": { "const": "AccessibilityEvidence" }, "standard": { "const": "WCAG 2.2 AA" }, "suiteVersion": { "$ref": "#/$defs/Version" }, "surface": { "$ref": "#/$defs/Id" }, "buildDigest": { "$ref": "#/$defs/Digest" }, "releaseDigest": { "$ref": "#/$defs/Digest" }, "assistiveTechnologies": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "knownExceptions": { "type": "array", "items": { "type": "string" } }, "outcome": { "enum": ["current", "expired", "superseded", "failed", "waived"] }, "ownerId": { "$ref": "#/$defs/Id" }, "expiresAt": { "$ref": "#/$defs/Timestamp" }, "waiverScope": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "affectedObligations": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "waiverReason": { "type": "string", "minLength": 1 }, "compensatingControl": { "type": "string", "minLength": 1 }, "legalBasis": { "type": "string", "minLength": 1 }, "waiverApproverAuthorityClass": { "$ref": "#/$defs/Id" }, "waiverApproverId": { "$ref": "#/$defs/Id" }
+      }}, { "if": { "properties": { "outcome": { "const": "waived" } } }, "then": { "required": ["waiverScope", "affectedObligations", "waiverReason", "compensatingControl", "waiverApproverAuthorityClass", "waiverApproverId"] } }], "unevaluatedProperties": false
+    }
+  }
+}

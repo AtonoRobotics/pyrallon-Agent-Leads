@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "cognitive-failure/1.0.0",
+  "recordType": "GatewayFailure",
+  "workId": "work-1",
+  "attempt": 1,
+  "state": "blocked_auth",
+  "routePolicyVersion": "cognitive-route/1",
+  "routeId": "codex-subscription-primary",
+  "contextManifestId": "manifest-1",
+  "occurredAt": "2030-01-01T10:00:01Z",
+  "deadline": "2030-01-01T10:05:00Z",
+  "diagnosticCode": "credential_unavailable",
+  "diagnosticEvidenceIds": ["evidence-route-1"],
+  "substantiveWorkPending": true,
+  "traceId": "trace-1"
+}

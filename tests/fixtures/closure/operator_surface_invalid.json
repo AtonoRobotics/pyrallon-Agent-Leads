@@ -1,0 +1,234 @@
+{
+  "JourneyView": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "operator_journey_view",
+      "tenant_id": "value",
+      "principal_id": "value",
+      "journey_id": "value",
+      "canonical_version": 1,
+      "etag": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generated_at": "2030-01-01T00:00:00Z",
+      "orthogonal_states": {
+        "journey": "value",
+        "contactability": "value",
+        "acknowledgment": "value",
+        "qualification": "value",
+        "consultation": "value",
+        "nurture": "value",
+        "representation": "value"
+      },
+      "blockers": [
+        {
+          "code": "value",
+          "category": "identity",
+          "recovery_owner": "system",
+          "evidence_refs": [
+            {
+              "record_id": "value",
+              "record_type": "Evidence",
+              "version": 1,
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "captured_at": "2030-01-01T00:00:00Z"
+            }
+          ]
+        }
+      ],
+      "next_action_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ],
+      "commitment_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ],
+      "qualification_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ],
+      "consent_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ],
+      "representation_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ],
+      "appointment_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ],
+      "effect_attempt_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ],
+      "briefing_items": [
+        {
+          "item_id": "value",
+          "label": "value",
+          "epistemic_state": "evidence",
+          "summary": "value",
+          "source_refs": [
+            {
+              "record_id": "value",
+              "record_type": "Evidence",
+              "version": 1,
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "captured_at": "2030-01-01T00:00:00Z"
+            }
+          ],
+          "time_sensitivity": "none"
+        }
+      ]
+    }
+  },
+  "OperatorCommand": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "operator_command",
+      "command_id": "value",
+      "tenant_id": "value",
+      "journey_id": "value",
+      "command_type": "approve",
+      "target_record_id": "value",
+      "target_record_type": "Approval",
+      "expected_version": 1,
+      "authority": {
+        "actor_id": "value",
+        "actor_type": "person",
+        "authorization_refs": [
+          {
+            "record_id": "authorization-1",
+            "record_type": "Authorization",
+            "version": 1,
+            "status": "active"
+          }
+        ],
+        "policy_ref": {
+          "record_id": "policy-1",
+          "record_type": "OperatorPolicy",
+          "version": 1,
+          "status": "active"
+        },
+        "action_class": "approve",
+        "resource_type": "Approval",
+        "resource_id": "value",
+        "authenticated_at": "2030-01-01T00:00:00Z"
+      },
+      "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "value",
+      "issued_at": "2030-01-01T00:00:00Z",
+      "expires_at": "2030-01-01T00:00:00Z",
+      "reason": "value"
+    }
+  },
+  "OperatorPolicy": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "operator_policy",
+      "policy_id": "policy-1",
+      "tenant_id": "value",
+      "record_version": 1,
+      "effective_from": "2030-01-01T00:00:00Z",
+      "status": "active",
+      "command_rules": [
+        {
+          "command_type": "approve",
+          "action_class": "approve",
+          "target_record_types": ["Approval"],
+          "actor_types": ["license_holder"]
+        }
+      ],
+      "evidence_refs": [
+        {
+          "record_id": "evidence-policy-1",
+          "record_type": "Evidence",
+          "version": 1,
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "captured_at": "2030-01-01T00:00:00Z"
+        }
+      ]
+    }
+  },
+  "CommandResult": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "operator_command_result",
+      "command_id": "value",
+      "tenant_id": "value",
+      "status": "applied",
+      "decided_at": "2030-01-01T00:00:00Z",
+      "decision_evidence_id": "value",
+      "current_version": 1,
+      "result_refs": [
+        {
+          "record_id": "value",
+          "record_type": "value",
+          "version": 1,
+          "status": "value"
+        }
+      ]
+    }
+  },
+  "OperatorError": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "operator_error",
+      "error_id": "value",
+      "tenant_id": "value",
+      "code": "authentication_required",
+      "retryable": true,
+      "occurred_at": "2030-01-01T00:00:00Z",
+      "correlation_id": "value"
+    }
+  },
+  "AccessibilityAcceptance": {
+    "removedField": "schema_version",
+    "record": {
+      "message_type": "accessibility_acceptance",
+      "artifact_id": "value",
+      "surface": "web",
+      "build_version": "value",
+      "standard": "WCAG 2.2",
+      "level": "AA",
+      "test_suites": [
+        "value"
+      ],
+      "assistive_technologies": [
+        "value"
+      ],
+      "blocking_violations": 0,
+      "artifact_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evaluated_at": "2030-01-01T00:00:00Z",
+      "evaluator_id": "value"
+    }
+  }
+}

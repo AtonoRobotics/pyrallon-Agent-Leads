@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/temporal/ot01-workflow/1.1.0",
+  "title": "OT01TemporalMessage",
+  "oneOf": [
+    { "$ref": "#/$defs/WorkflowInput" },
+    { "$ref": "#/$defs/CanonicalChangedSignal" },
+    { "$ref": "#/$defs/JourneyState" },
+    { "$ref": "#/$defs/ConnectorReconciliationInput" },
+    { "$ref": "#/$defs/EffectReconciliationState" },
+    { "$ref": "#/$defs/DomainChildInput" },
+    { "$ref": "#/$defs/WorkerConfiguration" },
+    { "$ref": "#/$defs/CompensationCommand" },
+    { "$ref": "#/$defs/CompensationResult" }
+  ],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "RuntimePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_to_close_seconds", "initial_retry_seconds", "backoff_coefficient",
+        "maximum_retry_seconds", "maximum_attempts"
+      ],
+      "properties": {
+        "start_to_close_seconds": { "type": "integer", "minimum": 1 },
+        "initial_retry_seconds": { "type": "integer", "minimum": 1 },
+        "backoff_coefficient": { "type": "number", "minimum": 1 },
+        "maximum_retry_seconds": { "type": "integer", "minimum": 1 },
+        "maximum_attempts": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "WorkerConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "task_queue", "max_concurrent_workflow_tasks",
+        "max_concurrent_activities", "max_cached_workflows", "graceful_shutdown_seconds"
+      ],
+      "properties": {
+        "message_type": { "const": "worker_configuration" },
+        "schema_version": { "const": "buyer-ops-temporal-worker/1.0.0" },
+        "task_queue": { "$ref": "#/$defs/Id" },
+        "max_concurrent_workflow_tasks": { "type": "integer", "minimum": 1 },
+        "max_concurrent_activities": { "type": "integer", "minimum": 1 },
+        "max_cached_workflows": { "type": "integer", "minimum": 0 },
+        "graceful_shutdown_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "WorkflowInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "tenant_id", "journey_id", "workflow_code_version",
+        "runtime_policy"
+      ],
+      "properties": {
+        "message_type": { "const": "workflow_input" },
+        "schema_version": { "const": "ot01-workflow/1.0.0" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "journey_id": { "$ref": "#/$defs/Id" },
+        "workflow_code_version": { "type": "integer", "const": 1 },
+        "runtime_policy": { "$ref": "#/$defs/RuntimePolicy" }
+      }
+    },
+    "CanonicalChangedSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "tenant_id", "journey_id", "event_id",
+        "observed_canonical_version"
+      ],
+      "properties": {
+        "message_type": { "const": "canonical_changed" },
+        "schema_version": { "const": "ot01-canonical-change/1.0.0" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "journey_id": { "$ref": "#/$defs/Id" },
+        "event_id": { "$ref": "#/$defs/Id" },
+        "observed_canonical_version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ConnectorReconciliationInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "tenant_id", "journey_id", "parent_workflow_id",
+        "effect_attempt_id", "workflow_code_version", "runtime_policy",
+        "reconciliation_interval_seconds"
+      ],
+      "properties": {
+        "message_type": { "const": "connector_reconciliation_input" },
+        "schema_version": { "const": "ot01-connector-reconciliation/1.0.0" },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "journey_id": { "$ref": "#/$defs/Id" },
+        "parent_workflow_id": { "$ref": "#/$defs/Id" },
+        "effect_attempt_id": { "$ref": "#/$defs/Id" },
+        "workflow_code_version": { "type": "integer", "const": 1 },
+        "runtime_policy": { "$ref": "#/$defs/RuntimePolicy" },
+        "reconciliation_interval_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "DomainChildInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "child_type", "tenant_id", "journey_id",
+        "parent_workflow_id", "workflow_code_version", "runtime_policy"
+      ],
+      "properties": {
+        "message_type": { "const": "domain_child_input" },
+        "schema_version": { "const": "ot01-domain-child/1.0.0" },
+        "child_type": { "enum": ["qualification", "nurture", "consultation"] },
+        "tenant_id": { "$ref": "#/$defs/Id" },
+        "journey_id": { "$ref": "#/$defs/Id" },
+        "parent_workflow_id": { "$ref": "#/$defs/Id" },
+        "workflow_code_version": { "type": "integer", "const": 1 },
+        "runtime_policy": { "$ref": "#/$defs/RuntimePolicy" }
+      }
+    },
+    "EffectReconciliationState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "effect_attempt_id", "attempt_state"
+      ],
+      "properties": {
+        "message_type": { "const": "effect_reconciliation_state" },
+        "schema_version": { "const": "ot01-effect-reconciliation-state/1.0.0" },
+        "effect_attempt_id": { "$ref": "#/$defs/Id" },
+        "attempt_state": {
+          "enum": ["unknown_outcome", "reconciled_failed", "reconciled_succeeded"]
+        },
+        "provider_receipt_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "JourneyState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_type", "schema_version", "journey_id", "canonical_version", "ingress_state",
+        "contactability_state", "acknowledgment_state", "qualification_state",
+        "consultation_state", "nurture_state", "blocker_codes"
+      ],
+      "properties": {
+        "message_type": { "const": "journey_state" },
+        "schema_version": { "const": "ot01-journey-state/1.0.0" },
+        "journey_id": { "$ref": "#/$defs/Id" },
+        "canonical_version": { "type": "integer", "minimum": 1 },
+        "ingress_state": { "enum": ["captured", "identified", "identity_ambiguous", "rejected"] },
+        "contactability_state": { "enum": ["unknown", "contactable", "temporarily_unavailable", "suppressed", "invalid"] },
+        "acknowledgment_state": { "enum": ["not_required", "pending", "sent", "delivered", "failed", "unknown_outcome"] },
+        "qualification_state": { "enum": ["not_started", "collecting", "sufficient_for_consult", "stale", "contradicted", "declined"] },
+        "consultation_state": { "enum": ["not_ready", "ready", "offering", "provider_pending", "booked", "completed", "cancelled", "no_show", "blocked"] },
+        "nurture_state": { "enum": ["inactive", "active", "paused", "dormant", "completed"] },
+        "blocker_codes": {
+          "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" }
+        },
+        "next_due_at": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "CompensationCommand": {
+      "type": "object", "additionalProperties": false,
+      "required": ["message_type", "schema_version", "command_id", "tenant_id", "journey_id", "workflow_id", "effect_attempt_id", "expected_effect_version", "eligible_attempt_states", "compensation_action", "payload_digest", "habitat_permit_digest", "authorization_id", "idempotency_key", "issued_at", "expires_at"],
+      "properties": {
+        "message_type": { "const": "compensation_command" }, "schema_version": { "const": "ot01-compensation/1.1.0" }, "command_id": { "$ref": "#/$defs/Id" }, "tenant_id": { "$ref": "#/$defs/Id" }, "journey_id": { "$ref": "#/$defs/Id" }, "workflow_id": { "$ref": "#/$defs/Id" }, "effect_attempt_id": { "$ref": "#/$defs/Id" }, "expected_effect_version": { "type": "integer", "minimum": 1 },
+        "eligible_attempt_states": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["confirmed", "reconciled_succeeded"] } }, "compensation_action": { "enum": ["cancel", "revoke", "delete", "send_correction"] }, "payload_digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" }, "habitat_permit_digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" }, "authorization_id": { "$ref": "#/$defs/Id" }, "idempotency_key": { "$ref": "#/$defs/Id" }, "issued_at": { "$ref": "#/$defs/Timestamp" }, "expires_at": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "CompensationResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["message_type", "schema_version", "command_id", "effect_attempt_id", "state", "attempt", "decided_at", "evidence_ids"],
+      "properties": {
+        "message_type": { "const": "compensation_result" }, "schema_version": { "const": "ot01-compensation/1.1.0" }, "command_id": { "$ref": "#/$defs/Id" }, "effect_attempt_id": { "$ref": "#/$defs/Id" }, "state": { "enum": ["registered", "ineligible", "dispatching", "confirmed", "unknown_outcome", "reconciliation_pending", "failed", "exhausted"] }, "attempt": { "type": "integer", "minimum": 1 }, "provider_receipt_id": { "$ref": "#/$defs/Id" }, "retry_not_before": { "$ref": "#/$defs/Timestamp" }, "decided_at": { "$ref": "#/$defs/Timestamp" }, "evidence_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }
+      }
+    }
+  }
+}

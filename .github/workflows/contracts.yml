@@ -1,0 +1,54 @@
+name: Contract CI gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+        env:
+          POSTGRES_PASSWORD: contract-test-only
+          POSTGRES_DB: buyer_ops_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d buyer_ops_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      BUYER_OPS_TEST_POSTGRES_DSN: postgresql://postgres:contract-test-only@127.0.0.1:5432/buyer_ops_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install uv==0.11.16
+      - run: uv sync --locked --extra dev
+      - name: Verify governing gate registry
+        run: uv run python scripts/verify_gate_registry.py
+      - name: Verify OT-01 completion ledger
+        run: uv run python scripts/verify_completion_ledger.py
+      - name: Verify canonical migration integrity
+        run: uv run python scripts/verify_migrations.py
+      - run: uv run python scripts/verify_contracts.py
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest
+      - name: Scan for committed credential material
+        run: uv run python scripts/scan_secrets.py

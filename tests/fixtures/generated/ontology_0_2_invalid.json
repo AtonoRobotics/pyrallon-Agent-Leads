@@ -1,0 +1,1078 @@
+{
+  "Tenant": {
+    "removedField": "deploymentMode",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Tenant",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "locale": "value",
+      "policyProfileId": "value",
+      "tenantState": "provisioning"
+    }
+  },
+  "Brokerage": {
+    "removedField": "legalName",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Brokerage",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "licenseNumber": "value",
+      "jurisdiction": "value",
+      "policyProfileId": "value",
+      "brokerageState": "pending_verification"
+    }
+  },
+  "LicenseHolder": {
+    "removedField": "personId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "LicenseHolder",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "licenseNumber": "value",
+      "licenseType": "broker",
+      "jurisdiction": "value",
+      "activeFrom": "2030-01-01T00:00:00Z",
+      "licenseState": "pending_verification"
+    }
+  },
+  "ServicePrincipal": {
+    "removedField": "principalType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "ServicePrincipal",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "credentialBindingIds": [
+        "value"
+      ],
+      "allowedCapabilities": [
+        "value"
+      ],
+      "principalState": "provisioning"
+    }
+  },
+  "Person": {
+    "removedField": "identityState",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Person",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "displayName": "value",
+      "endpointIds": [
+        "value"
+      ]
+    }
+  },
+  "ContactEndpoint": {
+    "removedField": "endpointType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "ContactEndpoint",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "normalizedValue": "value",
+      "ownerType": "person",
+      "ownerId": "value",
+      "ownershipState": "asserted",
+      "verificationState": "unverified",
+      "contactabilityState": "unknown"
+    }
+  },
+  "BuyingParty": {
+    "removedField": "members",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "BuyingParty",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "decisionAuthorityState": "unconfirmed"
+    }
+  },
+  "BuyerJourney": {
+    "removedField": "buyingPartyId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "BuyerJourney",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "ownerLicenseHolderId": "value",
+      "territory": "value",
+      "journeyState": "captured",
+      "qualificationState": "not_started",
+      "representationState": "unconfirmed"
+    }
+  },
+  "Conversation": {
+    "removedField": "channel",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Conversation",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "participants": [
+        {
+          "participantType": "person",
+          "participantId": "value",
+          "role": "buyer"
+        },
+        {
+          "participantType": "person",
+          "participantId": "value",
+          "role": "buyer"
+        }
+      ],
+      "externalThreadRefs": {},
+      "conversationState": "open"
+    }
+  },
+  "Message": {
+    "removedField": "conversationId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Message",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "direction": "inbound",
+      "senderType": "person",
+      "senderId": "value",
+      "recipients": [
+        {
+          "recipientType": "person",
+          "recipientId": "value"
+        }
+      ],
+      "bodyArtifactId": "value",
+      "sentOrReceivedAt": "2030-01-01T00:00:00Z",
+      "deliveryState": "observed"
+    }
+  },
+  "ConsentGrant": {
+    "removedField": "personId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "ConsentGrant",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "channel": "email",
+      "purpose": "value",
+      "principalId": "value",
+      "basis": "affirmative",
+      "grantedAt": "2030-01-01T00:00:00Z",
+      "validityState": "active"
+    }
+  },
+  "Suppression": {
+    "removedField": "subjectId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Suppression",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "scope": "channel_purpose",
+      "reason": "opt_out",
+      "suppressedAt": "2030-01-01T00:00:00Z",
+      "validityState": "active"
+    }
+  },
+  "LeadSource": {
+    "removedField": "sourceType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "LeadSource",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "attributedAt": "2030-01-01T00:00:00Z",
+      "parameters": {},
+      "attributionState": "observed"
+    }
+  },
+  "QualificationCriterion": {
+    "removedField": "criterionCode",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "QualificationCriterion",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "purpose": "value",
+      "allowedObservationStates": [
+        "unknown"
+      ],
+      "freshnessSeconds": 1,
+      "criterionState": "draft"
+    }
+  },
+  "QualificationObservation": {
+    "removedField": "journeyId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "QualificationObservation",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "criterionId": "value",
+      "epistemicItemId": "value",
+      "observationState": "unknown"
+    }
+  },
+  "BuyerRequirement": {
+    "removedField": "journeyId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "BuyerRequirement",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "statedByPersonId": "value",
+      "assertionId": "value",
+      "predicate": "value",
+      "value": null,
+      "priority": "must_have",
+      "requirementState": "asserted"
+    }
+  },
+  "FinancingReadiness": {
+    "removedField": "journeyId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "FinancingReadiness",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "readinessState": "unknown",
+      "verificationSourceIds": [
+        "value"
+      ],
+      "assessedAt": "2030-01-01T00:00:00Z",
+      "freshUntil": "2030-01-01T00:00:00Z"
+    }
+  },
+  "Appointment": {
+    "removedField": "journeyId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Appointment",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "appointmentType": "value",
+      "participantIds": [
+        "value",
+        "value"
+      ],
+      "startsAt": "2030-01-01T00:00:00Z",
+      "endsAt": "2030-01-01T00:00:00Z",
+      "timeZone": "value",
+      "appointmentState": "proposed"
+    }
+  },
+  "Commitment": {
+    "removedField": "journeyId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Commitment",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "obligorId": "value",
+      "beneficiaryIds": [
+        "value"
+      ],
+      "description": "value",
+      "dueAt": "2030-01-01T00:00:00Z",
+      "commitmentState": "open"
+    }
+  },
+  "PropertyReference": {
+    "removedField": "addressText",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "PropertyReference",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "suppliedBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "suppliedAt": "2030-01-01T00:00:00Z",
+      "sourceType": "buyer"
+    }
+  },
+  "DocumentArtifact": {
+    "removedField": "digest",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "DocumentArtifact",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "storageRef": "value",
+      "mediaType": "value",
+      "retentionClass": "transient",
+      "artifactState": "pending"
+    }
+  },
+  "IabsDelivery": {
+    "removedField": "formId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "IabsDelivery",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "formVersion": "value",
+      "jurisdiction": "TX",
+      "responsibleLicenseHolderId": "value",
+      "brokerageId": "value",
+      "recipientPersonId": "value",
+      "deliveryChannel": "email_attachment",
+      "deliveredAt": "2030-01-01T00:00:00Z",
+      "trigger": "first_substantive_specific_property_communication",
+      "artifactId": "value",
+      "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evidenceIds": [
+        "value"
+      ],
+      "validityState": "delivered"
+    }
+  },
+  "WrittenBuyerAgreement": {
+    "removedField": "agreementType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "WrittenBuyerAgreement",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "jurisdiction": "TX",
+      "brokerPartyId": "value",
+      "responsibleLicenseHolderId": "value",
+      "buyerPartyIds": [
+        "value"
+      ],
+      "serviceDefinitions": [
+        {
+          "serviceCode": "showing_access",
+          "allowed": true
+        }
+      ],
+      "exclusivity": "exclusive",
+      "effectiveAt": "2030-01-01T00:00:00Z",
+      "terminatesAt": "2030-01-01T00:00:00Z",
+      "compensation": {
+        "objectivelyAscertainable": true,
+        "negotiabilityDisclosurePresent": true,
+        "amountOrRate": "value"
+      },
+      "signatureEvidence": [
+        {
+          "signerPartyId": "value",
+          "signedAt": "2030-01-01T00:00:00Z",
+          "evidenceId": "value"
+        }
+      ],
+      "executedArtifactId": "value",
+      "executedArtifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "executionState": "draft"
+    }
+  },
+  "AgreementQualification": {
+    "removedField": "actionType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "AgreementQualification",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "actionIntentId": "value",
+      "actionPayloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "buyerPartyId": "value",
+      "responsibleLicenseHolderId": "value",
+      "brokerageId": "value",
+      "propertyReferenceId": "value",
+      "evaluatedAt": "2030-01-01T00:00:00Z",
+      "policyVersion": "value",
+      "result": "qualified",
+      "reasons": [
+        "value"
+      ],
+      "expiresAt": "2030-01-01T00:00:00Z"
+    }
+  },
+  "RepresentationRelationship": {
+    "removedField": "brokerageId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "RepresentationRelationship",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "buyingPartyId": "value",
+      "agreementId": "value",
+      "relationshipState": "active"
+    }
+  },
+  "Transaction": {
+    "removedField": "journeyId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Transaction",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "buyingPartyId": "value",
+      "brokerageId": "value",
+      "propertyReferenceId": "value",
+      "partyIds": [
+        "value-1",
+        "value-2"
+      ],
+      "executedArtifactId": "value",
+      "executedArtifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "initiatedAt": "2030-01-01T00:00:00Z",
+      "transactionState": "under_contract"
+    }
+  },
+  "TransactionMilestone": {
+    "removedField": "transactionId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "TransactionMilestone",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "milestoneType": "value",
+      "dueAt": "2030-01-01T00:00:00Z",
+      "confirmationState": "proposed",
+      "milestoneState": "pending"
+    }
+  },
+  "Authorization": {
+    "removedField": "grantorType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Authorization",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "grantorId": "value",
+      "granteeType": "person",
+      "granteeId": "value",
+      "actionClass": "value",
+      "resourceType": "value",
+      "resourceId": "value",
+      "grantedAt": "2030-01-01T00:00:00Z",
+      "expiresAt": "2030-01-01T00:00:00Z",
+      "authorizationState": "pending"
+    }
+  },
+  "Approval": {
+    "removedField": "approverType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Approval",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "approverId": "value",
+      "actionClass": "value",
+      "actionIntentId": "value",
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "scope": "value",
+      "decidedAt": "2030-01-01T00:00:00Z",
+      "expiresAt": "2030-01-01T00:00:00Z",
+      "decision": "approved"
+    }
+  },
+  "Evidence": {
+    "removedField": "sourceType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Evidence",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "sourceRef": "value",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "retentionClass": "transient",
+      "capturedAt": "2030-01-01T00:00:00Z",
+      "evidenceState": "current"
+    }
+  },
+  "Assertion": {
+    "removedField": "speakerType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Assertion",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "speakerId": "value",
+      "sourceLocation": "value",
+      "proposition": {
+        "subjectRef": "value",
+        "predicate": "value",
+        "value": null,
+        "validFrom": "2030-01-01T00:00:00Z"
+      },
+      "assertionState": "current"
+    }
+  },
+  "VerifiedFact": {
+    "removedField": "proposition",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "VerifiedFact",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "verificationRuleId": "value",
+      "verificationMethod": "value",
+      "supportingEvidenceIds": [
+        "value"
+      ],
+      "verifiedAt": "2030-01-01T00:00:00Z",
+      "factState": "current"
+    }
+  },
+  "Inference": {
+    "removedField": "proposition",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Inference",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "methodType": "deterministic",
+      "methodId": "value",
+      "methodVersion": "value",
+      "inputItemIds": [
+        "value"
+      ],
+      "confidence": 0,
+      "derivedAt": "2030-01-01T00:00:00Z",
+      "expiresAt": "2030-01-01T00:00:00Z",
+      "inferenceState": "current"
+    }
+  },
+  "Memory": {
+    "removedField": "scopeType",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Memory",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "scopeId": "value",
+      "summary": "value",
+      "sourceItemIds": [
+        "value"
+      ],
+      "compiledAt": "2030-01-01T00:00:00Z",
+      "memoryState": "current"
+    }
+  },
+  "Contradiction": {
+    "removedField": "leftItemId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Contradiction",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "rightItemId": "value",
+      "scopeType": "predicate",
+      "scopeId": "value",
+      "detectedAt": "2030-01-01T00:00:00Z",
+      "resolutionState": "open"
+    }
+  },
+  "Correction": {
+    "removedField": "correctedItemId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "Correction",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "correctionAction": "replace",
+      "reason": "value",
+      "attributedTo": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "correctionEvidenceIds": [
+        "value"
+      ],
+      "correctedAt": "2030-01-01T00:00:00Z",
+      "correctionState": "proposed"
+    }
+  },
+  "WorkflowReference": {
+    "removedField": "workflowId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "WorkflowReference",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "runId": "value",
+      "workflowType": "value",
+      "subjectType": "value",
+      "subjectId": "value",
+      "executionState": "created",
+      "observedAt": "2030-01-01T00:00:00Z"
+    }
+  },
+  "EffectAttempt": {
+    "removedField": "intentId",
+    "record": {
+      "id": "id-1",
+      "tenantId": "tenantId-1",
+      "schemaVersion": "buyer-ops/0.3.0",
+      "recordType": "EffectAttempt",
+      "version": 1,
+      "createdAt": "2030-01-01T00:00:00Z",
+      "updatedAt": "2030-01-01T00:00:00Z",
+      "effectiveFrom": "2030-01-01T00:00:00Z",
+      "createdBy": {
+        "actorType": "person",
+        "actorId": "value"
+      },
+      "sourceEvidenceIds": [
+        "value"
+      ],
+      "status": "active",
+      "actionClass": "value",
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "permitDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotencyKey": "value",
+      "attemptState": "registered"
+    }
+  }
+}

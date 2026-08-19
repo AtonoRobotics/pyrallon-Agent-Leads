@@ -1,0 +1,24 @@
+{
+  "id": "person-1",
+  "tenantId": "tenant-1",
+  "schemaVersion": "buyer-ops/0.3.0",
+  "recordType": "Person",
+  "version": 1,
+  "createdAt": "2029-01-01T00:00:00Z",
+  "updatedAt": "2029-01-01T00:00:00Z",
+  "effectiveFrom": "2029-01-01T00:00:00Z",
+  "createdBy": {"actorType": "service_principal", "actorId": "crm-1"},
+  "sourceEvidenceIds": ["evidence-1"],
+  "status": "active",
+  "identityState": "resolved",
+  "displayName": "Buyer",
+  "endpoints": [
+    {
+      "endpointId": "endpoint-1",
+      "type": "email",
+      "normalizedValue": "buyer@example.com",
+      "verificationState": "verified",
+      "status": "active"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "packet": "SCP-01",
+  "publishedAt": "2026-08-19",
+  "classification": "additive-contract-families-and-minor-family-revisions",
+  "contracts": [
+    {"name":"authority_activation_fair_housing","previous":null,"current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"new family: OPEN-025–027 actor/tenant authorization, signed release activation, and GATE-007 fair-housing controls"},
+    {"name":"closure","previous":"1.0.0","current":"1.1.0","readerRange":">=1.1.0,<2.0.0","migration":"migrations/0009_control_plane.sql","change":"adds executable lifecycle, signature, routing, metric, release, and accessibility bindings"},
+    {"name":"ontology","previous":"0.2.0","current":"0.3.0","readerRange":">=0.3.0,<0.4.0","migration":"migrations/0006_ontology_0_3.sql","rollback":"migrations/0006_ontology_0_3.rollback.sql"},
+    {"name":"gateway_runtime","previous":"1.0.0","current":"1.1.0","readerRange":">=1.0.0,<2.0.0","change":"adds context sufficiency, action/output safety, and degradation policy records"},
+    {"name":"temporal","previous":"1.0.0","current":"1.1.0","readerRange":">=1.0.0,<2.0.0","change":"adds compensation command and result records"},
+    {"name":"operator_surface","previous":"1.0.0","current":"1.1.0","readerRange":">=1.1.0,<2.0.0","change":"complete canonical mutation payloads and exact versioned authority/policy bindings; 1.0 remains audit-only"},
+    {"name":"telemetry_slo","previous":null,"current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"new family"},
+    {"name":"ot01_ingress","previous":"1.0.0","current":"1.1.0","readerRange":">=1.1.0,<2.0.0","change":"minor: versioned opt-out lexicon, acknowledgment policy, deterministic decision, and outcome contracts"},
+    {"name":"connector_gateway","previous":null,"current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"new family"},
+    {"name":"release_activation","previous":"1.0.0","current":"1.1.0","readerRange":">=1.0.0,<2.0.0","change":"activation decisions bind release, gate registry, dependency closure, and deployed accessibility builds; legacy gate evidence is audit-only"},
+    {"name":"gateway","previous":"1.1.0","current":"1.1.0","readerRange":">=1.0.0,<2.0.0","change":"unchanged"},
+    {"name":"habitat","previous":"1.0.0","current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"unchanged"},
+    {"name":"context","previous":"1.0.0","current":"1.1.0","readerRange":">=1.1.0,<2.0.0","change":"binds output-route policy and per-source freshness into the signed manifest"}
+  ],
+  "admission": {
+    "readers": "reject versions outside the manifest reader range",
+    "writers": "emit only the manifest writerVersion",
+    "newFamilies": "no legacy wire representation; consumers must negotiate or fail closed",
+    "ontology": "0.2 records require migration 0006 before 0.3 admission"
+  }
+}

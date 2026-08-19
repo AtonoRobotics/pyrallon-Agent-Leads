@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/release-activation/1.1.0",
+  "title": "ReleaseActivationMessage",
+  "oneOf": [{ "$ref": "#/$defs/GateEvidence" }, { "$ref": "#/$defs/ActivationDecision" }],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "Time": { "type": "string", "format": "date-time" },
+    "Digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" },
+    "Signature": {
+      "type": "object", "additionalProperties": false,
+      "required": ["keyId", "algorithm", "value"],
+      "properties": {
+        "keyId": { "$ref": "#/$defs/Id" },
+        "algorithm": { "enum": ["ed25519", "ecdsa-p256-sha256"] },
+        "value": { "type": "string", "minLength": 32 }
+      }
+    },
+    "GateEvidence": {
+      "description": "Legacy audit envelope. It is not activation-admissible after 1.1.0.",
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "evidenceId", "gateId", "producerId", "producerVersion", "scope", "artifactUri", "artifactVersion", "artifactDigest", "observedAt", "expiresAt", "invalidationInputs", "signature"],
+      "properties": {
+        "messageType": { "const": "gate_evidence" }, "schemaVersion": { "const": "release-activation/1.0.0" }, "evidenceId": { "$ref": "#/$defs/Id" }, "gateId": { "$ref": "#/$defs/Id" }, "producerId": { "$ref": "#/$defs/Id" }, "producerVersion": { "$ref": "#/$defs/Id" }, "scope": { "enum": ["contract", "tenant", "environment", "release"] }, "artifactUri": { "type": "string", "format": "uri" }, "artifactVersion": { "$ref": "#/$defs/Id" }, "artifactDigest": { "$ref": "#/$defs/Digest" }, "observedAt": { "$ref": "#/$defs/Time" }, "expiresAt": { "$ref": "#/$defs/Time" }, "reviewedAt": { "$ref": "#/$defs/Time" }, "invalidationInputs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Digest" } }, "signature": { "$ref": "#/$defs/Signature" }
+      }
+    },
+    "ActivationDecision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "decisionId", "capabilityId", "tenantId", "environment", "releaseDigest", "gateRegistryVersion", "gateRegistryDigest", "directlyApplicableGateIds", "requiredGateIds", "deployedBuildDigests", "expectedActivationVersion", "decision", "evidenceIds", "accessibilityEvidenceIds", "evidenceSetDigest", "authorizedBy", "authorizationId", "decidedAt", "rollbackState", "readbackRequired", "signature"],
+      "properties": {
+        "messageType": { "const": "activation_decision" },
+        "schemaVersion": { "const": "release-activation/1.1.0" },
+        "decisionId": { "$ref": "#/$defs/Id" },
+        "capabilityId": { "$ref": "#/$defs/Id" },
+        "tenantId": { "$ref": "#/$defs/Id" },
+        "environment": { "enum": ["staging", "production"] },
+        "releaseDigest": { "$ref": "#/$defs/Digest" },
+        "gateRegistryVersion": { "$ref": "#/$defs/Id" },
+        "gateRegistryDigest": { "$ref": "#/$defs/Digest" },
+        "directlyApplicableGateIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "requiredGateIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "deployedBuildDigests": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/$defs/Digest" } },
+        "expectedActivationVersion": { "type": "integer", "minimum": 0 },
+        "decision": { "enum": ["activate", "deactivate", "deny"] },
+        "evidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "accessibilityEvidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "evidenceSetDigest": { "$ref": "#/$defs/Digest" },
+        "authorizedBy": { "$ref": "#/$defs/Id" },
+        "authorizationId": { "$ref": "#/$defs/Id" },
+        "decidedAt": { "$ref": "#/$defs/Time" },
+        "rollbackState": { "enum": ["not_required", "armed", "executing", "completed", "failed"] },
+        "readbackRequired": { "const": true },
+        "signature": { "$ref": "#/$defs/Signature" }
+      }
+    }
+  }
+}

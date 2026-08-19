@@ -1,0 +1,7 @@
+{
+  "fixtureBase": "valid/written_buyer_agreement.json",
+  "mutation": {"path": "terminatesAt", "value": "2030-01-17T00:00:01Z"},
+  "expectedCode": "NON_REP_TERM_EXCEEDED"
+}
+
+

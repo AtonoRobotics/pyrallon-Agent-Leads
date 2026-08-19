@@ -1,0 +1,22 @@
+{
+  "contract": "operator_surface",
+  "fromVersion": "1.0.0",
+  "toVersion": "1.1.0",
+  "readerRange": ">=1.1.0,<2.0.0",
+  "writerVersion": "1.1.0",
+  "classification": "backward_incompatible_command_admission",
+  "auditRead": {
+    "operator-surface/1.0.0": true,
+    "operator-surface/1.1.0": true
+  },
+  "executableWrite": {
+    "operator-surface/1.0.0": false,
+    "operator-surface/1.1.0": true
+  },
+  "changes": [
+    "Canonical correction and revocation commands require complete ontology records.",
+    "Authority bindings require exact versioned authorization and policy references.",
+    "The payload digest binds the complete mutation payload.",
+    "Version 1.0 commands remain audit-readable and fail closed for execution."
+  ]
+}

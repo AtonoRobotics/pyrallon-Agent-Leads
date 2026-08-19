@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "buyer-ops-contracts"
+version = "0.1.0"
+description = "Executable schema, semantic, and compatibility contracts for Buyer Operations AI"
+requires-python = ">=3.12"
+dependencies = [
+  "cryptography==49.0.0",
+  "jsonschema==4.26.0",
+  "pydantic==2.13.4",
+  "psycopg[binary]==3.3.4",
+  "PyYAML==6.0.3",
+  "referencing==0.37.0",
+  "temporalio==1.30.0",
+  "rfc8785>=0.1.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "datamodel-code-generator==0.35.0",
+  "mypy==1.17.1",
+  "pytest==8.4.2",
+  "ruff==0.12.12",
+  "types-jsonschema==4.26.0.20260202",
+]
+
+[project.scripts]
+buyer-ops-contracts = "buyer_ops_contracts.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+buyer_ops_contracts = ["schemas/*.json", "contracts.manifest.json", "py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+markers = [
+  "postgres: requires BUYER_OPS_TEST_POSTGRES_DSN and a disposable PostgreSQL database",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["src/buyer_ops_contracts/generated", "pip-*", "library-upload-tmp"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["buyer_ops_contracts"]
+exclude = ["src/buyer_ops_contracts/generated"]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20260815",
+]

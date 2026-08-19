@@ -1,0 +1,122 @@
+{
+  "manifestVersion": "1.0.0",
+  "contracts": [
+    {
+      "name": "authority_activation_fair_housing",
+      "resource": "schemas/authority-activation-fair-housing.schema.json",
+      "sha256": "99c0c2d5ee6a226ee038492ca28418d5b1b9559c06fe9e880b483e182d6b6b3a",
+      "schemaId": "https://buyer-ops.example/schemas/open-025-027-closure/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "closure",
+      "resource": "schemas/closure.schema.json",
+      "sha256": "6f9215a5bb532f416f874bfcf6abd4a03c49ee785401e9a857ca01a53fc14b7b",
+      "schemaId": "https://buyer-ops.example/schemas/open-019-024-closure/1.1.0",
+      "schemaVersion": "1.1.0",
+      "readerRange": ">=1.1.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "gateway",
+      "resource": "schemas/gateway.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/cognitive-runtime-gateway/1.1.0",
+      "schemaVersion": "1.1.0",
+      "sha256": "bb92926cd369e75e7f47112a46f77bef7b210be6ded8439fe8093349e4af6482",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "gateway_runtime",
+      "resource": "schemas/gateway_runtime.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/gateway-runtime-config/1.1.0",
+      "schemaVersion": "1.1.0",
+      "sha256": "058458d5a122bdae2afe82cabd8016b7470d24d2bb23dd78e3e7c318e4b3efea",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "ontology",
+      "resource": "schemas/ontology.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/ontology/buyer-ops/0.3.0",
+      "schemaVersion": "0.3.0",
+      "sha256": "30e3ebfc1b2756cd3dedd0b83fb7a849d8ca66589255a62afb8dc98058cb9f2b",
+      "readerRange": ">=0.3.0,<0.4.0",
+      "writerVersion": "0.3.0"
+    },
+    {
+      "name": "habitat",
+      "resource": "schemas/habitat.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/habitat/effect-intent/1.0.0",
+      "schemaVersion": "1.0.0",
+      "sha256": "be417326ab84220822ad9f94da888e806cba7d11a9a2235ce828887e519d7cad",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "temporal",
+      "resource": "schemas/temporal.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/temporal/ot01-workflow/1.1.0",
+      "schemaVersion": "1.1.0",
+      "sha256": "d4ba5449f44f7ac29bc7f262f77b68c2b345231233e54e60b2cdf8e00b60a1fb",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "context",
+      "resource": "schemas/context.schema.json",
+      "schemaId": "https://buyer-ops.example/schemas/context-compiler/1.1.0",
+      "schemaVersion": "1.1.0",
+      "sha256": "47d4678deba7b45e61bb9f38ba7b403ac0c484b12339e7e0a9a1d6494e3748cd",
+      "readerRange": ">=1.1.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "operator_surface",
+      "resource": "schemas/operator_surface.schema.json",
+      "sha256": "7fed6bd1604d4265d1588dd6424d744829044bdf475b12b35d86063230ac4752",
+      "schemaId": "https://buyer-ops.example/schemas/operator-surface/1.1.0",
+      "schemaVersion": "1.1.0",
+      "readerRange": ">=1.1.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "telemetry_slo",
+      "resource": "schemas/telemetry_slo.schema.json",
+      "sha256": "2c76186f857d38da79cfbde35d8d6c111212e162e4b25f2d43ba6debdb50b25a",
+      "schemaId": "https://buyer-ops.example/schemas/telemetry-slo/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "ot01_ingress",
+      "resource": "schemas/ot01_ingress.schema.json",
+      "sha256": "33807386f791893686b9310c3c5a5be4af449a52cb896ead314f80a5780ef506",
+      "schemaId": "https://buyer-ops.example/schemas/ot01-ingress/1.1.0",
+      "schemaVersion": "1.1.0",
+      "readerRange": ">=1.1.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    },
+    {
+      "name": "connector_gateway",
+      "resource": "schemas/connector_gateway.schema.json",
+      "sha256": "f6aad043bd2be4fe41908c75325f0c5ac5fc4fdfd07f53ba619c4b40bfca6ae8",
+      "schemaId": "https://buyer-ops.example/schemas/connector-gateway/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "release_activation",
+      "resource": "schemas/release_activation.schema.json",
+      "sha256": "42d847efd6d8386ad6772d977788d9e4f6c012a4423d35901c26b76a98953ecb",
+      "schemaId": "https://buyer-ops.example/schemas/release-activation/1.1.0",
+      "schemaVersion": "1.1.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.1.0"
+    }
+  ]
+}

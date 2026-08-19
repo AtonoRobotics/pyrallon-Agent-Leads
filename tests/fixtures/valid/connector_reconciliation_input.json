@@ -1,0 +1,17 @@
+{
+  "message_type": "connector_reconciliation_input",
+  "schema_version": "ot01-connector-reconciliation/1.0.0",
+  "tenant_id": "tenant-1",
+  "journey_id": "journey-1",
+  "parent_workflow_id": "parent-1",
+  "effect_attempt_id": "effect-attempt-1",
+  "workflow_code_version": 1,
+  "runtime_policy": {
+    "start_to_close_seconds": 30,
+    "initial_retry_seconds": 1,
+    "backoff_coefficient": 2,
+    "maximum_retry_seconds": 10,
+    "maximum_attempts": 5
+  },
+  "reconciliation_interval_seconds": 60
+}
