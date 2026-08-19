@@ -25,7 +25,7 @@ An implementation convenience cannot override a higher-ranked source. A new conf
 | `REAL-ESTATE-BUYER-AGENT-AI-PRD.md` Revision 7.1 | Product scope, requirements, authority, acceptance | Governing |
 | `COGNITIVE-RUNTIME-GATEWAY-CONTRACT.md` Revision 1.1 | Cognitive request, routing, adapters, credentials, proposal boundary | Governing |
 | `ONTOLOGY-V0-CONTRACT.md` Revision 1 | Canonical entity, relationship, epistemic, agreement, and transition semantics | Governing |
-| `ONTOLOGY-V0.schema.json` Version 0.1.0 | Executable structural schemas for OT-01 and agreement-critical canonical records | Governing schema |
+| `ONTOLOGY-V0.schema.json` Version 0.3.0 | Executable structural schemas for OT-01 and agreement-critical canonical records | Governing schema |
 | `COGNITIVE-RUNTIME-GATEWAY.schema.json` Version 1.1.0 | Executable cognitive request/proposal boundary schemas | Governing schema |
 | `PRODUCTION-GATE-REGISTRY.yaml` Revision 1 | Gate applicability, dependencies, evidence, activation blocks | Governing |
 | `OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md` Revision 1 | First production operational thread | Governing for that thread |
@@ -177,7 +177,7 @@ These do not block canonical non-cognitive implementation but block the named ac
 
 OPEN-010 through OPEN-018 are resolved by SCP-01 as of 2026-08-19. The authoritative mapping is
 `SPECIFICATION-CLOSURE-PACKET.md`; version and reader/writer compatibility is
-`SCP-01-COMPATIBILITY.json`. Resolution evidence is the 11-family hash-pinned manifest, generated
+`SCP-01-COMPATIBILITY.json`. Resolution evidence is the 13-family hash-pinned manifest, generated
 models, valid/invalid fixtures, ontology 0.3 migration and executable lifecycle/reference admission,
 167 passing tests (including 21 PostgreSQL and 7 Temporal tests), static/format checks, secret scan,
 package build, and drift verifiers. These IDs no longer block implementation admission. Deployment
@@ -217,7 +217,7 @@ capability activation, and deterministic fair-housing controls respectively. Res
 includes the hash-pinned candidate schema, generated models, append-only persistence, exact-payload activation
 readback, command-admission authority checks, connector activation/permit conjunction, deterministic
 Unicode matching, purpose-bound features, counterfactual invariance, and unit/PostgreSQL evidence.
-PR #1 is based on the obsolete four-family ontology 0.1.0 package. The specification owner has
+PR #1 is based on the obsolete four-family ontology 0.1.0 package and is closed. The corrected 13-family 0.3.0 candidate is in PR #2. The specification owner has
 superseded it and directed that it must not be merged. These IDs are not governingly resolved and
 must not be reused for unrelated implementation-discovered gaps.
 
