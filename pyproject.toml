@@ -39,7 +39,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["src/buyer_ops_contracts/generated", "pip-*", "library-upload-tmp"]
+extend-exclude = ["src/buyer_ops_contracts/generated", "pip-*", "library-upload-tmp", "tmp*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
