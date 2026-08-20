@@ -23,6 +23,7 @@ from buyer_ops_contracts.artifacts import ArtifactPointer
 from buyer_ops_contracts.audit import verify_tenant_export
 from buyer_ops_contracts.canonical_repository import CanonicalRepository, VersionConflict
 from buyer_ops_contracts.closure_repository import PostgresClosureRepository
+from buyer_ops_contracts.derived_contract_repository import DerivedContractReader
 from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.evidence import EvidenceIntegrityError, verify_checkpoint
 from buyer_ops_contracts.evidence_lifecycle import (
@@ -1789,6 +1790,85 @@ def test_new_contract_storage_rollback_refuses_admitted_record_loss(postgres_dsn
             admin.execute(DERIVED_CONTRACT_ROLLBACK.read_text())
         assert admin.execute("SELECT to_regclass('derived_contract_records')").fetchone() == (
             "derived_contract_records",
+        )
+
+
+def test_derived_contract_reader_returns_tenant_scoped_structurally_valid_exact_versions(
+    postgres_dsn: str,
+) -> None:
+    qualification, availability = _derived_contract_fixture("reader")
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        _insert_derived_contract_record(
+            connection,
+            family="qualification_readiness",
+            record_id=qualification["policyId"],
+            record_version=1,
+            record=qualification,
+        )
+        _insert_derived_contract_record(
+            connection,
+            family="availability_booking",
+            record_id=availability["bindingId"],
+            record_version=1,
+            record=availability,
+        )
+    reader_a = DerivedContractReader(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    )
+    assert (
+        reader_a.get(
+            contract_family="qualification_readiness",
+            message_type="qualification_policy",
+            record_id=qualification["policyId"],
+            record_version=1,
+        )
+        == qualification
+    )
+    assert (
+        reader_a.get(
+            contract_family="availability_booking",
+            message_type="calendar_provider_binding",
+            record_id=availability["bindingId"],
+            record_version=1,
+        )
+        == availability
+    )
+    assert (
+        DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-b").get(
+            contract_family="qualification_readiness",
+            message_type="qualification_policy",
+            record_id=qualification["policyId"],
+            record_version=1,
+        )
+        is None
+    )
+
+
+def test_derived_contract_reader_revalidates_stored_payload(postgres_dsn: str) -> None:
+    qualification, _ = _derived_contract_fixture("reader-invalid")
+    qualification["criteria"] = []
+    with psycopg.connect(postgres_dsn, autocommit=True) as admin:
+        admin.execute(
+            "INSERT INTO derived_contract_records "
+            "(tenant_id, contract_family, message_type, record_id, record_version, "
+            "schema_version, payload) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (
+                qualification["tenantId"],
+                "qualification_readiness",
+                qualification["messageType"],
+                qualification["policyId"],
+                1,
+                qualification["schemaVersion"],
+                Jsonb(qualification),
+            ),
+        )
+    with pytest.raises(ContractViolation):
+        DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a").get(
+            contract_family="qualification_readiness",
+            message_type="qualification_policy",
+            record_id=qualification["policyId"],
+            record_version=1,
         )
 
 
