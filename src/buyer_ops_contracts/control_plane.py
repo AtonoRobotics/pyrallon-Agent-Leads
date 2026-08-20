@@ -117,9 +117,11 @@ class ControlPlane:
             if method == "POST" and route == "/v1/connectors/oauth/complete":
                 return 200, self._oauth_complete(actor_id, payload)
             if method == "GET" and route == "/v1/platform/oauth-clients":
+                public = os.environ.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/")
                 return 200, {
                     "clients": self._platform_oauth_clients(),
-                    "publicOrigin": os.environ.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/"),
+                    "publicOrigin": public,
+                    "redirectUri": f"{public}/api/connectors/callback" if public else "",
                 }
             if method == "POST" and route == "/v1/platform/oauth-clients":
                 if not actor_id:

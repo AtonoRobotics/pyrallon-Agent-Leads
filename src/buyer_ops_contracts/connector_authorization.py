@@ -249,10 +249,7 @@ class ConnectorAuthorization:
         if spec is None or spec["issuer"] not in {"google", "microsoft", "twilio"}:
             raise SetupRejected("validation_failed", "connector does not use OAuth")
         issuer = str(spec["issuer"])
-        if not redirect_uri.startswith(("https://", "http://")):
-            raise SetupRejected("validation_failed", "redirect_uri must be an http(s) URL")
-        if issuer in {"google", "microsoft"}:
-            _require_provider_redirect(issuer, redirect_uri)
+        redirect_uri = canonical_connector_redirect(issuer, redirect_uri)
         client = self._client_for(issuer)
         channels = list(spec.get("channels") or [connector_id])
         for channel in channels:
@@ -312,15 +309,18 @@ class ConnectorAuthorization:
             "code_challenge": _pkce_challenge(verifier),
             "code_challenge_method": "S256",
             "access_type": "offline",
-            "prompt": "consent",
+            "include_granted_scopes": "true",
         }
         if spec["issuer"] == "microsoft":
             params.pop("access_type")
+            params.pop("include_granted_scopes")
             params["response_mode"] = "query"
+            params["prompt"] = "consent"
         return {
             "authorizationUrl": f"{authorize}?{urlencode(params)}",
             "connectorId": connector_id,
             "grantId": grant_id,
+            "redirectUri": redirect_uri,
             "expiresAt": _stamp(expires_at),
         }
 
@@ -860,6 +860,26 @@ def _platform_key(permit_secret: bytes) -> bytes:
         salt=b"buyer-ops-platform-oauth",
         info=b"platform-oauth-v1",
     ).derive(material[:64] if len(material) > 64 else material)
+
+
+CONNECTOR_CALLBACK_PATH = "/api/connectors/callback"
+
+
+def operator_public_origin() -> str:
+    return os.environ.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/")
+
+
+def canonical_connector_redirect(issuer: str, requested: str) -> str:
+    """Google/Microsoft see one redirect URI: OPERATOR_PUBLIC_URL, not the browser tab."""
+    public = operator_public_origin()
+    if issuer in {"google", "microsoft"} and public:
+        return f"{public}{CONNECTOR_CALLBACK_PATH}"
+    uri = requested.strip()
+    if not uri.startswith(("https://", "http://")):
+        raise SetupRejected("validation_failed", "redirect_uri must be an http(s) URL")
+    if issuer in {"google", "microsoft"}:
+        _require_provider_redirect(issuer, uri)
+    return uri
 
 
 def _return_origin_allowed(origin: str) -> bool:

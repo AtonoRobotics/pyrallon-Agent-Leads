@@ -198,7 +198,30 @@ def test_google_oauth_allows_https_hostname_redirect() -> None:
     assert "strix-alpha.tailfc1d45.ts.net" in started["authorizationUrl"]
 
 
-def test_google_oauth_rejects_private_http_redirect() -> None:
+def test_google_oauth_public_url_overrides_loopback_and_lan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPERATOR_PUBLIC_URL", "https://strix-alpha.tailfc1d45.ts.net")
+    auth = _auth()
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}",
+        "grantState": "pending",
+    }
+    started = auth.start_oauth(
+        actor_id="actor-1",
+        connector_id="google.workspace",
+        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+        return_origin="http://192.168.0.50:8180",
+    )
+    assert started["redirectUri"] == "https://strix-alpha.tailfc1d45.ts.net/api/connectors/callback"
+    assert "127.0.0.1" not in started["authorizationUrl"]
+    assert "192.168.0.50" not in started["authorizationUrl"]
+    assert "strix-alpha.tailfc1d45.ts.net" in started["authorizationUrl"]
+    assert "prompt=consent" not in started["authorizationUrl"]
+
+
+def test_google_oauth_rejects_private_http_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPERATOR_PUBLIC_URL", raising=False)
     auth = _auth()
     auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
         "id": f"grant:{connector_id}",
@@ -226,6 +249,8 @@ def test_google_workspace_connect_asks_for_mail_and_calendar() -> None:
     assert "calendar.events" in started["authorizationUrl"]
     assert "gmail.send" in started["authorizationUrl"]
     assert started["connectorId"] == "google.workspace"
+    assert "prompt=consent" not in started["authorizationUrl"]
+    assert "include_granted_scopes=true" in started["authorizationUrl"]
 
 
 def test_start_oauth_refuses_unknown_connector() -> None:
