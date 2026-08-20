@@ -447,8 +447,23 @@ def admit_idempotency(command: dict[str, Any], existing_payload_digest: str | No
 def validate_reconciliation(prior_result: dict[str, Any], reconciliation: dict[str, Any]) -> None:
     if prior_result["tenantId"] != reconciliation["tenantId"]:
         raise ContractSemanticError("cross_tenant_reference")
+    expected_prior_ref = {
+        "recordId": prior_result["resultId"],
+        "recordType": "BookingResult",
+        "version": 1,
+    }
+    if reconciliation["priorResultRef"] != expected_prior_ref:
+        raise ContractSemanticError("prior_result_reference_mismatch")
+    if reconciliation["commandRef"] != prior_result["commandRef"]:
+        raise ContractSemanticError("reconciliation_command_reference_mismatch")
+    if reconciliation["providerBindingRef"] != prior_result["providerBindingRef"]:
+        raise ContractSemanticError("reconciliation_binding_reference_mismatch")
     if prior_result["state"] != "unknown_outcome":
         raise ContractSemanticError("reconciliation_requires_unknown_outcome")
+    if _time(reconciliation["derivedAt"]) < _time(prior_result["observedAt"]):
+        raise ContractSemanticError("reconciliation_precedes_prior_result")
+    if reconciliation["providerObservationRef"]["recordId"] not in reconciliation["evidenceIds"]:
+        raise ContractSemanticError("provider_observation_evidence_missing")
     terminal = reconciliation["result"] in {"confirmed", "cancelled"}
     if terminal != (
         reconciliation["appointmentRef"] is not None

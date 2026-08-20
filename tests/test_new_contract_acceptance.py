@@ -311,6 +311,16 @@ def test_authority_watermark_version_idempotency_and_reconciliation() -> None:
         admit_idempotency(command, "sha256:ffffffffffffffffffffffffffffffff")
     validate_reconciliation(valid["result"], valid["reconciliation"])
 
+    wrong_prior = copy.deepcopy(valid["reconciliation"])
+    wrong_prior["priorResultRef"]["recordId"] = "result-other"
+    with pytest.raises(ContractSemanticError, match="prior_result_reference_mismatch"):
+        validate_reconciliation(valid["result"], wrong_prior)
+
+    missing_observation_evidence = copy.deepcopy(valid["reconciliation"])
+    missing_observation_evidence["evidenceIds"] = ["request-a"]
+    with pytest.raises(ContractSemanticError, match="provider_observation_evidence_missing"):
+        validate_reconciliation(valid["result"], missing_observation_evidence)
+
 
 def test_revocation_race_and_concurrent_version_fail_closed() -> None:
     valid = _load("availability_booking/valid.json")
