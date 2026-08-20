@@ -228,13 +228,22 @@ class ControlPlane:
                 return 200, self._canonical_get(tenant_id, record_id)
             if method == "POST" and route == "/v1/canonical":
                 self._require_actor(tenant_id, actor_id)
-                return 200, self._canonical_save(tenant_id, payload)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "canonical mutation must use a published command boundary",
+                )
             if method == "POST" and route == "/v1/actor-authorizations":
                 self._require_actor(tenant_id, actor_id)
-                return 200, self._admit_actor_authorization(tenant_id, payload)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "actor authorization owner admission semantics are not published",
+                )
             if method == "POST" and route == "/v1/operator-policies":
                 self._require_actor(tenant_id, actor_id)
-                return 200, self._admit_operator_policy(tenant_id, payload)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "operator policy owner admission semantics are not published",
+                )
             return 404, _error("validation_failed", "unknown route")
         except KeyError as exc:
             return 404, _error("evidence_unavailable", str(exc))
@@ -282,22 +291,6 @@ class ControlPlane:
         try:
             grants = ActorTenantAuthorizationRepository(connection).list_current_for_actor(actor_id)
             return [_tenancy_projection(item, connection) for item in grants]
-        finally:
-            connection.close()
-
-    def _admit_actor_authorization(self, tenant_id: str, record: dict[str, Any]) -> dict[str, Any]:
-        connection = self._connection()
-        try:
-            return ActorTenantAuthorizationRepository(connection, tenant_id=tenant_id).save(record)
-        finally:
-            connection.close()
-
-    def _admit_operator_policy(self, tenant_id: str, record: dict[str, Any]) -> dict[str, Any]:
-        from .operator_policy import OperatorPolicyRepository
-
-        connection = self._connection()
-        try:
-            return OperatorPolicyRepository(connection, tenant_id=tenant_id).admit(record)
         finally:
             connection.close()
 
@@ -607,13 +600,6 @@ class ControlPlane:
             if record is None:
                 raise KeyError(record_id)
             return record
-        finally:
-            connection.close()
-
-    def _canonical_save(self, tenant_id: str, record: dict[str, Any]) -> dict[str, Any]:
-        connection = self._connection()
-        try:
-            return CanonicalRepository(connection, tenant_id=tenant_id).save(record)
         finally:
             connection.close()
 

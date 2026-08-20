@@ -40,7 +40,7 @@ def _plane(
     return plane
 
 
-def test_canonical_post_admits_license_holder() -> None:
+def test_canonical_post_fails_closed_without_governed_command_binding() -> None:
     connection = Connection()
     connection.cursor_instance.references["person-agent-1"] = {
         "recordType": "Person",
@@ -62,9 +62,8 @@ def test_canonical_post_admits_license_holder() -> None:
         },
         json.dumps(_license_holder()).encode(),
     )
-    assert status == 200
-    assert payload["id"] == "holder-1"
-    assert payload["recordType"] == "LicenseHolder"
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
 
 
 def test_canonical_post_requires_authenticated_actor() -> None:
@@ -255,7 +254,7 @@ def test_tenancies_require_authenticated_actor() -> None:
     assert payload["code"] == "authentication_required"
 
 
-def test_operator_policy_post_admits_published_policy() -> None:
+def test_operator_policy_post_fails_closed_without_owner_admission_contract() -> None:
     policy = {
         "message_type": "operator_policy",
         "schema_version": "operator-surface/1.1.0",
@@ -294,8 +293,25 @@ def test_operator_policy_post_admits_published_policy() -> None:
         },
         json.dumps(policy).encode(),
     )
-    assert status == 200
-    assert payload["policy_id"] == "policy-1"
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
+
+
+def test_actor_authorization_post_fails_closed_without_owner_admission_contract() -> None:
+    plane = _plane(AuthorizationConnection())  # type: ignore[arg-type]
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        "POST",
+        "/v1/actor-authorizations",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"{}",
+    )
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
 
 
 def test_operator_policy_post_requires_authenticated_actor() -> None:
@@ -716,7 +732,7 @@ def test_activation_readback_is_empty_until_signed_evidence_exists() -> None:
     assert payload == {"decisions": []}
 
 
-def test_canonical_post_rejects_invalid_ontology_record() -> None:
+def test_canonical_post_does_not_admit_even_structurally_invalid_payload() -> None:
     plane = _plane(Connection())
     plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
     status, payload = plane.handle(
@@ -730,4 +746,4 @@ def test_canonical_post_rejects_invalid_ontology_record() -> None:
         json.dumps({"recordType": "LicenseHolder"}).encode(),
     )
     assert status == 422
-    assert payload["code"] == "validation_failed"
+    assert payload["code"] == "configuration_incomplete"
