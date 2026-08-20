@@ -1,12 +1,14 @@
-"""Read-only PostgreSQL access for admitted derived contract families."""
+"""PostgreSQL access primitives for admitted derived contract families."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Any, cast
 
-from .canonical_repository import Connection
+from .canonical_repository import Connection, TenantIsolationViolation
+from .contract_acceptance import validate_qualification_decisions
 from .registry import ContractRegistry
 from .structural import validate_record
 
@@ -30,6 +32,83 @@ _VERSIONED_MESSAGE_TYPES = {
     "calendar_provider_binding",
     "availability_policy",
 }
+
+
+class QualificationDecisionPairRepository:
+    """Atomically append a validated decision pair without activating a production writer."""
+
+    def __init__(
+        self,
+        connection_factory: ConnectionFactory,
+        *,
+        tenant_id: str,
+        registry: ContractRegistry | None = None,
+    ) -> None:
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        self._connection_factory = connection_factory
+        self._tenant_id = tenant_id
+        self._registry = registry or ContractRegistry()
+
+    def append_decision_pair(
+        self,
+        *,
+        policy: dict[str, Any],
+        inputs: dict[str, Any],
+        next_question: dict[str, Any],
+        readiness: dict[str, Any],
+    ) -> None:
+        """Validate complete caller-supplied records and append both decisions once."""
+
+        records = (policy, inputs, next_question, readiness)
+        for record in records:
+            validate_record(record, "qualification_readiness", self._registry)
+        expected_types = (
+            "qualification_policy",
+            "qualification_input_set",
+            "next_question_decision",
+            "readiness_decision",
+        )
+        if tuple(record["messageType"] for record in records) != expected_types:
+            raise ValueError("qualification decision pair has unexpected message types")
+        if any(record["tenantId"] != self._tenant_id for record in records):
+            raise TenantIsolationViolation("record tenantId does not match repository tenant")
+        validate_qualification_decisions(policy, inputs, next_question, readiness)
+
+        with self._connection_factory() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('app.tenant_id', %s, true)",
+                        (self._tenant_id,),
+                    )
+                    for decision in (next_question, readiness):
+                        cursor.execute(
+                            """
+                            INSERT INTO derived_contract_records
+                                (tenant_id, contract_family, message_type, record_id,
+                                 record_version, schema_version, payload)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                            """.strip(),
+                            (
+                                self._tenant_id,
+                                "qualification_readiness",
+                                decision["messageType"],
+                                decision["decisionId"],
+                                1,
+                                decision["schemaVersion"],
+                                json.dumps(
+                                    decision,
+                                    sort_keys=True,
+                                    separators=(",", ":"),
+                                    ensure_ascii=False,
+                                ),
+                            ),
+                        )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
 
 
 class DerivedContractReader:

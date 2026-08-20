@@ -8,7 +8,13 @@ from typing import Any, cast
 
 import pytest
 
-from buyer_ops_contracts.derived_contract_repository import DerivedContractReader
+from buyer_ops_contracts.canonical_repository import TenantIsolationViolation
+from buyer_ops_contracts.contract_acceptance import ContractSemanticError
+from buyer_ops_contracts.derived_contract_repository import (
+    DerivedContractReader,
+    QualificationDecisionPairRepository,
+)
+from buyer_ops_contracts.errors import ContractViolation
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -49,9 +55,56 @@ class _Connection:
         self.rollbacks += 1
 
 
+class _WriteCursor:
+    def __init__(self, *, fail_on_execute: int | None = None) -> None:
+        self.executions: list[tuple[str, tuple[object, ...]]] = []
+        self._fail_on_execute = fail_on_execute
+
+    def __enter__(self) -> _WriteCursor:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(self, statement: str, parameters: tuple[object, ...]) -> None:
+        self.executions.append((statement, parameters))
+        if len(self.executions) == self._fail_on_execute:
+            raise RuntimeError("injected second decision failure")
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return None
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return []
+
+
+class _WriteConnection:
+    def __init__(self, *, fail_on_execute: int | None = None) -> None:
+        self.cursor_instance = _WriteCursor(fail_on_execute=fail_on_execute)
+        self.commits = 0
+        self.rollbacks = 0
+
+    def cursor(self) -> _WriteCursor:
+        return self.cursor_instance
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+
 def _qualification_policy() -> dict[str, Any]:
     fixture = json.loads((ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text())
     return cast(dict[str, Any], fixture["policy"])
+
+
+def _qualification_records() -> tuple[dict[str, Any], ...]:
+    fixture = json.loads((ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text())
+    return tuple(
+        cast(dict[str, Any], fixture[key])
+        for key in ("policy", "input", "nextQuestion", "readiness")
+    )
 
 
 def test_reader_rejects_a_structurally_valid_payload_with_mismatched_identity() -> None:
@@ -99,3 +152,103 @@ def test_reader_rejects_an_unpublished_contract_before_opening_a_connection() ->
             record_version=1,
         )
     assert not opened
+
+
+def test_qualification_decision_pair_is_validated_before_atomic_append() -> None:
+    connection = _WriteConnection()
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    policy, inputs, next_question, readiness = _qualification_records()
+    QualificationDecisionPairRepository(
+        connection_factory, tenant_id="tenant-a"
+    ).append_decision_pair(
+        policy=policy,
+        inputs=inputs,
+        next_question=next_question,
+        readiness=readiness,
+    )
+
+    assert connection.commits == 1
+    assert connection.rollbacks == 0
+    assert len(connection.cursor_instance.executions) == 3
+    inserts = connection.cursor_instance.executions[1:]
+    assert [parameters[2] for _, parameters in inserts] == [
+        "next_question_decision",
+        "readiness_decision",
+    ]
+
+
+def test_qualification_decision_pair_rejects_invalid_records_before_opening() -> None:
+    opened = False
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        nonlocal opened
+        opened = True
+        yield _WriteConnection()
+
+    policy, inputs, next_question, readiness = _qualification_records()
+    readiness["result"] = "not_ready"
+    repository = QualificationDecisionPairRepository(connection_factory, tenant_id="tenant-a")
+    with pytest.raises(ContractSemanticError, match="readiness_result_mismatch"):
+        repository.append_decision_pair(
+            policy=policy,
+            inputs=inputs,
+            next_question=next_question,
+            readiness=readiness,
+        )
+    assert not opened
+
+
+@pytest.mark.parametrize("failure", ["structural", "tenant"])
+def test_qualification_decision_pair_rejects_unadmitted_envelope_before_opening(
+    failure: str,
+) -> None:
+    opened = False
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        nonlocal opened
+        opened = True
+        yield _WriteConnection()
+
+    policy, inputs, next_question, readiness = _qualification_records()
+    expected: type[Exception]
+    if failure == "structural":
+        next_question.pop("reasonCodes")
+        expected = ContractViolation
+    else:
+        readiness["tenantId"] = "tenant-other"
+        expected = TenantIsolationViolation
+    repository = QualificationDecisionPairRepository(connection_factory, tenant_id="tenant-a")
+    with pytest.raises(expected):
+        repository.append_decision_pair(
+            policy=policy,
+            inputs=inputs,
+            next_question=next_question,
+            readiness=readiness,
+        )
+    assert not opened
+
+
+def test_qualification_decision_pair_rolls_back_second_insert_failure() -> None:
+    connection = _WriteConnection(fail_on_execute=3)
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    policy, inputs, next_question, readiness = _qualification_records()
+    repository = QualificationDecisionPairRepository(connection_factory, tenant_id="tenant-a")
+    with pytest.raises(RuntimeError, match="second decision failure"):
+        repository.append_decision_pair(
+            policy=policy,
+            inputs=inputs,
+            next_question=next_question,
+            readiness=readiness,
+        )
+    assert connection.commits == 0
+    assert connection.rollbacks == 1

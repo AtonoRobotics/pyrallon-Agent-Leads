@@ -23,7 +23,10 @@ from buyer_ops_contracts.artifacts import ArtifactPointer
 from buyer_ops_contracts.audit import verify_tenant_export
 from buyer_ops_contracts.canonical_repository import CanonicalRepository, VersionConflict
 from buyer_ops_contracts.closure_repository import PostgresClosureRepository
-from buyer_ops_contracts.derived_contract_repository import DerivedContractReader
+from buyer_ops_contracts.derived_contract_repository import (
+    DerivedContractReader,
+    QualificationDecisionPairRepository,
+)
 from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.evidence import EvidenceIntegrityError, verify_checkpoint
 from buyer_ops_contracts.evidence_lifecycle import (
@@ -1634,6 +1637,22 @@ def _derived_contract_fixture(suffix: str) -> tuple[dict[str, Any], dict[str, An
     return qualification, availability
 
 
+def _qualification_decision_pair_fixture(
+    suffix: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    fixture = json.loads((ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text())
+    policy = fixture["policy"]
+    inputs = fixture["input"]
+    next_question = fixture["nextQuestion"]
+    readiness = fixture["readiness"]
+    inputs["inputSetId"] = f"qualification-input-{suffix}"
+    next_question["decisionId"] = f"next-question-{suffix}"
+    readiness["decisionId"] = f"readiness-{suffix}"
+    for decision in (next_question, readiness):
+        decision["inputSetRef"]["recordId"] = inputs["inputSetId"]
+    return policy, inputs, next_question, readiness
+
+
 def _insert_derived_contract_record(
     connection: psycopg.Connection[Any],
     *,
@@ -1870,6 +1889,80 @@ def test_derived_contract_reader_revalidates_stored_payload(postgres_dsn: str) -
             record_id=qualification["policyId"],
             record_version=1,
         )
+
+
+def test_qualification_decision_pair_appends_atomically_and_round_trips(
+    postgres_dsn: str,
+) -> None:
+    policy, inputs, next_question, readiness = _qualification_decision_pair_fixture("atomic")
+    repository = QualificationDecisionPairRepository(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    )
+    repository.append_decision_pair(
+        policy=policy,
+        inputs=inputs,
+        next_question=next_question,
+        readiness=readiness,
+    )
+
+    reader = DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a")
+    assert (
+        reader.get(
+            contract_family="qualification_readiness",
+            message_type="next_question_decision",
+            record_id=next_question["decisionId"],
+            record_version=1,
+        )
+        == next_question
+    )
+    assert (
+        reader.get(
+            contract_family="qualification_readiness",
+            message_type="readiness_decision",
+            record_id=readiness["decisionId"],
+            record_version=1,
+        )
+        == readiness
+    )
+
+
+def test_qualification_decision_pair_rolls_back_if_second_insert_conflicts(
+    postgres_dsn: str,
+) -> None:
+    policy, inputs, next_question, readiness = _qualification_decision_pair_fixture("rollback")
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        _insert_derived_contract_record(
+            connection,
+            family="qualification_readiness",
+            record_id=readiness["decisionId"],
+            record_version=1,
+            record=readiness,
+        )
+
+    repository = QualificationDecisionPairRepository(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    )
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        repository.append_decision_pair(
+            policy=policy,
+            inputs=inputs,
+            next_question=next_question,
+            readiness=readiness,
+        )
+
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM derived_contract_records "
+            "WHERE message_type = 'next_question_decision' AND record_id = %s",
+            (next_question["decisionId"],),
+        ).fetchone() == (0,)
+        assert connection.execute(
+            "SELECT count(*) FROM derived_contract_records "
+            "WHERE message_type = 'readiness_decision' AND record_id = %s",
+            (readiness["decisionId"],),
+        ).fetchone() == (1,)
 
 
 def test_database_rejects_record_envelope_mismatch(postgres_dsn: str) -> None:
