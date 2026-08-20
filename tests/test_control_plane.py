@@ -232,6 +232,26 @@ def test_workspace_requires_tenant_and_actor() -> None:
     assert payload["code"] == "authority_denied"
 
 
+@pytest.mark.parametrize("route", ["/v1/journeys", "/v1/journeys/journey-1"])
+def test_journey_projection_routes_fail_closed_until_derivation_is_published(
+    route: str,
+) -> None:
+    plane = _plane(AuthorizationConnection())  # type: ignore[arg-type]
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        "GET",
+        route,
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"",
+    )
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
+
+
 def test_tenancies_are_empty_without_actor_authorization() -> None:
     status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
         "GET",

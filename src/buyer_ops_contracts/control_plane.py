@@ -38,7 +38,6 @@ from .habitat_repository import PostgresHabitatRepository, PostgresVersionLocked
 from .ingress import IngressRejected
 from .ingress_service import IngressProviderRuntime, IngressService
 from .operator_commands import OperatorCommandError, OperatorCommandService
-from .operator_projection import OperatorProjection
 from .release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from .telemetry import TelemetryRecorder
 
@@ -145,10 +144,17 @@ class ControlPlane:
             if not tenant_id:
                 return 403, _error("authority_denied", "tenant header required")
             if method == "GET" and route == "/v1/journeys":
-                return 200, {"journeys": self._list_journeys(tenant_id, actor_id)}
+                self._require_actor(tenant_id, actor_id)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "governed operator projection rules are not published",
+                )
             if method == "GET" and route.startswith("/v1/journeys/"):
-                journey_id = unquote(route.split("/", 3)[-1])
-                return 200, self._journey(tenant_id, actor_id, journey_id)
+                self._require_actor(tenant_id, actor_id)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "governed operator projection rules are not published",
+                )
             if method == "GET" and route == "/v1/workspace":
                 self._require_actor(tenant_id, actor_id)
                 return 422, _error(
@@ -294,30 +300,6 @@ class ControlPlane:
         try:
             grants = ActorTenantAuthorizationRepository(connection).list_current_for_actor(actor_id)
             return [_tenancy_projection(item, connection) for item in grants]
-        finally:
-            connection.close()
-
-    def _list_journeys(self, tenant_id: str, actor_id: str) -> list[dict[str, Any]]:
-        self._require_actor(tenant_id, actor_id)
-        connection = self._connection()
-        try:
-            repo = CanonicalRepository(connection, tenant_id=tenant_id)
-            projection = OperatorProjection(repo, tenant_id=tenant_id)
-            views = []
-            for journey_id in projection.list_journey_ids():
-                views.append(projection.journey_view(journey_id=journey_id, principal_id=actor_id))
-            return views
-        finally:
-            connection.close()
-
-    def _journey(self, tenant_id: str, actor_id: str, journey_id: str) -> dict[str, Any]:
-        self._require_actor(tenant_id, actor_id)
-        connection = self._connection()
-        try:
-            repo = CanonicalRepository(connection, tenant_id=tenant_id)
-            return OperatorProjection(repo, tenant_id=tenant_id).journey_view(
-                journey_id=journey_id, principal_id=actor_id
-            )
         finally:
             connection.close()
 
