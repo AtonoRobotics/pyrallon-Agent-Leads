@@ -2,18 +2,27 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from test_actor_authorization import _Connection as AuthorizationConnection
 from test_actor_authorization import _grant
 from test_canonical_repository import Connection, _license_holder
+from test_ingress import _envelope, _message_identity
 
-from buyer_ops_contracts.control_plane import ControlPlane
+from buyer_ops_contracts.canonical_repository import Connection as RepositoryConnection
+from buyer_ops_contracts.control_plane import ControlPlane, IngressProviderRuntimeFactory
+from buyer_ops_contracts.ingress import InboundEnvelope, RegisteredInboundEvent
+from buyer_ops_contracts.ingress_service import IngressProviderRuntime
 from buyer_ops_contracts.structural import validate_record
 
 
-def _plane(connection: object) -> ControlPlane:
+def _plane(
+    connection: object,
+    *,
+    ingress_provider_runtime_factory: IngressProviderRuntimeFactory | None = None,
+) -> ControlPlane:
     public = Ed25519PrivateKey.generate().public_key()
     plane = ControlPlane(
         "postgresql://unused",
@@ -21,6 +30,7 @@ def _plane(connection: object) -> ControlPlane:
         control_token="token",
         release_public_keys={"health-test": public},
         gate_registry_path=Path("PRODUCTION-GATE-REGISTRY.yaml"),
+        ingress_provider_runtime_factory=ingress_provider_runtime_factory,
     )
     plane._connection = lambda: connection  # type: ignore[method-assign]
     return plane
@@ -400,6 +410,62 @@ def test_ingress_envelope_fails_closed_without_provider_configuration() -> None:
 
     assert status == 422
     assert payload["code"] == "configuration_incomplete"
+
+
+def test_ingress_envelope_uses_deployment_supplied_provider_runtime() -> None:
+    seen_tenants: list[str] = []
+
+    class _RejectingAuthenticator:
+        def authenticate(self, tenant_id: str, envelope: InboundEnvelope) -> bool:
+            seen_tenants.append(tenant_id)
+            return False
+
+    class _NeverArtifacts:
+        def verify_payload(self, tenant_id: str, artifact_id: str, digest: str) -> bool:
+            raise AssertionError("artifact verification must not follow authentication denial")
+
+    class _NeverCapture:
+        def after_ingress(
+            self,
+            envelope: InboundEnvelope,
+            identity: dict[str, Any],
+            registered: RegisteredInboundEvent,
+            *,
+            display_name: str,
+        ) -> dict[str, Any]:
+            raise AssertionError("capture must not follow authentication denial")
+
+    class _RuntimeFactory:
+        def __call__(
+            self, *, connection: RepositoryConnection, tenant_id: str
+        ) -> IngressProviderRuntime:
+            del connection, tenant_id
+            return IngressProviderRuntime(
+                authenticator=_RejectingAuthenticator(),
+                artifacts=_NeverArtifacts(),
+                capture=_NeverCapture(),
+            )
+
+    plane = _plane(
+        Connection(),
+        ingress_provider_runtime_factory=_RuntimeFactory(),
+    )
+
+    status, payload = plane.handle(
+        "POST",
+        "/v1/ingress/envelope",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+        },
+        json.dumps(
+            {"envelope": _envelope().to_mapping(), "identity": _message_identity()}
+        ).encode(),
+    )
+
+    assert status == 403
+    assert payload["code"] == "ingress_authentication_failed"
+    assert seen_tenants == ["tenant-1"]
 
 
 def test_invalid_operator_command_returns_typed_operator_error() -> None:

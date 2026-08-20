@@ -9,7 +9,7 @@ import secrets
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import unquote, urlparse
 
 import psycopg
@@ -22,7 +22,7 @@ from .activation import (
 )
 from .actor_authorization import ActorTenantAuthorizationRepository
 from .canonical_habitat import CanonicalLockedHabitatStateReader, PlatformPolicyEvaluator
-from .canonical_repository import CanonicalRepository
+from .canonical_repository import CanonicalRepository, Connection
 from .capture import CaptureIncomplete
 from .cognition_authorization import CognitionAuthorization
 from .connector_authorization import (
@@ -36,7 +36,7 @@ from .errors import ContractViolation, SetupRejected
 from .habitat import HabitatKernel, HabitatState
 from .habitat_repository import PostgresHabitatRepository, PostgresVersionLockedStateReader
 from .ingress import IngressRejected
-from .ingress_service import IngressService
+from .ingress_service import IngressProviderRuntime, IngressService
 from .operator_commands import OperatorCommandError, OperatorCommandService
 from .operator_projection import OperatorProjection
 from .release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
@@ -54,6 +54,10 @@ class _LockedStateOnly:
         raise RuntimeError("Habitat state must be loaded under the repository transaction lock")
 
 
+class IngressProviderRuntimeFactory(Protocol):
+    def __call__(self, *, connection: Connection, tenant_id: str) -> IngressProviderRuntime: ...
+
+
 class ControlPlane:
     def __init__(
         self,
@@ -63,6 +67,7 @@ class ControlPlane:
         control_token: str,
         release_public_keys: dict[str, Ed25519PublicKey],
         gate_registry_path: Path,
+        ingress_provider_runtime_factory: IngressProviderRuntimeFactory | None = None,
     ) -> None:
         if len(permit_secret) < 32:
             raise ValueError("permit_secret must contain at least 32 bytes")
@@ -76,6 +81,7 @@ class ControlPlane:
         self._release_public_keys = release_public_keys
         self._gate_registry, self._gate_registry_digest = load_gate_registry(gate_registry_path)
         self._oauth_clients = oauth_clients_from_env()
+        self._ingress_provider_runtime_factory = ingress_provider_runtime_factory
 
     def handle(
         self, method: str, path: str, headers: dict[str, str], body: bytes
@@ -388,7 +394,19 @@ class ControlPlane:
     def _ingress_envelope(self, tenant_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         connection = self._connection()
         try:
-            return IngressService(connection, tenant_id=tenant_id).admit_envelope(payload)
+            runtime = (
+                self._ingress_provider_runtime_factory(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                )
+                if self._ingress_provider_runtime_factory is not None
+                else None
+            )
+            return IngressService(
+                connection,
+                tenant_id=tenant_id,
+                provider_runtime=runtime,
+            ).admit_envelope(payload)
         finally:
             connection.close()
 
