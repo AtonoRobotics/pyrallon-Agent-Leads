@@ -91,6 +91,16 @@ def test_qualification_inputs_bind_the_exact_policy_version() -> None:
         validate_qualification(policy, inputs)
 
 
+def test_missing_qualification_policy_or_reference_fails_closed() -> None:
+    valid = _load("qualification_readiness/valid.json")
+    missing_reference = copy.deepcopy(valid["input"])
+    missing_reference.pop("policyRef")
+
+    for policy, inputs in (({}, valid["input"]), (valid["policy"], missing_reference)):
+        with pytest.raises(ContractSemanticError, match="configuration_incomplete"):
+            validate_qualification(policy, inputs)
+
+
 def test_question_tie_break_and_readiness_are_order_independent() -> None:
     valid = _load("qualification_readiness/valid.json")
     policy = valid["policy"]

@@ -47,6 +47,8 @@ def validate_policy_version(current: dict[str, Any], predecessor: dict[str, Any]
 
 
 def validate_qualification(policy: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
+    if not policy or not inputs or "policyRef" not in inputs:
+        raise ContractSemanticError("configuration_incomplete")
     if policy["tenantId"] != inputs["tenantId"]:
         raise ContractSemanticError("cross_tenant_reference")
     expected_policy_ref = {
