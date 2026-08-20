@@ -305,11 +305,12 @@ credentials, capacity, and its named activation gates.
 
 ### PKT-08 — Progressive qualification cognition
 
-**Execution status (2026-08-19): Design-blocked in part by GAP-QUALIFICATION-READINESS.** Existing ontology,
-proposal-grounding, and fair-housing controls remain valid. Progressive question selection and the
-deterministic consultation-readiness predicate must not choose unpublished policy fields,
-thresholds, tie-breaking, or decision-record semantics. Closure requirements are recorded in
-`IMPLEMENTATION-COMPLETION-AUDIT.md`.
+**Execution status (2026-08-19): In progress; no governing-contract block.** Qualification Readiness
+Contract 1.0 publishes owner-bound policy, exact criterion/freshness/disposition inputs,
+deterministic question tie-breaking, exact service-zone/capacity/escalation bindings, typed input
+sets, and source-linked derivation decisions. Implementation may resume against
+`QUALIFICATION-READINESS.schema.json`; production cognition remains subject to the named gates and
+OPEN-002/OPEN-008 activation inputs.
 
 **Objective:** Implement the bounded qualification proposal/action class against canonical state.
 
@@ -328,11 +329,12 @@ thresholds, tie-breaking, or decision-record semantics. Closure requirements are
 
 ### PKT-09 — Consultation scheduling and reconciliation
 
-**Execution status (2026-08-19): Design-blocked in part by GAP-AVAILABILITY-BOOKING.** Appointment, Habitat,
-connector, and Temporal primitives remain valid. Availability, `SlotSet`, booking, reschedule,
-cancel, and reconciliation behavior must not invent unpublished policy inputs, command records,
-expiry rules, or provider-result semantics. Closure requirements are recorded in
-`IMPLEMENTATION-COMPLETION-AUDIT.md`.
+**Execution status (2026-08-19): In progress; no governing-contract block.** Availability and Booking
+Contract 1.0 publishes owner-bound provider/calendar and availability policy, exact snapshot and
+watermark bindings, deterministic SlotSet derivation/ordering/expiry, book/reschedule/cancel
+commands, provider results, and unknown-outcome reconciliation. Implementation may resume against
+`AVAILABILITY-BOOKING.schema.json`; live calendar effects remain blocked by OPEN-003/OPEN-006 and
+the named gates.
 
 **Objective:** Complete OT-01 with real calendar booking.
 

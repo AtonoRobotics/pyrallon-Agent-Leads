@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/qualification-readiness/1.0.0",
+  "title": "QualificationReadinessContract",
+  "oneOf": [
+    {"$ref": "#/$defs/QualificationPolicy"},
+    {"$ref": "#/$defs/QualificationInputSet"},
+    {"$ref": "#/$defs/NextQuestionDecision"},
+    {"$ref": "#/$defs/ReadinessDecision"}
+  ],
+  "$defs": {
+    "Id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "Time": {"type": "string", "format": "date-time"},
+    "Digest": {"type": "string", "pattern": "^[A-Za-z0-9_-]+:[A-Fa-f0-9]{32,}$"},
+    "RecordRef": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recordId", "recordType", "version"],
+      "properties": {"recordId": {"$ref": "#/$defs/Id"}, "recordType": {"$ref": "#/$defs/Id"}, "version": {"type": "integer", "minimum": 1}}
+    },
+    "OwnerRef": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ownerType", "ownerId"],
+      "properties": {"ownerType": {"enum": ["brokerage", "license_holder", "deployment_operator"]}, "ownerId": {"$ref": "#/$defs/Id"}}
+    },
+    "DeriverRef": {
+      "type": "object", "additionalProperties": false,
+      "required": ["principalId", "implementationId", "implementationVersion"],
+      "properties": {"principalId": {"$ref": "#/$defs/Id"}, "implementationId": {"const": "qualification_readiness_v1"}, "implementationVersion": {"$ref": "#/$defs/Id"}}
+    },
+    "CriterionRule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["criterionId", "predicate", "disposition", "acceptedObservationStates", "maxAgeSeconds", "priority", "questionTemplateRef", "missingDisposition", "contradictionDisposition"],
+      "properties": {
+        "criterionId": {"$ref": "#/$defs/Id"}, "predicate": {"$ref": "#/$defs/Id"},
+        "disposition": {"enum": ["required", "declinable", "agent_handled", "optional"]},
+        "acceptedObservationStates": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["asserted", "verified", "buyer_declined", "not_applicable"]}},
+        "maxAgeSeconds": {"type": "integer", "minimum": 1, "maximum": 31536000}, "priority": {"type": "integer", "minimum": 0},
+        "questionTemplateRef": {"$ref": "#/$defs/RecordRef"},
+        "missingDisposition": {"enum": ["ask", "agent_handle", "block_readiness", "ignore"]},
+        "contradictionDisposition": {"enum": ["ask_clarification", "agent_handle", "block_readiness"]}
+      }
+    },
+    "QualificationPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "policyId", "version", "owner", "lifecycle", "effectiveFrom", "criteria", "questionTieBreak", "readinessAlgorithm", "serviceZonePolicyRef", "capacityPolicyRef", "urgentEscalationPolicyRef", "sourceEvidenceIds"],
+      "properties": {
+        "messageType": {"const": "qualification_policy"}, "schemaVersion": {"const": "qualification-readiness/1.0.0"},
+        "tenantId": {"$ref": "#/$defs/Id"}, "policyId": {"$ref": "#/$defs/Id"}, "version": {"type": "integer", "minimum": 1}, "owner": {"$ref": "#/$defs/OwnerRef"},
+        "lifecycle": {"enum": ["draft", "active", "superseded", "retired"]}, "effectiveFrom": {"$ref": "#/$defs/Time"}, "effectiveTo": {"oneOf": [{"$ref": "#/$defs/Time"}, {"type": "null"}]},
+        "supersedesRecordId": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]},
+        "criteria": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/CriterionRule"}},
+        "questionTieBreak": {"const": "priority_then_criterion_id_ascending"},
+        "readinessAlgorithm": {"const": "all_required_resolved_no_blocking_contradiction_zone_and_capacity_v1"},
+        "serviceZonePolicyRef": {"$ref": "#/$defs/RecordRef"}, "capacityPolicyRef": {"$ref": "#/$defs/RecordRef"}, "urgentEscalationPolicyRef": {"$ref": "#/$defs/RecordRef"},
+        "sourceEvidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    },
+    "ObservationBinding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["criterionId", "observationRef", "observationState", "observedAt", "validAtEvaluation", "contradictionRefs"],
+      "properties": {"criterionId": {"$ref": "#/$defs/Id"}, "observationRef": {"$ref": "#/$defs/RecordRef"}, "observationState": {"enum": ["unknown", "asserted", "verified", "inferred", "buyer_declined", "stale", "contradicted", "not_applicable"]}, "observedAt": {"$ref": "#/$defs/Time"}, "validAtEvaluation": {"type": "boolean"}, "contradictionRefs": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/RecordRef"}}}
+    },
+    "QualificationInputSet": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "inputSetId", "journeyRef", "policyRef", "evaluatedAt", "observations", "serviceZoneDecisionRef", "serviceZoneEligible", "capacityDecisionRef", "capacityAvailable", "urgentEscalationRefs", "canonicalWatermark", "inputDigest"],
+      "properties": {
+        "messageType": {"const": "qualification_input_set"}, "schemaVersion": {"const": "qualification-readiness/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "inputSetId": {"$ref": "#/$defs/Id"},
+        "journeyRef": {"$ref": "#/$defs/RecordRef"}, "policyRef": {"$ref": "#/$defs/RecordRef"}, "evaluatedAt": {"$ref": "#/$defs/Time"},
+        "observations": {"type": "array", "items": {"$ref": "#/$defs/ObservationBinding"}},
+        "serviceZoneDecisionRef": {"$ref": "#/$defs/RecordRef"}, "serviceZoneEligible": {"type": "boolean"}, "capacityDecisionRef": {"$ref": "#/$defs/RecordRef"}, "capacityAvailable": {"type": "boolean"},
+        "urgentEscalationRefs": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/RecordRef"}}, "canonicalWatermark": {"$ref": "#/$defs/Id"}, "inputDigest": {"$ref": "#/$defs/Digest"}
+      }
+    },
+    "NextQuestionDecision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "decisionId", "inputSetRef", "policyRef", "result", "criterionId", "questionTemplateRef", "reasonCodes", "derivedAt", "derivedBy", "inputDigest"],
+      "properties": {
+        "messageType": {"const": "next_question_decision"}, "schemaVersion": {"const": "qualification-readiness/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "decisionId": {"$ref": "#/$defs/Id"}, "inputSetRef": {"$ref": "#/$defs/RecordRef"}, "policyRef": {"$ref": "#/$defs/RecordRef"},
+        "result": {"enum": ["ask", "agent_handle", "no_question", "blocked"]}, "criterionId": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]}, "questionTemplateRef": {"oneOf": [{"$ref": "#/$defs/RecordRef"}, {"type": "null"}]},
+        "reasonCodes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "derivedAt": {"$ref": "#/$defs/Time"}, "derivedBy": {"$ref": "#/$defs/DeriverRef"}, "inputDigest": {"$ref": "#/$defs/Digest"}
+      }
+    },
+    "ReadinessDecision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "decisionId", "journeyRef", "inputSetRef", "policyRef", "result", "reasonCodes", "blockingCriterionIds", "derivedAt", "derivedBy", "inputDigest", "expiresAt", "evidenceIds"],
+      "properties": {
+        "messageType": {"const": "readiness_decision"}, "schemaVersion": {"const": "qualification-readiness/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "decisionId": {"$ref": "#/$defs/Id"},
+        "journeyRef": {"$ref": "#/$defs/RecordRef"}, "inputSetRef": {"$ref": "#/$defs/RecordRef"}, "policyRef": {"$ref": "#/$defs/RecordRef"}, "result": {"enum": ["ready", "not_ready", "blocked", "configuration_incomplete"]},
+        "reasonCodes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "blockingCriterionIds": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "derivedAt": {"$ref": "#/$defs/Time"}, "derivedBy": {"$ref": "#/$defs/DeriverRef"}, "inputDigest": {"$ref": "#/$defs/Digest"}, "expiresAt": {"$ref": "#/$defs/Time"}, "evidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    }
+  }
+}

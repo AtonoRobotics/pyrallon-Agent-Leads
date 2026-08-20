@@ -52,6 +52,14 @@ MAPPINGS = {
         ROOT / "RELEASE-ACTIVATION.schema.json",
         PACKAGE / "schemas/release_activation.schema.json",
     ),
+    "qualification_readiness": (
+        ROOT / "QUALIFICATION-READINESS.schema.json",
+        PACKAGE / "schemas/qualification_readiness.schema.json",
+    ),
+    "availability_booking": (
+        ROOT / "AVAILABILITY-BOOKING.schema.json",
+        PACKAGE / "schemas/availability_booking.schema.json",
+    ),
 }
 
 

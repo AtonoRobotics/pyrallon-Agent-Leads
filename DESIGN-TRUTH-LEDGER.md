@@ -27,6 +27,8 @@ An implementation convenience cannot override a higher-ranked source. A new conf
 | `ONTOLOGY-V0-CONTRACT.md` Revision 1 | Canonical entity, relationship, epistemic, agreement, and transition semantics | Governing |
 | `ONTOLOGY-V0.schema.json` Version 0.3.0 | Executable structural schemas for OT-01 and agreement-critical canonical records | Governing schema |
 | `COGNITIVE-RUNTIME-GATEWAY.schema.json` Version 1.1.0 | Executable cognitive request/proposal boundary schemas | Governing schema |
+| `QUALIFICATION-READINESS-CONTRACT.md` / `QUALIFICATION-READINESS.schema.json` Version 1.0.0 | Policy ownership, progressive selection, readiness inputs and deterministic derivation | Governing |
+| `AVAILABILITY-BOOKING-CONTRACT.md` / `AVAILABILITY-BOOKING.schema.json` Version 1.0.0 | Calendar-provider ownership, availability, SlotSet, booking and reconciliation | Governing |
 | `PRODUCTION-GATE-REGISTRY.yaml` Revision 1 | Gate applicability, dependencies, evidence, activation blocks | Governing |
 | `OPERATIONAL-THREAD-01-LEAD-TO-CONSULT-CONTRACT.md` Revision 1 | First production operational thread | Governing for that thread |
 | `IMPLEMENTATION-PACKET-INDEX.md` Revision 1 | Dependency-bounded autonomous implementation sequence | Governing implementation plan |
@@ -176,14 +178,14 @@ These do not block canonical non-cognitive implementation but block the named ac
 ## 14. Authority closure
 
 PR #1 and commit `8f528d9` are closed and superseded; they targeted the obsolete four-family
-`buyer-ops/0.1.0` package. The corrected candidate is PR #2 on
-`spec/kernel-0.3.0-authority-corrected`, based on the 13-family `buyer-ops/0.3.0` authority review
-branch. Its packaged/root schema bytes, manifest digests, and generated Pydantic models are
-synchronized, and `uv run --extra dev python scripts/verify_contracts.py` passes locally.
+`buyer-ops/0.1.0` package. The governing `review/kernel-0.3.0-authority` branch contains the 15-family
+`buyer-ops/0.3.0` authority package. Packaged/root schema bytes, manifest digests, generated
+Pydantic models, and generator/verifier mappings are synchronized.
 
-OPEN-025–027 are therefore resolved by the candidate. Default-branch authority and repository CI
-remain review/merge evidence, not reasons to describe the candidate as semantically missing. Runtime
-activation remains separately gated by deployment decisions and capability-specific evidence.
+OPEN-025–027, qualification/readiness ownership and derivation, and availability/booking
+owner-provider-derivation bindings are published. PKT-08 and PKT-09 may proceed at these seams.
+Runtime activation remains separately gated by deployment decisions, provider configuration, and
+capability-specific evidence.
 
 ## 15. Implementation admission rule
 

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/availability-booking/1.0.0",
+  "title": "AvailabilityBookingContract",
+  "oneOf": [
+    {"$ref": "#/$defs/CalendarProviderBinding"},
+    {"$ref": "#/$defs/AvailabilityPolicy"},
+    {"$ref": "#/$defs/CalendarSnapshot"},
+    {"$ref": "#/$defs/SlotSet"},
+    {"$ref": "#/$defs/BookingCommand"},
+    {"$ref": "#/$defs/BookingResult"},
+    {"$ref": "#/$defs/BookingReconciliation"}
+  ],
+  "$defs": {
+    "Id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "Time": {"type": "string", "format": "date-time"},
+    "Digest": {"type": "string", "pattern": "^[A-Za-z0-9_-]+:[A-Fa-f0-9]{32,}$"},
+    "RecordRef": {"type": "object", "additionalProperties": false, "required": ["recordId", "recordType", "version"], "properties": {"recordId": {"$ref": "#/$defs/Id"}, "recordType": {"$ref": "#/$defs/Id"}, "version": {"type": "integer", "minimum": 1}}},
+    "OwnerRef": {"type": "object", "additionalProperties": false, "required": ["ownerType", "ownerId"], "properties": {"ownerType": {"enum": ["brokerage", "license_holder", "deployment_operator"]}, "ownerId": {"$ref": "#/$defs/Id"}}},
+    "DeriverRef": {"type": "object", "additionalProperties": false, "required": ["principalId", "implementationId", "implementationVersion"], "properties": {"principalId": {"$ref": "#/$defs/Id"}, "implementationId": {"enum": ["availability_v1", "booking_reconciliation_v1"]}, "implementationVersion": {"$ref": "#/$defs/Id"}}},
+    "Interval": {"type": "object", "additionalProperties": false, "required": ["startsAt", "endsAt"], "properties": {"startsAt": {"$ref": "#/$defs/Time"}, "endsAt": {"$ref": "#/$defs/Time"}}},
+    "CalendarProviderBinding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "bindingId", "version", "owner", "providerKind", "providerAccountId", "calendarId", "connectorGrantRef", "capabilityInventoryRef", "lifecycle", "effectiveFrom", "sourceEvidenceIds"],
+      "properties": {
+        "messageType": {"const": "calendar_provider_binding"}, "schemaVersion": {"const": "availability-booking/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "bindingId": {"$ref": "#/$defs/Id"}, "version": {"type": "integer", "minimum": 1}, "owner": {"$ref": "#/$defs/OwnerRef"},
+        "providerKind": {"enum": ["google_calendar", "microsoft_graph_calendar", "other_qualified_adapter"]}, "providerAccountId": {"$ref": "#/$defs/Id"}, "calendarId": {"$ref": "#/$defs/Id"}, "connectorGrantRef": {"$ref": "#/$defs/RecordRef"}, "capabilityInventoryRef": {"$ref": "#/$defs/RecordRef"},
+        "lifecycle": {"enum": ["draft", "active", "suspended", "revoked", "superseded", "retired"]}, "effectiveFrom": {"$ref": "#/$defs/Time"}, "effectiveTo": {"oneOf": [{"$ref": "#/$defs/Time"}, {"type": "null"}]}, "supersedesRecordId": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]}, "sourceEvidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    },
+    "WeeklyWindow": {"type": "object", "additionalProperties": false, "required": ["dayOfWeek", "localStart", "localEnd"], "properties": {"dayOfWeek": {"type": "integer", "minimum": 1, "maximum": 7}, "localStart": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"}, "localEnd": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"}}},
+    "AvailabilityPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "policyId", "version", "owner", "lifecycle", "effectiveFrom", "timeZone", "weeklyWindows", "blackouts", "consultationDurationSeconds", "beforeBufferSeconds", "afterBufferSeconds", "slotIncrementSeconds", "horizonSeconds", "slotSetTtlSeconds", "travelPolicyRef", "locationPolicyRef", "serviceZonePolicyRef", "capacityPolicyRef", "ordering", "sourceEvidenceIds"],
+      "properties": {
+        "messageType": {"const": "availability_policy"}, "schemaVersion": {"const": "availability-booking/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "policyId": {"$ref": "#/$defs/Id"}, "version": {"type": "integer", "minimum": 1}, "owner": {"$ref": "#/$defs/OwnerRef"}, "lifecycle": {"enum": ["draft", "active", "superseded", "retired"]}, "effectiveFrom": {"$ref": "#/$defs/Time"}, "effectiveTo": {"oneOf": [{"$ref": "#/$defs/Time"}, {"type": "null"}]}, "supersedesRecordId": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]},
+        "timeZone": {"$ref": "#/$defs/Id"}, "weeklyWindows": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/WeeklyWindow"}}, "blackouts": {"type": "array", "items": {"$ref": "#/$defs/Interval"}},
+        "consultationDurationSeconds": {"type": "integer", "minimum": 300, "maximum": 14400}, "beforeBufferSeconds": {"type": "integer", "minimum": 0, "maximum": 14400}, "afterBufferSeconds": {"type": "integer", "minimum": 0, "maximum": 14400}, "slotIncrementSeconds": {"type": "integer", "minimum": 300, "maximum": 3600}, "horizonSeconds": {"type": "integer", "minimum": 3600, "maximum": 7776000}, "slotSetTtlSeconds": {"type": "integer", "minimum": 30, "maximum": 900},
+        "travelPolicyRef": {"$ref": "#/$defs/RecordRef"}, "locationPolicyRef": {"$ref": "#/$defs/RecordRef"}, "serviceZonePolicyRef": {"$ref": "#/$defs/RecordRef"}, "capacityPolicyRef": {"$ref": "#/$defs/RecordRef"}, "ordering": {"const": "starts_at_then_location_id_then_slot_id"}, "sourceEvidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    },
+    "CalendarSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "snapshotId", "providerBindingRef", "observedAt", "rangeStart", "rangeEnd", "providerWatermark", "providerVersion", "busyIntervals", "snapshotDigest", "sourceEvidenceIds"],
+      "properties": {"messageType": {"const": "calendar_snapshot"}, "schemaVersion": {"const": "availability-booking/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "snapshotId": {"$ref": "#/$defs/Id"}, "providerBindingRef": {"$ref": "#/$defs/RecordRef"}, "observedAt": {"$ref": "#/$defs/Time"}, "rangeStart": {"$ref": "#/$defs/Time"}, "rangeEnd": {"$ref": "#/$defs/Time"}, "providerWatermark": {"$ref": "#/$defs/Id"}, "providerVersion": {"$ref": "#/$defs/Id"}, "busyIntervals": {"type": "array", "items": {"$ref": "#/$defs/Interval"}}, "snapshotDigest": {"$ref": "#/$defs/Digest"}, "sourceEvidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}}
+    },
+    "Slot": {"type": "object", "additionalProperties": false, "required": ["slotId", "startsAt", "endsAt", "timeZone", "locationId", "resourceIds", "slotDigest"], "properties": {"slotId": {"$ref": "#/$defs/Id"}, "startsAt": {"$ref": "#/$defs/Time"}, "endsAt": {"$ref": "#/$defs/Time"}, "timeZone": {"$ref": "#/$defs/Id"}, "locationId": {"$ref": "#/$defs/Id"}, "resourceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "slotDigest": {"$ref": "#/$defs/Digest"}}},
+    "SlotSet": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "slotSetId", "journeyRef", "readinessDecisionRef", "policyRef", "snapshotRef", "providerBindingRef", "derivedAt", "derivedBy", "expiresAt", "inputDigest", "slots", "reasonCodes"],
+      "properties": {"messageType": {"const": "slot_set"}, "schemaVersion": {"const": "availability-booking/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "slotSetId": {"$ref": "#/$defs/Id"}, "journeyRef": {"$ref": "#/$defs/RecordRef"}, "readinessDecisionRef": {"$ref": "#/$defs/RecordRef"}, "policyRef": {"$ref": "#/$defs/RecordRef"}, "snapshotRef": {"$ref": "#/$defs/RecordRef"}, "providerBindingRef": {"$ref": "#/$defs/RecordRef"}, "derivedAt": {"$ref": "#/$defs/Time"}, "derivedBy": {"$ref": "#/$defs/DeriverRef"}, "expiresAt": {"$ref": "#/$defs/Time"}, "inputDigest": {"$ref": "#/$defs/Digest"}, "slots": {"type": "array", "items": {"$ref": "#/$defs/Slot"}}, "reasonCodes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}}
+    },
+    "BookingCommand": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "commandId", "commandKind", "journeyRef", "appointmentRef", "expectedAppointmentVersion", "slotSetRef", "selectedSlotId", "selectedSlotDigest", "providerBindingRef", "providerWatermark", "actorRef", "authorizationRef", "effectIntentRef", "payloadDigest", "idempotencyKey", "expiresAt"],
+      "properties": {"messageType": {"const": "booking_command"}, "schemaVersion": {"const": "availability-booking/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "commandId": {"$ref": "#/$defs/Id"}, "commandKind": {"enum": ["book", "reschedule", "cancel"]}, "journeyRef": {"$ref": "#/$defs/RecordRef"}, "appointmentRef": {"oneOf": [{"$ref": "#/$defs/RecordRef"}, {"type": "null"}]}, "expectedAppointmentVersion": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]}, "slotSetRef": {"oneOf": [{"$ref": "#/$defs/RecordRef"}, {"type": "null"}]}, "selectedSlotId": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]}, "selectedSlotDigest": {"oneOf": [{"$ref": "#/$defs/Digest"}, {"type": "null"}]}, "providerBindingRef": {"$ref": "#/$defs/RecordRef"}, "providerWatermark": {"$ref": "#/$defs/Id"}, "actorRef": {"$ref": "#/$defs/RecordRef"}, "authorizationRef": {"$ref": "#/$defs/RecordRef"}, "effectIntentRef": {"$ref": "#/$defs/RecordRef"}, "payloadDigest": {"$ref": "#/$defs/Digest"}, "idempotencyKey": {"$ref": "#/$defs/Id"}, "expiresAt": {"$ref": "#/$defs/Time"}}
+    },
+    "BookingResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "resultId", "commandRef", "state", "providerBindingRef", "providerRequestId", "providerEventId", "providerVersion", "providerReceiptRef", "observedAt", "reasonCodes", "evidenceIds"],
+      "properties": {"messageType": {"const": "booking_result"}, "schemaVersion": {"const": "availability-booking/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "resultId": {"$ref": "#/$defs/Id"}, "commandRef": {"$ref": "#/$defs/RecordRef"}, "state": {"enum": ["accepted", "provider_pending", "confirmed", "cancelled", "stale_slot", "calendar_conflict", "version_conflict", "rejected", "unknown_outcome", "failed", "reconciled_succeeded", "reconciled_failed"]}, "providerBindingRef": {"$ref": "#/$defs/RecordRef"}, "providerRequestId": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]}, "providerEventId": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]}, "providerVersion": {"oneOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]}, "providerReceiptRef": {"oneOf": [{"$ref": "#/$defs/RecordRef"}, {"type": "null"}]}, "observedAt": {"$ref": "#/$defs/Time"}, "reasonCodes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "evidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}}
+    },
+    "BookingReconciliation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "reconciliationId", "commandRef", "priorResultRef", "providerBindingRef", "providerObservationRef", "result", "appointmentRef", "appointmentVersion", "derivedAt", "derivedBy", "reasonCodes", "evidenceIds"],
+      "properties": {"messageType": {"const": "booking_reconciliation"}, "schemaVersion": {"const": "availability-booking/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "reconciliationId": {"$ref": "#/$defs/Id"}, "commandRef": {"$ref": "#/$defs/RecordRef"}, "priorResultRef": {"$ref": "#/$defs/RecordRef"}, "providerBindingRef": {"$ref": "#/$defs/RecordRef"}, "providerObservationRef": {"$ref": "#/$defs/RecordRef"}, "result": {"enum": ["confirmed", "cancelled", "failed", "still_unknown", "conflict_requires_resolution"]}, "appointmentRef": {"oneOf": [{"$ref": "#/$defs/RecordRef"}, {"type": "null"}]}, "appointmentVersion": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]}, "derivedAt": {"$ref": "#/$defs/Time"}, "derivedBy": {"$ref": "#/$defs/DeriverRef"}, "reasonCodes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "evidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}}
+    }
+  }
+}

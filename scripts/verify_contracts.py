@@ -56,6 +56,8 @@ def main() -> None:
         "ot01_ingress": ROOT / "OT01-INGRESS.schema.json",
         "connector_gateway": ROOT / "CONNECTOR-GATEWAY.schema.json",
         "release_activation": ROOT / "RELEASE-ACTIVATION.schema.json",
+        "qualification_readiness": ROOT / "QUALIFICATION-READINESS.schema.json",
+        "availability_booking": ROOT / "AVAILABILITY-BOOKING.schema.json",
     }
     for entry in manifest["contracts"]:
         packaged = PACKAGE / entry["resource"]

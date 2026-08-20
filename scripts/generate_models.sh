@@ -33,7 +33,9 @@ for specification in \
   'TELEMETRY-SLO.schema.json:telemetry_slo' \
   'OT01-INGRESS.schema.json:ot01_ingress' \
   'CONNECTOR-GATEWAY.schema.json:connector_gateway' \
-  'RELEASE-ACTIVATION.schema.json:release_activation'
+  'RELEASE-ACTIVATION.schema.json:release_activation' \
+  'QUALIFICATION-READINESS.schema.json:qualification_readiness' \
+  'AVAILABILITY-BOOKING.schema.json:availability_booking'
 do
   schema="${specification%%:*}"
   module="${specification##*:}"

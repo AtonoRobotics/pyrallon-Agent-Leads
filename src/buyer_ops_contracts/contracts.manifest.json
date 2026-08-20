@@ -1,5 +1,5 @@
 {
-  "manifestVersion": "1.0.0",
+  "manifestVersion": "1.1.0",
   "contracts": [
     {
       "name": "authority_activation_fair_housing",
@@ -117,6 +117,24 @@
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.1.0"
+    },
+    {
+      "name": "qualification_readiness",
+      "resource": "schemas/qualification_readiness.schema.json",
+      "sha256": "bd42acfdfd0ced99edf8fc2b9e0d910d0ba2fd8a88383e87ea12732d9292a425",
+      "schemaId": "https://buyer-ops.example/schemas/qualification-readiness/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "availability_booking",
+      "resource": "schemas/availability_booking.schema.json",
+      "sha256": "ad7d4a416f55338829c72777035adece4b689245c237b5fe28ac47ae6ee7dc47",
+      "schemaId": "https://buyer-ops.example/schemas/availability-booking/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
     }
   ]
 }
