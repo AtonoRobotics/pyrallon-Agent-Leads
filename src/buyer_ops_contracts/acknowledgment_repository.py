@@ -184,6 +184,9 @@ class AcknowledgmentRepository:
                 observed = datetime.fromisoformat(outcome["observedAt"].replace("Z", "+00:00"))
                 if observed < captured:
                     raise ValueError("acknowledgment outcome cannot precede capture")
+                decided = datetime.fromisoformat(decision["decidedAt"].replace("Z", "+00:00"))
+                if observed < decided:
+                    raise ValueError("acknowledgment outcome cannot precede decision")
                 if outcome["state"] == "failed" and "failureCode" not in outcome:
                     raise ValueError("failed acknowledgment outcome requires failureCode")
                 if outcome["state"] == "suppressed" and not decision["optOutMatched"]:

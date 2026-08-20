@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
 from typing import cast
 
+import pytest
 import rfc8785
 
 from buyer_ops_contracts.acknowledgment import normalize_opt_out_text
@@ -96,3 +98,23 @@ def test_admit_config_locks_stable_identity_before_current_version_lookup() -> N
     assert "ingress_ack_configs_current" in statements[2][0]
     assert connection.commits == 1
     assert connection.rollbacks == 0
+
+
+def test_outcome_cannot_precede_the_exact_decision() -> None:
+    fixtures = json.loads((ROOT / "tests/fixtures/closure/ot01_ingress_valid.json").read_text())
+    decision = fixtures["AcknowledgmentDecision"]
+    outcome = copy.deepcopy(fixtures["AcknowledgmentOutcome"])
+    outcome.update(
+        captureEventId=decision["externalMessageIdentityRef"]["recordId"],
+        captureCommittedAt=decision["capturedAt"],
+        observedAt="2030-01-01T00:00:00.500000Z",
+    )
+    connection = _ReplayConnection((decision,))
+
+    with pytest.raises(ValueError, match="precede decision"):
+        AcknowledgmentRepository(
+            cast(Connection, connection), tenant_id=decision["tenantId"]
+        ).admit_outcome(outcome)
+
+    assert connection.commits == 0
+    assert connection.rollbacks == 1
