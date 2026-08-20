@@ -173,8 +173,10 @@ class ControlPlane:
             if method == "POST" and route == "/v1/commands":
                 return 200, self._command(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/habitat/evaluate-authority":
+                self._require_actor(tenant_id, actor_id)
                 return 200, self._evaluate(tenant_id, payload)
             if method == "POST" and route == "/v1/habitat/admit-event":
+                self._require_actor(tenant_id, actor_id)
                 return 200, self._admit(tenant_id, payload)
             if method == "POST" and route == "/v1/ingress":
                 return 200, self._ingress(tenant_id, payload)

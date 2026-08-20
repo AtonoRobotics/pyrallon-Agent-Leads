@@ -337,6 +337,8 @@ def test_operator_read_routes_require_authenticated_actor(route: str) -> None:
         ("GET", "/v1/activation"),
         ("GET", "/v1/canonical/record-1"),
         ("POST", "/v1/canonical"),
+        ("POST", "/v1/habitat/evaluate-authority"),
+        ("POST", "/v1/habitat/admit-event"),
         ("POST", "/v1/actor-authorizations"),
         ("POST", "/v1/operator-policies"),
         ("POST", "/v1/activation/evidence"),
@@ -360,9 +362,14 @@ def test_operator_routes_reject_actor_without_current_tenancy(method: str, route
 
 @pytest.mark.parametrize(
     "route",
-    ["/v1/activation/evidence", "/v1/activation/decisions"],
+    [
+        "/v1/activation/evidence",
+        "/v1/activation/decisions",
+        "/v1/habitat/evaluate-authority",
+        "/v1/habitat/admit-event",
+    ],
 )
-def test_activation_mutation_routes_require_authenticated_actor(route: str) -> None:
+def test_authority_routes_require_authenticated_actor(route: str) -> None:
     status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
         "POST",
         route,
