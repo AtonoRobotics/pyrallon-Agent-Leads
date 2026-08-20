@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import rfc8785
 from cryptography.exceptions import InvalidSignature
@@ -61,7 +61,7 @@ class PostgresCapabilityDisablementVerifier:
                 """
                 SELECT payload FROM release_activation_decisions
                 WHERE tenant_id = %s AND capability_id = %s
-                ORDER BY decided_at DESC
+                ORDER BY activation_version DESC
                 LIMIT 1
                 """.strip(),
                 (self._tenant_id, capability_id),
@@ -98,7 +98,9 @@ class ActivationController:
             raise ValueError("legacy gate evidence is audit-only and cannot satisfy activation")
         return PostgresClosureRepository(self._connection, tenant_id=self._tenant_id).save(evidence)
 
-    def record_decision(self, decision: dict[str, Any]) -> dict[str, Any]:
+    def record_decision(
+        self, decision: dict[str, Any], *, evaluated_at: datetime | None = None
+    ) -> dict[str, Any]:
         validate_record(decision, "release_activation")
         if decision.get("messageType") != "activation_decision":
             raise ValueError("messageType must be activation_decision")
@@ -106,20 +108,46 @@ class ActivationController:
             raise ValueError("activation decision tenant does not match repository tenant")
         if self._signature_verifier is None or not self._signature_verifier.verify(decision):
             raise ValueError("activation decision signature is invalid")
-        self._validate_decision_evidence(decision)
+        del evaluated_at
         try:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"release-activation:{self._tenant_id}:{decision['capabilityId']}",),
+                )
+                cursor.execute(
+                    """
+                    SELECT COALESCE(MAX(activation_version), 0)
+                    FROM release_activation_decisions
+                    WHERE tenant_id = %s AND capability_id = %s
+                    """.strip(),
+                    (self._tenant_id, decision["capabilityId"]),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise RuntimeError("activation version unavailable")
+                current_version = cast(int, row[0])
+                if int(decision["expectedActivationVersion"]) != current_version:
+                    raise ValueError("activation version conflict")
+                records = self._load_current_evidence_on(
+                    cursor,
+                    [*decision["evidenceIds"], *decision["accessibilityEvidenceIds"]],
+                    for_share=True,
+                )
+                self._validate_decision_evidence(decision, records=records)
+                cursor.execute(
                     """
                     INSERT INTO release_activation_decisions (
-                        tenant_id, decision_id, capability_id, payload, decided_at
-                    ) VALUES (%s, %s, %s, %s, %s)
+                        tenant_id, decision_id, capability_id, activation_version,
+                        payload, decided_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
                     """.strip(),
                     (
                         self._tenant_id,
                         decision["decisionId"],
                         decision["capabilityId"],
+                        current_version + 1,
                         Jsonb(decision),
                         decision["decidedAt"],
                     ),
@@ -138,7 +166,7 @@ class ActivationController:
                     """
                     SELECT payload FROM release_activation_decisions
                     WHERE tenant_id = %s AND capability_id = %s
-                    ORDER BY decided_at DESC
+                    ORDER BY activation_version DESC
                     LIMIT 1
                     """.strip(),
                     (self._tenant_id, capability_id),
@@ -154,13 +182,41 @@ class ActivationController:
         return payload if isinstance(payload, dict) else None
 
     def capability_activated(self, capability_id: str) -> bool:
-        decision = self.current_decision(capability_id)
-        if decision is None or decision.get("decision") != "activate":
-            return False
         try:
-            self._validate_decision_evidence(decision, evaluated_at=datetime.now(UTC))
-        except (ValueError, RuntimeError):
+            with self._connection.cursor() as cursor:
+                self._set_tenant(cursor)
+                cursor.execute(
+                    """
+                    SELECT payload FROM release_activation_decisions
+                    WHERE tenant_id = %s AND capability_id = %s
+                    ORDER BY activation_version DESC
+                    LIMIT 1 FOR SHARE
+                    """.strip(),
+                    (self._tenant_id, capability_id),
+                )
+                row = cursor.fetchone()
+                if row is None or not isinstance(row[0], dict):
+                    self._connection.commit()
+                    return False
+                decision = row[0]
+                if decision.get("decision") != "activate":
+                    self._connection.commit()
+                    return False
+                records = self._load_current_evidence_on(
+                    cursor,
+                    [*decision["evidenceIds"], *decision["accessibilityEvidenceIds"]],
+                    for_share=True,
+                )
+                self._validate_decision_evidence(
+                    decision, records=records, evaluated_at=datetime.now(UTC)
+                )
+        except (ValueError, RuntimeError, KeyError):
+            self._connection.rollback()
             return False
+        except Exception:
+            self._connection.rollback()
+            raise
+        self._connection.commit()
         return True
 
     def list_decisions(self) -> list[dict[str, Any]]:
@@ -172,7 +228,7 @@ class ActivationController:
                     SELECT DISTINCT ON (capability_id) payload
                     FROM release_activation_decisions
                     WHERE tenant_id = %s
-                    ORDER BY capability_id, decided_at DESC
+                    ORDER BY capability_id, activation_version DESC
                     """.strip(),
                     (self._tenant_id,),
                 )
@@ -184,7 +240,11 @@ class ActivationController:
         return [row[0] for row in rows if isinstance(row[0], dict)]
 
     def _validate_decision_evidence(
-        self, decision: dict[str, Any], *, evaluated_at: datetime | None = None
+        self,
+        decision: dict[str, Any],
+        *,
+        records: list[dict[str, Any]] | None = None,
+        evaluated_at: datetime | None = None,
     ) -> None:
         if self._evaluator is None:
             raise ValueError("release evidence evaluator is required")
@@ -197,7 +257,7 @@ class ActivationController:
         if tuple(sorted(decision["requiredGateIds"])) != required:
             raise ValueError("activation required gate set mismatch")
         all_ids = [*decision["evidenceIds"], *decision["accessibilityEvidenceIds"]]
-        records = self._load_current_evidence(all_ids)
+        records = self._load_current_evidence(all_ids) if records is None else records
         if len(records) != len(set(all_ids)):
             raise ValueError("activation evidence is missing or ambiguous")
         by_type: dict[str, list[dict[str, Any]]] = {}
@@ -242,6 +302,17 @@ class ActivationController:
             raise
         self._connection.commit()
         return [row[0] for row in rows if isinstance(row[0], dict)]
+
+    def _load_current_evidence_on(
+        self, cursor: Any, evidence_ids: list[str], *, for_share: bool
+    ) -> list[dict[str, Any]]:
+        locking = " FOR SHARE" if for_share else ""
+        cursor.execute(
+            "SELECT payload FROM closure_records_current "
+            "WHERE tenant_id = %s AND record_id = ANY(%s)" + locking,
+            (self._tenant_id, evidence_ids),
+        )
+        return [row[0] for row in cursor.fetchall() if isinstance(row[0], dict)]
 
     def _set_tenant(self, cursor: Any) -> None:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))

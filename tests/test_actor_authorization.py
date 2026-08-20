@@ -6,6 +6,7 @@ import pytest
 
 from buyer_ops_contracts.actor_authorization import (
     ActorTenantAuthorizationRepository,
+    admit_published_record,
     authorize_operator_command,
 )
 from buyer_ops_contracts.authority_activation_fair_housing import (
@@ -199,6 +200,53 @@ def test_command_authority_is_exactly_tenant_scope_and_version_bound() -> None:
             authorize_operator_command(
                 changed, _command(), actor_id="actor-1", tenant_id="tenant-1"
             )
+
+
+def test_admit_published_record_routes_actor_tenant_authorization() -> None:
+    connection = _Connection()
+    saved = admit_published_record(connection, _grant(), now=datetime(2030, 1, 2, tzinfo=UTC))
+    assert saved["recordType"] == "ActorTenantAuthorization"
+    assert connection.commits == 1
+    assert any(
+        "actor_tenant_authorizations_current" in sql
+        for sql, _ in connection.cursor_instance.statements
+    )
+
+
+def test_admit_published_record_routes_operator_policy() -> None:
+    policy = {
+        "message_type": "operator_policy",
+        "schema_version": "operator-surface/1.1.0",
+        "policy_id": "policy-1",
+        "tenant_id": "tenant-1",
+        "record_version": 1,
+        "effective_from": "2030-01-01T00:00:00Z",
+        "status": "active",
+        "command_rules": [
+            {
+                "command_type": "request_reconciliation",
+                "action_class": "request_reconciliation",
+                "target_record_types": ["EffectAttempt"],
+                "actor_types": ["license_holder"],
+            }
+        ],
+        "evidence_refs": [
+            {
+                "record_id": "evidence-policy-1",
+                "record_type": "Evidence",
+                "version": 1,
+                "digest": "sha256:" + "a" * 64,
+                "captured_at": "2030-01-01T00:00:00Z",
+            }
+        ],
+    }
+    connection = _Connection()
+    saved = admit_published_record(connection, policy)
+    assert saved["message_type"] == "operator_policy"
+    assert saved["policy_id"] == "policy-1"
+    assert any(
+        "operator_policies_current" in sql for sql, _ in connection.cursor_instance.statements
+    )
 
 
 def test_command_authority_rejects_missing_or_legacy_authorization_reference() -> None:

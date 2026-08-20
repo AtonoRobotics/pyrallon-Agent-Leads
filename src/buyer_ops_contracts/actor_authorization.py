@@ -8,8 +8,26 @@ from typing import Any, cast
 from psycopg.types.json import Jsonb
 
 from .authority_activation_fair_housing import validate_authority_activation_fair_housing_semantics
-from .canonical_repository import Connection
+from .canonical_repository import CanonicalRepository, Connection
 from .structural import validate_record
+
+
+def admit_published_record(
+    connection: Connection, record: dict[str, Any], *, now: datetime | None = None
+) -> dict[str, Any]:
+    """Admit an OPEN-025 grant or a canonical ontology record. No demo tenant is created."""
+    tenant_id = str(record.get("tenantId") or record.get("tenant_id") or "")
+    if not tenant_id:
+        raise ValueError("tenantId is required")
+    if record.get("recordType") == "ActorTenantAuthorization":
+        return ActorTenantAuthorizationRepository(connection, tenant_id=tenant_id).save(
+            record, now=now
+        )
+    if record.get("message_type") == "operator_policy":
+        from .operator_policy import OperatorPolicyRepository
+
+        return OperatorPolicyRepository(connection, tenant_id=tenant_id).admit(record)
+    return CanonicalRepository(connection, tenant_id=tenant_id).save(record)
 
 
 class ActorTenantAuthorizationRepository:

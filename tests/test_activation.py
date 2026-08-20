@@ -9,9 +9,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from buyer_ops_contracts.activation import Ed25519ActivationDecisionSignatureVerifier
 
 
-def test_activation_signature_verifier_binds_exact_decision_material() -> None:
-    private_key = Ed25519PrivateKey.generate()
-    decision = {
+def _decision() -> dict:
+    return {
         "messageType": "activation_decision",
         "schemaVersion": "release-activation/1.1.0",
         "decisionId": "decision-1",
@@ -35,6 +34,11 @@ def test_activation_signature_verifier_binds_exact_decision_material() -> None:
         "rollbackState": "armed",
         "readbackRequired": True,
     }
+
+
+def test_activation_signature_verifier_binds_exact_decision_material() -> None:
+    private_key = Ed25519PrivateKey.generate()
+    decision = _decision()
     signature = private_key.sign(rfc8785.dumps(decision))
     decision["signature"] = {
         "keyId": "release-key-1",
