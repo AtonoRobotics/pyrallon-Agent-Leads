@@ -191,8 +191,10 @@ class ControlPlane:
                 self._require_actor(tenant_id, actor_id)
                 return 200, {"decisions": self._activation(tenant_id)}
             if method == "POST" and route == "/v1/activation/evidence":
+                self._require_actor(tenant_id, actor_id)
                 return 200, self._gate_evidence(tenant_id, payload)
             if method == "POST" and route == "/v1/activation/decisions":
+                self._require_actor(tenant_id, actor_id)
                 return 200, self._activation_decision(tenant_id, payload)
             if method == "POST" and route == "/v1/telemetry/observations":
                 return 200, self._telemetry(tenant_id, payload)

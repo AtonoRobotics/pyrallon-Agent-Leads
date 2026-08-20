@@ -312,6 +312,8 @@ def test_operator_read_routes_require_authenticated_actor(route: str) -> None:
         ("POST", "/v1/canonical"),
         ("POST", "/v1/actor-authorizations"),
         ("POST", "/v1/operator-policies"),
+        ("POST", "/v1/activation/evidence"),
+        ("POST", "/v1/activation/decisions"),
     ],
 )
 def test_operator_routes_reject_actor_without_current_tenancy(method: str, route: str) -> None:
@@ -327,6 +329,24 @@ def test_operator_routes_reject_actor_without_current_tenancy(method: str, route
     )
     assert status == 403
     assert payload["code"] == "authority_denied"
+
+
+@pytest.mark.parametrize(
+    "route",
+    ["/v1/activation/evidence", "/v1/activation/decisions"],
+)
+def test_activation_mutation_routes_require_authenticated_actor(route: str) -> None:
+    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+        "POST",
+        route,
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+        },
+        b"{}",
+    )
+    assert status == 401
+    assert payload["code"] == "authentication_required"
 
 
 def test_invalid_operator_command_returns_typed_operator_error() -> None:
