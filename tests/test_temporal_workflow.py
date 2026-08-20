@@ -1,6 +1,5 @@
 import asyncio
 import os
-from pathlib import Path
 
 import pytest
 from temporalio import activity
@@ -131,14 +130,10 @@ async def _wait_for_version(handle, version: int) -> dict:
     raise AssertionError(f"workflow did not reconcile canonical version {version}")
 
 
-def _test_server_options() -> dict:
-    cached_server = Path("/tmp/temporal-test-server-sdk-python-1.30.0")
-    existing_server = os.environ.get("TEMPORAL_TEST_SERVER_PATH")
-    if existing_server is None and cached_server.is_file():
-        existing_server = str(cached_server)
+def _test_server_options() -> dict[str, object]:
     return {
-        "test_server_existing_path": existing_server,
-        "test_server_download_version": "1.30.0",
+        "test_server_existing_path": os.environ.get("TEMPORAL_TEST_SERVER_PATH"),
+        "test_server_download_version": "default",
     }
 
 

@@ -15,7 +15,7 @@ Canonical reference mappings and the bindings that remain unavailable are enumer
 - Python 3.12
 - `uv`
 - PostgreSQL 17 for integration verification
-- Temporal Python SDK 1.30.0; the SDK-managed 1.30.0 test server for workflow replay tests
+- Temporal Python SDK 1.30.0 and its SDK-selected compatible test server for workflow replay tests
 - Docker only when using the disposable local PostgreSQL workflow
 
 Install the exact locked runtime and development dependencies:
@@ -81,7 +81,7 @@ uv run pytest tests/test_postgres_integration.py
 ```
 
 CI installs from `uv.lock` with uv 0.11.16 and runs the same suite against a digest-pinned PostgreSQL
-service plus the version-pinned Temporal test server.
+service plus the compatible test server selected by the exactly pinned Temporal SDK.
 
 ## Migration order
 
