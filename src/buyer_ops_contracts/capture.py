@@ -338,4 +338,9 @@ class FormCapture:
         ]
         if not journeys:
             return None
-        return str(sorted(journeys, key=lambda item: str(item.get("createdAt", "")))[-1]["id"])
+        if len(journeys) != 1:
+            raise CaptureIncomplete(
+                "configuration_incomplete",
+                "multiple BuyerJourneys match the resolved person; explicit journey binding is required",
+            )
+        return str(journeys[0]["id"])

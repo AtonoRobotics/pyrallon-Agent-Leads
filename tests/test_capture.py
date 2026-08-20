@@ -211,6 +211,73 @@ def test_after_ingress_reuses_person_and_journey_for_matching_fingerprint() -> N
     assert starts == [{"tenant_id": "tenant-1", "journey_id": "journey-existing"}]
 
 
+def test_after_ingress_rejects_ambiguous_journeys_for_matching_identity() -> None:
+    starts: list[dict] = []
+    mapping = _mapping()
+
+    def list_by_type(record_type: str) -> list[dict]:
+        if record_type == "BuyingParty":
+            return [{"id": "party-1", "members": [{"personId": "person-1"}]}]
+        if record_type == "BuyerJourney":
+            return [
+                {
+                    "id": "journey-first",
+                    "buyingPartyId": "party-1",
+                    "createdAt": "2026-08-19T12:00:00Z",
+                },
+                {
+                    "id": "journey-second",
+                    "buyingPartyId": "party-1",
+                    "createdAt": "2026-08-20T12:00:00Z",
+                },
+            ]
+        raise AssertionError(f"unexpected list_by_type({record_type})")
+
+    with (
+        patch.object(IdentityRepository, "get_by_fingerprint", return_value=mapping),
+        patch.object(CanonicalRepository, "list_by_type", side_effect=list_by_type),
+        pytest.raises(CaptureIncomplete) as raised,
+    ):
+        FormCapture(
+            object(),
+            tenant_id="tenant-1",
+            start_journey=lambda **kwargs: starts.append(kwargs) or None,
+        ).after_ingress(
+            _envelope(),
+            {"observedAt": "2026-08-20T12:00:00Z"},
+            RegisteredInboundEvent("inbound:2", duplicate=False, duplicate_of=None),
+            display_name="Jordan Buyer",
+        )
+
+    assert raised.value.code == "configuration_incomplete"
+    assert starts == []
+
+
+def test_after_ingress_does_not_create_or_start_a_journey_when_none_is_bound() -> None:
+    starts: list[dict] = []
+    mapping = _mapping()
+
+    with (
+        patch.object(IdentityRepository, "get_by_fingerprint", return_value=mapping),
+        patch.object(CanonicalRepository, "list_by_type", return_value=[]),
+        patch.object(IdentityRepository, "admit_created_bundle") as admit,
+    ):
+        result = FormCapture(
+            object(),
+            tenant_id="tenant-1",
+            start_journey=lambda **kwargs: starts.append(kwargs) or None,
+        ).after_ingress(
+            _envelope(),
+            {"observedAt": "2026-08-20T12:00:00Z"},
+            RegisteredInboundEvent("inbound:3", duplicate=False, duplicate_of=None),
+            display_name="Jordan Buyer",
+        )
+
+    assert result["journey_id"] is None
+    assert starts == []
+    admit.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "holders",
     [
