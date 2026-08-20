@@ -256,7 +256,12 @@ class ControlPlane:
                 status = 422
             return status, _error(exc.code, str(exc))
         except ConnectorDenied as exc:
-            return 403, _error(exc.code, exc.detail)
+            status = {
+                "configuration_incomplete": 422,
+                "validation_failed": 422,
+                "version_conflict": 409,
+            }.get(exc.code, 403)
+            return status, _error(exc.code, exc.detail)
         except ContractViolation as exc:
             return 422, {
                 "code": "validation_failed",
@@ -516,8 +521,7 @@ class ControlPlane:
         connection = self._connection()
         try:
             repo = CanonicalRepository(connection, tenant_id=tenant_id)
-            activation = self._activation_controller(connection, tenant_id)
-            rows = ConnectorGateway(repo, activation, tenant_id=tenant_id).inventory()
+            rows = ConnectorGateway(repo, tenant_id=tenant_id).inventory()
             bindings = self._connector_auth(connection, tenant_id).bindings()
             for row in rows:
                 bound = bindings.get(str(row.get("grant_id")), {})
@@ -562,10 +566,7 @@ class ControlPlane:
         connection = self._connection()
         try:
             repo = CanonicalRepository(connection, tenant_id=tenant_id)
-            activation = self._activation_controller(connection, tenant_id)
-            return ConnectorGateway(repo, activation, tenant_id=tenant_id).invoke(
-                request, permit_digest=permit
-            )
+            return ConnectorGateway(repo, tenant_id=tenant_id).invoke(request, permit_digest=permit)
         finally:
             connection.close()
 

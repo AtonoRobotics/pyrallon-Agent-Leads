@@ -12,6 +12,7 @@ from test_canonical_repository import Connection, _license_holder
 from test_ingress import _envelope, _message_identity
 
 from buyer_ops_contracts.canonical_repository import Connection as RepositoryConnection
+from buyer_ops_contracts.connector_service import ConnectorDenied
 from buyer_ops_contracts.control_plane import ControlPlane, IngressProviderRuntimeFactory
 from buyer_ops_contracts.ingress import InboundEnvelope, RegisteredInboundEvent
 from buyer_ops_contracts.ingress_service import IngressProviderRuntime
@@ -466,6 +467,41 @@ def test_ingress_envelope_uses_deployment_supplied_provider_runtime() -> None:
     assert status == 403
     assert payload["code"] == "ingress_authentication_failed"
     assert seen_tenants == ["tenant-1"]
+
+
+@pytest.mark.parametrize(
+    ("code", "expected_status"),
+    [
+        ("configuration_incomplete", 422),
+        ("validation_failed", 422),
+        ("version_conflict", 409),
+        ("authority_denied", 403),
+        ("connector_revoked", 403),
+    ],
+)
+def test_connector_http_errors_preserve_typed_outcomes(code: str, expected_status: int) -> None:
+    plane = _plane(Connection())
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+
+    def _deny(tenant_id: str, request: dict[str, Any], permit: str) -> dict[str, Any]:
+        del tenant_id, request, permit
+        raise ConnectorDenied(code, "connector denial detail")
+
+    plane._invoke = _deny  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        "POST",
+        "/v1/connectors/invoke",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+            "x-buyer-ops-permit": "sha256:" + "b" * 64,
+        },
+        b"{}",
+    )
+
+    assert status == expected_status
+    assert payload == {"code": code, "detail": "connector denial detail"}
 
 
 def test_invalid_operator_command_returns_typed_operator_error() -> None:

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
-from .activation import ActivationController
-from .canonical_repository import CanonicalRepository
 from .structural import validate_record
 
 
@@ -16,16 +14,20 @@ class ConnectorDenied(RuntimeError):
         super().__init__(detail)
 
 
+class ConnectorRepository(Protocol):
+    def get(self, record_id: str) -> dict[str, Any] | None: ...
+
+    def list_by_type(self, record_type: str) -> list[dict[str, Any]]: ...
+
+
 class ConnectorGateway:
     def __init__(
         self,
-        repository: CanonicalRepository,
-        activation: ActivationController,
+        repository: ConnectorRepository,
         *,
         tenant_id: str,
     ) -> None:
         self._repository = repository
-        self._activation = activation
         self._tenant_id = tenant_id
 
     def inventory(self) -> list[dict[str, Any]]:
@@ -62,6 +64,6 @@ class ConnectorGateway:
         if request["capability"] not in [str(item) for item in grant.get("capabilities", [])]:
             raise ConnectorDenied("authority_denied", "grant lacks required capability")
         raise ConnectorDenied(
-            "connector_revoked",
+            "configuration_incomplete",
             "live provider adapters are not activated for this environment",
         )
