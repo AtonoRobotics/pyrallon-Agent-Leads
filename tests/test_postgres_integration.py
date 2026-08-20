@@ -479,6 +479,40 @@ def test_concurrent_operator_policy_initial_versions_have_one_winner(
         ).fetchone() == (1,)
 
 
+def test_concurrent_acknowledgment_config_initial_versions_have_one_winner(
+    postgres_dsn: str,
+) -> None:
+    fixtures = json.loads((ROOT / "tests/fixtures/closure/ot01_ingress_valid.json").read_text())
+    policy = copy.deepcopy(fixtures["AcknowledgmentPolicy"])
+    policy.update(tenantId="tenant-a", policyId="ack-policy-version-race")
+    barrier = threading.Barrier(2)
+
+    def admit(candidate: dict[str, Any]) -> str:
+        with _runtime_connection(postgres_dsn) as connection:
+            repository = AcknowledgmentRepository(connection, tenant_id="tenant-a")
+            barrier.wait()
+            try:
+                repository.admit_config(candidate)
+                return "admitted"
+            except VersionConflict:
+                return "version_conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(admit, [policy, copy.deepcopy(policy)]))
+    assert sorted(outcomes) == ["admitted", "version_conflict"]
+
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM ingress_ack_config_versions WHERE config_id = %s",
+            (policy["policyId"],),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT record_version FROM ingress_ack_configs_current WHERE config_id = %s",
+            (policy["policyId"],),
+        ).fetchone() == (1,)
+
+
 def _inbound_envelope(
     provider_event_id: str = "provider-event-1", *, digest: str | None = None
 ) -> InboundEnvelope:

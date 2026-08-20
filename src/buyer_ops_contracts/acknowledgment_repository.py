@@ -44,6 +44,10 @@ class AcknowledgmentRepository:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"acknowledgment-config:{self._tenant_id}:{kind}:{config_id}",),
+                )
+                cursor.execute(
                     "SELECT record_version,status FROM ingress_ack_configs_current WHERE tenant_id=%s AND config_type=%s AND config_id=%s FOR UPDATE",
                     (self._tenant_id, kind, config_id),
                 )

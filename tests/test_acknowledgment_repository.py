@@ -76,3 +76,23 @@ def test_decide_locks_idempotency_key_before_replay_lookup() -> None:
     assert "ingress_acknowledgment_decisions" in statements[2][0]
     assert connection.commits == 1
     assert connection.rollbacks == 0
+
+
+def test_admit_config_locks_stable_identity_before_current_version_lookup() -> None:
+    fixtures = json.loads((ROOT / "tests/fixtures/closure/ot01_ingress_valid.json").read_text())
+    policy = fixtures["AcknowledgmentPolicy"]
+    connection = _ReplayConnection(None)
+
+    AcknowledgmentRepository(
+        cast(Connection, connection), tenant_id=policy["tenantId"]
+    ).admit_config(policy)
+
+    statements = connection.cursor_instance.executions
+    assert "set_config" in statements[0][0]
+    assert "pg_advisory_xact_lock" in statements[1][0]
+    assert statements[1][1] == (
+        f"acknowledgment-config:{policy['tenantId']}:{policy['messageType']}:{policy['policyId']}",
+    )
+    assert "ingress_ack_configs_current" in statements[2][0]
+    assert connection.commits == 1
+    assert connection.rollbacks == 0
