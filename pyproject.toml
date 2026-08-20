@@ -16,9 +16,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "datamodel-code-generator==0.35.0",
+  "datamodel-code-generator==0.64.0",
   "mypy==1.17.1",
-  "pytest==8.4.2",
+  "pytest==9.0.3",
   "ruff==0.12.12",
   "types-jsonschema==4.26.0.20260202",
 ]
