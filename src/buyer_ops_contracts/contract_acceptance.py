@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, date, datetime, time
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -522,3 +522,25 @@ def validate_reconciliation(prior_result: dict[str, Any], reconciliation: dict[s
         and reconciliation["appointmentVersion"] is not None
     ):
         raise ContractSemanticError("appointment_evidence_mismatch")
+
+
+def require_unknown_outcome_resolution(
+    prior_result: dict[str, Any], reconciliation: dict[str, Any] | None
+) -> Literal["confirmed", "cancelled", "failed"]:
+    """Require provider truth without authorizing any subsequent effect."""
+
+    if reconciliation is None:
+        raise ContractSemanticError("reconciliation_required")
+    validate_reconciliation(prior_result, reconciliation)
+    result = reconciliation["result"]
+    if result == "still_unknown":
+        raise ContractSemanticError("reconciliation_required")
+    if result == "conflict_requires_resolution":
+        raise ContractSemanticError("reconciliation_required")
+    if result == "confirmed":
+        return "confirmed"
+    if result == "cancelled":
+        return "cancelled"
+    if result == "failed":
+        return "failed"
+    raise ContractSemanticError("reconciliation_required")

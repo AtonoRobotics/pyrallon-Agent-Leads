@@ -13,6 +13,7 @@ from buyer_ops_contracts.contract_acceptance import (
     canonical_digest,
     local_window_instants,
     readiness_result,
+    require_unknown_outcome_resolution,
     select_next_question,
     validate_availability_policy,
     validate_booking_command,
@@ -392,6 +393,39 @@ def test_authority_watermark_version_idempotency_and_reconciliation() -> None:
     missing_observation_evidence["evidenceIds"] = ["request-a"]
     with pytest.raises(ContractSemanticError, match="provider_observation_evidence_missing"):
         validate_reconciliation(valid["result"], missing_observation_evidence)
+
+
+def test_unknown_outcome_barrier_requires_source_linked_terminal_truth() -> None:
+    valid = _load("availability_booking/valid.json")
+    prior_result = valid["result"]
+    reconciliation = valid["reconciliation"]
+
+    with pytest.raises(ContractSemanticError, match="reconciliation_required"):
+        require_unknown_outcome_resolution(prior_result, None)
+    assert require_unknown_outcome_resolution(prior_result, reconciliation) == "confirmed"
+    cancelled = copy.deepcopy(reconciliation)
+    cancelled["result"] = "cancelled"
+    assert require_unknown_outcome_resolution(prior_result, cancelled) == "cancelled"
+
+    still_unknown = copy.deepcopy(reconciliation)
+    still_unknown["result"] = "still_unknown"
+    still_unknown["appointmentRef"] = None
+    still_unknown["appointmentVersion"] = None
+    with pytest.raises(ContractSemanticError, match="reconciliation_required"):
+        require_unknown_outcome_resolution(prior_result, still_unknown)
+
+    conflicted = copy.deepcopy(still_unknown)
+    conflicted["result"] = "conflict_requires_resolution"
+    with pytest.raises(ContractSemanticError, match="reconciliation_required"):
+        require_unknown_outcome_resolution(prior_result, conflicted)
+    mismatched_unknown = copy.deepcopy(still_unknown)
+    mismatched_unknown["priorResultRef"]["recordId"] = "result-other"
+    with pytest.raises(ContractSemanticError, match="prior_result_reference_mismatch"):
+        require_unknown_outcome_resolution(prior_result, mismatched_unknown)
+
+    failed = copy.deepcopy(still_unknown)
+    failed["result"] = "failed"
+    assert require_unknown_outcome_resolution(prior_result, failed) == "failed"
 
 
 @pytest.mark.parametrize(
