@@ -920,6 +920,77 @@ def test_acknowledgment_opt_out_and_decision_are_atomic(postgres_dsn: str) -> No
         assert canonical.get("ack-suppression-1") is not None
         assert repository.decide(request, " STOP ", template) == decision
 
+        concurrent = copy.deepcopy(request)
+        concurrent.update(
+            requestId="ack-request-concurrent",
+            decisionId="ack-decision-concurrent",
+            idempotencyKey="ack-idem-concurrent",
+        )
+        concurrent["suppressionRecordCandidate"]["id"] = "ack-suppression-concurrent"
+        barrier = threading.Barrier(2)
+
+        def decide_concurrently(candidate: dict[str, Any]) -> dict[str, Any]:
+            with _runtime_connection(postgres_dsn) as worker_connection:
+                worker = AcknowledgmentRepository(worker_connection, tenant_id="tenant-a")
+                barrier.wait()
+                return worker.decide(candidate, "stop", template)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            concurrent_results = list(
+                executor.map(decide_concurrently, [concurrent, copy.deepcopy(concurrent)])
+            )
+        assert concurrent_results[0] == concurrent_results[1]
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", ("tenant-a",))
+        assert connection.execute(
+            "SELECT count(*) FROM ingress_acknowledgment_decisions WHERE idempotency_key=%s",
+            (concurrent["idempotencyKey"],),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT count(*) FROM canonical_record_versions WHERE record_id=%s",
+            (concurrent["suppressionRecordCandidate"]["id"],),
+        ).fetchone() == (1,)
+
+        conflict_a = copy.deepcopy(request)
+        conflict_a.update(
+            requestId="ack-request-race-a",
+            decisionId="ack-decision-race-a",
+            idempotencyKey="ack-idem-race-conflict",
+        )
+        conflict_a["suppressionRecordCandidate"]["id"] = "ack-suppression-race-a"
+        conflict_b = copy.deepcopy(conflict_a)
+        conflict_b.update(requestId="ack-request-race-b", decisionId="ack-decision-race-b")
+        conflict_b["suppressionRecordCandidate"]["id"] = "ack-suppression-race-b"
+        barrier = threading.Barrier(2)
+
+        def decide_conflicting(candidate: dict[str, Any]) -> dict[str, Any] | str:
+            with _runtime_connection(postgres_dsn) as worker_connection:
+                worker = AcknowledgmentRepository(worker_connection, tenant_id="tenant-a")
+                barrier.wait()
+                try:
+                    return worker.decide(candidate, "stop", template)
+                except ValueError as error:
+                    return str(error)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            conflict_results = list(executor.map(decide_conflicting, [conflict_a, conflict_b]))
+        assert sum(isinstance(result, dict) for result in conflict_results) == 1
+        assert (
+            conflict_results.count("idempotency key reused with different acknowledgment input")
+            == 1
+        )
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", ("tenant-a",))
+        assert connection.execute(
+            "SELECT count(*) FROM ingress_acknowledgment_decisions WHERE idempotency_key=%s",
+            (conflict_a["idempotencyKey"],),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT count(*) FROM canonical_record_versions WHERE record_id IN (%s,%s)",
+            (
+                conflict_a["suppressionRecordCandidate"]["id"],
+                conflict_b["suppressionRecordCandidate"]["id"],
+            ),
+        ).fetchone() == (1,)
+
         conflicting = copy.deepcopy(request)
         conflicting.update(requestId="ack-request-2", idempotencyKey="ack-idem-2")
         conflicting["suppressionRecordCandidate"]["id"] = "ack-suppression-rollback"

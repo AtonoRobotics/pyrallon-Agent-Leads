@@ -89,6 +89,10 @@ class AcknowledgmentRepository:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"acknowledgment-decision:{self._tenant_id}:{request['idempotencyKey']}",),
+                )
+                cursor.execute(
                     "SELECT request_digest,decision FROM ingress_acknowledgment_decisions WHERE tenant_id=%s AND idempotency_key=%s FOR SHARE",
                     (self._tenant_id, request["idempotencyKey"]),
                 )
