@@ -41,7 +41,7 @@ from .operator_commands import OperatorCommandError, OperatorCommandService
 from .operator_projection import OperatorProjection
 from .release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from .telemetry import TelemetryRecorder
-from .tenant_setup import SetupRejected, bootstrap_tenant
+from .tenant_setup import SetupRejected, bootstrap_tenant, ensure_runtime_principal
 from .workspace import (
     assemble_journey,
     assemble_workspace,
@@ -115,8 +115,12 @@ class ControlPlane:
                     return 401, _error("authentication_required", "actor required")
                 return 200, self._setup_tenant(actor_id, payload)
             if method == "POST" and route == "/v1/connectors/oauth/complete":
+                if not actor_id:
+                    return 401, _error("authentication_required", "actor required")
                 return 200, self._oauth_complete(actor_id, payload)
             if method == "GET" and route == "/v1/platform/oauth-clients":
+                if not actor_id:
+                    return 401, _error("authentication_required", "actor required")
                 public = os.environ.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/")
                 return 200, {
                     "clients": self._platform_oauth_clients(),
@@ -249,6 +253,7 @@ class ControlPlane:
         connection = self._connection()
         try:
             repo = CanonicalRepository(connection, tenant_id=tenant_id)
+            ensure_runtime_principal(repo, tenant_id=tenant_id)
             payload = assemble_workspace(repo)
             payload["connectors"] = self._connectors(tenant_id)
             payload["activation"] = {"decisions": self._activation(tenant_id)}
@@ -260,9 +265,9 @@ class ControlPlane:
         self._require_actor(tenant_id, actor_id)
         connection = self._connection()
         try:
-            return assemble_journey(
-                CanonicalRepository(connection, tenant_id=tenant_id), journey_id
-            )
+            repo = CanonicalRepository(connection, tenant_id=tenant_id)
+            ensure_runtime_principal(repo, tenant_id=tenant_id)
+            return assemble_journey(repo, journey_id)
         finally:
             connection.close()
 

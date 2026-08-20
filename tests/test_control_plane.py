@@ -426,6 +426,28 @@ def test_platform_oauth_secret_material_has_no_http_readback_surface() -> None:
     assert payload["code"] == "validation_failed"
 
 
+def test_connector_oauth_completion_requires_authenticated_actor() -> None:
+    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+        "POST",
+        "/v1/connectors/oauth/complete",
+        {"x-buyer-ops-token": "token"},
+        json.dumps({"state": "untrusted", "code": "untrusted"}).encode(),
+    )
+    assert status == 401
+    assert payload["code"] == "authentication_required"
+
+
+def test_platform_oauth_client_metadata_requires_authenticated_actor() -> None:
+    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+        "GET",
+        "/v1/platform/oauth-clients",
+        {"x-buyer-ops-token": "token"},
+        b"",
+    )
+    assert status == 401
+    assert payload["code"] == "authentication_required"
+
+
 def test_activation_readback_is_empty_until_signed_evidence_exists() -> None:
     plane = _plane(AuthorizationConnection())  # type: ignore[arg-type]
     plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
