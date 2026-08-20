@@ -45,7 +45,9 @@ def _nurture_state(journey: dict[str, Any]) -> str:
     return "inactive"
 
 
-def _person_endpoints(person: dict[str, Any], endpoints: dict[str, dict[str, Any]]) -> dict[str, str | None]:
+def _person_endpoints(
+    person: dict[str, Any], endpoints: dict[str, dict[str, Any]]
+) -> dict[str, str | None]:
     email = None
     phone = None
     contactability = "unknown"
@@ -105,7 +107,9 @@ def assemble_workspace(repository: CanonicalRepository) -> dict[str, Any]:
     parties_by_id = _index(parties)
     appointments_by_journey: dict[str, list[dict[str, Any]]] = {}
     for appointment in appointments:
-        appointments_by_journey.setdefault(str(appointment.get("journeyId")), []).append(appointment)
+        appointments_by_journey.setdefault(str(appointment.get("journeyId")), []).append(
+            appointment
+        )
     conversations_by_journey: dict[str, dict[str, Any]] = {}
     for conversation in conversations:
         journey_id = conversation.get("primaryJourneyId")
@@ -129,7 +133,9 @@ def assemble_workspace(repository: CanonicalRepository) -> dict[str, Any]:
         person = people_by_id.get(str(member_id)) if member_id else None
         person_view = {
             "id": str(person["id"]) if person else "",
-            "displayName": str(person.get("displayName") or journey["id"]) if person else str(journey["id"]),
+            "displayName": str(person.get("displayName") or journey["id"])
+            if person
+            else str(journey["id"]),
             "identityState": str(person.get("identityState") or "unknown") if person else "unknown",
             "email": None,
             "phone": None,
@@ -144,7 +150,9 @@ def assemble_workspace(repository: CanonicalRepository) -> dict[str, Any]:
                 contactability = "suppressed"
         journey_appointments = appointments_by_journey.get(str(journey["id"]), [])
         next_appointment = None
-        proposed = [item for item in journey_appointments if item.get("appointmentState") == "proposed"]
+        proposed = [
+            item for item in journey_appointments if item.get("appointmentState") == "proposed"
+        ]
         if proposed:
             chosen = sorted(proposed, key=lambda item: str(item.get("startsAt") or ""))[0]
             next_appointment = {
@@ -153,10 +161,10 @@ def assemble_workspace(repository: CanonicalRepository) -> dict[str, Any]:
                 "state": chosen.get("appointmentState"),
                 "locationOrMode": chosen.get("locationOrMode"),
             }
-        conversation = conversations_by_journey.get(str(journey["id"]))
+        current_conversation = conversations_by_journey.get(str(journey["id"]))
         source = "form"
-        if conversation is not None:
-            source = _CHANNEL_SOURCE.get(str(conversation.get("channel")), "form")
+        if current_conversation is not None:
+            source = _CHANNEL_SOURCE.get(str(current_conversation.get("channel")), "form")
         open_cases = 1 if person_view["identityState"] in {"ambiguous", "conflict"} else 0
         if person is not None and person_view["identityState"] in {"ambiguous", "conflict"}:
             cases.append(
@@ -275,11 +283,15 @@ def assemble_journey(repository: CanonicalRepository, journey_id: str) -> dict[s
     assertions = _index(repository.list_by_type("Assertion"))
     criteria = _index(repository.list_by_type("QualificationCriterion"))
     appointments = [
-        item for item in repository.list_by_type("Appointment") if item.get("journeyId") == journey_id
+        item
+        for item in repository.list_by_type("Appointment")
+        if item.get("journeyId") == journey_id
     ]
     consents = repository.list_by_type("ConsentGrant")
     commitments = [
-        item for item in repository.list_by_type("Commitment") if item.get("journeyId") == journey_id
+        item
+        for item in repository.list_by_type("Commitment")
+        if item.get("journeyId") == journey_id
     ]
     person_id = card["personId"] if card else ""
     observation_views = []
@@ -293,7 +305,9 @@ def assemble_journey(repository: CanonicalRepository, journey_id: str) -> dict[s
         observation_views.append(
             {
                 "id": item["id"],
-                "criterion": criterion.get("criterionCode") if criterion else item.get("criterionId"),
+                "criterion": criterion.get("criterionCode")
+                if criterion
+                else item.get("criterionId"),
                 "epistemicType": "assertion",
                 "value": value,
                 "observationState": item.get("observationState"),
@@ -388,7 +402,9 @@ def propose_appointment(
         if item.get("status") == "active" and item.get("licenseState") == "active"
     ]
     if len(holders) != 1:
-        raise SetupRejected("configuration_incomplete", "exactly one active LicenseHolder is required")
+        raise SetupRejected(
+            "configuration_incomplete", "exactly one active LicenseHolder is required"
+        )
     parties = _index(repository.list_by_type("BuyingParty"))
     party = parties.get(str(journey.get("buyingPartyId")))
     if party is None or not party.get("members"):
@@ -400,7 +416,11 @@ def propose_appointment(
     evidence_id = new_id("evidence")
     appointment_id = new_id("appointment")
     digest = sha256_digest(
-        {"journeyId": journey_id, "startsAt": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "actorId": actor_id}
+        {
+            "journeyId": journey_id,
+            "startsAt": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "actorId": actor_id,
+        }
     )
     evidence = {
         "id": evidence_id,

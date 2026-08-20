@@ -42,6 +42,7 @@ class _DefaultHttp:
     ) -> tuple[int, Any]:
         return urllib_http(method, url, headers=headers, data=data, timeout=timeout)
 
+
 CHATGPT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 CHATGPT_DEVICE_CODE_URL = "https://auth.openai.com/api/accounts/deviceauth/usercode"
 CHATGPT_DEVICE_TOKEN_URL = "https://auth.openai.com/api/accounts/deviceauth/token"

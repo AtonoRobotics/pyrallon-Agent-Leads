@@ -156,8 +156,7 @@ def build_tenant_bundle(request: dict[str, Any], *, actor_id: str) -> dict[str, 
     actor = _require("actorId", actor_id)
     stamp = str(request.get("observedAt") or _now())
     expires_at = str(
-        request.get("authorizationExpiresAt")
-        or _stamp(datetime.now(UTC) + timedelta(days=3650))
+        request.get("authorizationExpiresAt") or _stamp(datetime.now(UTC) + timedelta(days=3650))
     )
     evidence_id = f"evidence:setup:{tenant_id}"
     policy_id = f"operator-policy:{tenant_id}"

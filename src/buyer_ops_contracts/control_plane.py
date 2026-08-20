@@ -253,7 +253,9 @@ class ControlPlane:
         self._require_actor(tenant_id, actor_id)
         connection = self._connection()
         try:
-            return assemble_journey(CanonicalRepository(connection, tenant_id=tenant_id), journey_id)
+            return assemble_journey(
+                CanonicalRepository(connection, tenant_id=tenant_id), journey_id
+            )
         finally:
             connection.close()
 
@@ -460,7 +462,9 @@ class ControlPlane:
         finally:
             connection.close()
 
-    def _cognition_auth(self, connection: Any, tenant_id: str, actor_id: str) -> CognitionAuthorization:
+    def _cognition_auth(
+        self, connection: Any, tenant_id: str, actor_id: str
+    ) -> CognitionAuthorization:
         return CognitionAuthorization(
             connection,
             tenant_id=tenant_id,
@@ -484,7 +488,9 @@ class ControlPlane:
             connector_id = str(payload.get("connectorId") or "")
             auth.refuse_unsupported(connector_id)
             if connector_id != "openai.chatgpt":
-                raise SetupRejected("validation_failed", "only ChatGPT subscription uses device OAuth")
+                raise SetupRejected(
+                    "validation_failed", "only ChatGPT subscription uses device OAuth"
+                )
             return auth.start_chatgpt_device()
         finally:
             connection.close()
@@ -551,7 +557,9 @@ class ControlPlane:
         finally:
             connection.close()
 
-    def _oauth_start(self, tenant_id: str, actor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _oauth_start(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         connection = self._connection()
         try:
             return self._connector_auth(connection, tenant_id).start_oauth(

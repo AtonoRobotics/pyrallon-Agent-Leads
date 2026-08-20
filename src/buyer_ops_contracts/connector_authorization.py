@@ -141,6 +141,22 @@ def urllib_http(
         return status, text
 
 
+class _UrllibHttpClient:
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        data: bytes | None,
+        timeout: float,
+    ) -> tuple[int, Any]:
+        return urllib_http(method, url, headers=headers, data=data, timeout=timeout)
+
+
+DEFAULT_HTTP_CLIENT = _UrllibHttpClient()
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -184,7 +200,7 @@ class ConnectorAuthorization:
         tenant_id: str,
         permit_secret: bytes,
         oauth_clients: dict[str, dict[str, str]],
-        http: HttpClient = urllib_http,
+        http: HttpClient = DEFAULT_HTTP_CLIENT,
         clock: Any = _now,
     ) -> None:
         if not tenant_id:
@@ -230,11 +246,12 @@ class ConnectorAuthorization:
         spec = PROVIDERS.get(connector_id)
         if spec is None or spec["issuer"] not in {"google", "microsoft", "twilio"}:
             raise SetupRejected("validation_failed", "connector does not use OAuth")
+        issuer = str(spec["issuer"])
         if not redirect_uri.startswith(("https://", "http://")):
             raise SetupRejected("validation_failed", "redirect_uri must be an http(s) URL")
-        if spec["issuer"] in {"google", "microsoft"}:
-            _require_provider_redirect(spec["issuer"], redirect_uri)
-        client = self._client_for(spec["issuer"])
+        if issuer in {"google", "microsoft"}:
+            _require_provider_redirect(issuer, redirect_uri)
+        client = self._client_for(issuer)
         channels = list(spec.get("channels") or [connector_id])
         for channel in channels:
             channel_spec = PROVIDERS[channel]
@@ -312,11 +329,12 @@ class ConnectorAuthorization:
             raise SetupRejected("authority_denied", "oauth tenant mismatch")
         session = self._consume_session(session_id, actor_id)
         spec = PROVIDERS[session["connector_id"]]
-        if spec["issuer"] == "twilio":
+        issuer = str(spec["issuer"])
+        if issuer == "twilio":
             return self._complete_twilio_connect(session, account_sid)
         if not code.strip():
             raise SetupRejected("validation_failed", "authorization code is required")
-        client = self._client_for(spec["issuer"])
+        client = self._client_for(issuer)
         token_url = str(spec["token"]).format(tenant=client.get("directory_id") or "common")
         body = urlencode(
             {
@@ -331,7 +349,10 @@ class ConnectorAuthorization:
         status, payload = self._http.request(
             "POST",
             token_url,
-            headers={"content-type": "application/x-www-form-urlencoded", "accept": "application/json"},
+            headers={
+                "content-type": "application/x-www-form-urlencoded",
+                "accept": "application/json",
+            },
             data=body,
             timeout=20,
         )
@@ -424,9 +445,9 @@ class ConnectorAuthorization:
         }
 
     def _client_for(self, issuer: str) -> dict[str, str]:
-        stored = PlatformOAuthStore(
-            self._connection, permit_secret=self._permit_secret
-        ).client_for(issuer)
+        stored = PlatformOAuthStore(self._connection, permit_secret=self._permit_secret).client_for(
+            issuer
+        )
         if stored.get("client_id") and (issuer == "twilio" or stored.get("client_secret")):
             return stored
         client = dict(self._oauth_clients.get(issuer) or {})
@@ -457,7 +478,9 @@ class ConnectorAuthorization:
                 "connector_authorization_failed",
                 "provider userinfo rejected the access token",
             )
-        account = str(payload.get("email") or payload.get("mail") or payload.get("userPrincipalName") or "")
+        account = str(
+            payload.get("email") or payload.get("mail") or payload.get("userPrincipalName") or ""
+        )
         if not account:
             raise SetupRejected(
                 "connector_authorization_failed",
@@ -589,7 +612,9 @@ class ConnectorAuthorization:
             )
         stamp = _stamp(self._clock())
         evidence_id = f"evidence:connector:{connector_id}:{secrets.token_hex(4)}"
-        digest = sha256_digest({"connectorId": connector_id, "tenantId": self._tenant_id, "at": stamp})
+        digest = sha256_digest(
+            {"connectorId": connector_id, "tenantId": self._tenant_id, "at": stamp}
+        )
         evidence = {
             "id": evidence_id,
             "tenantId": self._tenant_id,
@@ -749,7 +774,9 @@ class PlatformOAuthStore:
     def list_public(self) -> list[dict[str, str]]:
         env = oauth_clients_from_env()
         issuers = ("google", "microsoft", "twilio")
-        rows = {issuer: {"issuer": issuer, "clientId": "", "configured": "false"} for issuer in issuers}
+        rows = {
+            issuer: {"issuer": issuer, "clientId": "", "configured": "false"} for issuer in issuers
+        }
         for issuer, client in env.items():
             if not client.get("client_id"):
                 continue
@@ -847,7 +874,8 @@ def oauth_clients_from_env() -> dict[str, dict[str, str]]:
         "microsoft": {
             "client_id": os.environ.get("MICROSOFT_OAUTH_CLIENT_ID", "").strip(),
             "client_secret": os.environ.get("MICROSOFT_OAUTH_CLIENT_SECRET", "").strip(),
-            "directory_id": os.environ.get("MICROSOFT_OAUTH_TENANT_ID", "common").strip() or "common",
+            "directory_id": os.environ.get("MICROSOFT_OAUTH_TENANT_ID", "common").strip()
+            or "common",
         },
         "twilio": {
             "client_id": os.environ.get("TWILIO_CONNECT_APP_SID", "").strip(),
