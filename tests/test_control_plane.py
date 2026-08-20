@@ -103,19 +103,20 @@ def test_tenancies_come_from_current_actor_tenant_authorization() -> None:
     }
 
 
-def test_workspace_journey_unquotes_colon_ids() -> None:
+def test_canonical_read_unquotes_colon_ids() -> None:
     plane = _plane(Connection())
     seen: dict[str, str] = {}
 
-    def _journey(tenant_id: str, actor_id: str, journey_id: str) -> dict[str, str]:
-        del tenant_id, actor_id
-        seen["id"] = journey_id
-        return {"id": journey_id}
+    def _record(tenant_id: str, record_id: str) -> dict[str, str]:
+        del tenant_id
+        seen["id"] = record_id
+        return {"id": record_id}
 
-    plane._workspace_journey = _journey  # type: ignore[method-assign]
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    plane._canonical_get = _record  # type: ignore[method-assign]
     status, payload = plane.handle(
         "GET",
-        "/v1/workspace/journeys/journey%3A1111-2222",
+        "/v1/canonical/journey%3A1111-2222",
         {
             "x-buyer-ops-token": "token",
             "x-buyer-ops-tenant": "tenant-1",
@@ -128,19 +129,20 @@ def test_workspace_journey_unquotes_colon_ids() -> None:
     assert payload == {"id": "journey:1111-2222"}
 
 
-def test_workspace_journey_decodes_id_without_rewriting_route() -> None:
+def test_canonical_read_decodes_id_without_rewriting_route() -> None:
     plane = _plane(Connection())
     seen: dict[str, str] = {}
 
-    def _journey(tenant_id: str, actor_id: str, journey_id: str) -> dict[str, str]:
-        del tenant_id, actor_id
-        seen["id"] = journey_id
-        return {"id": journey_id}
+    def _record(tenant_id: str, record_id: str) -> dict[str, str]:
+        del tenant_id
+        seen["id"] = record_id
+        return {"id": record_id}
 
-    plane._workspace_journey = _journey  # type: ignore[method-assign]
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    plane._canonical_get = _record  # type: ignore[method-assign]
     status, payload = plane.handle(
         "GET",
-        "/v1/workspace/journeys/provider%2Fjourney%3A1",
+        "/v1/canonical/provider%2Fjourney%3A1",
         {
             "x-buyer-ops-token": "token",
             "x-buyer-ops-tenant": "tenant-1",
@@ -153,22 +155,8 @@ def test_workspace_journey_decodes_id_without_rewriting_route() -> None:
     assert payload == {"id": "provider/journey:1"}
 
 
-def test_setup_tenant_does_not_require_tenant_header() -> None:
-    class _Boom:
-        def close(self) -> None:
-            return None
-
-    plane = _plane(_Boom())
-
-    def _raise() -> object:
-        raise RuntimeError("bootstrap should be invoked")
-
-    plane._setup_tenant = lambda actor_id, payload: {  # type: ignore[method-assign]
-        "tenantId": payload["tenantId"],
-        "actorId": actor_id,
-        "pendingConnectors": ["twilio.sms"],
-    }
-    del _raise
+def test_setup_tenant_refuses_unpublished_bootstrap_semantics() -> None:
+    plane = _plane(AuthorizationConnection())
     status, payload = plane.handle(
         "POST",
         "/v1/setup/tenant",
@@ -187,9 +175,37 @@ def test_setup_tenant_does_not_require_tenant_header() -> None:
             }
         ).encode(),
     )
-    assert status == 200
-    assert payload["tenantId"] == "brokerage-live-1"
-    assert payload["actorId"] == "actor-1"
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
+
+
+@pytest.mark.parametrize(
+    ("method", "route"),
+    [
+        ("GET", "/v1/workspace"),
+        ("GET", "/v1/workspace/journeys/journey-1"),
+        ("POST", "/v1/workspace/appointments"),
+        ("POST", "/v1/workspace/assertions"),
+        ("POST", "/v1/workspace/suppressions"),
+    ],
+)
+def test_workspace_routes_refuse_unpublished_projection_and_mutation_semantics(
+    method: str, route: str
+) -> None:
+    plane = _plane(AuthorizationConnection())
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        method,
+        route,
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"{}" if method == "POST" else b"",
+    )
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
 
 
 def test_workspace_requires_tenant_and_actor() -> None:

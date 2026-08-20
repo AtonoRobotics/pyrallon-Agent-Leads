@@ -113,7 +113,10 @@ class ControlPlane:
             if method == "POST" and route == "/v1/setup/tenant":
                 if not actor_id:
                     return 401, _error("authentication_required", "actor required")
-                return 200, self._setup_tenant(actor_id, payload)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "governed tenant bootstrap semantics are not published",
+                )
             if method == "POST" and route == "/v1/connectors/oauth/complete":
                 if not actor_id:
                     return 401, _error("authentication_required", "actor required")
@@ -144,16 +147,35 @@ class ControlPlane:
                 journey_id = unquote(route.split("/", 3)[-1])
                 return 200, self._journey(tenant_id, actor_id, journey_id)
             if method == "GET" and route == "/v1/workspace":
-                return 200, self._workspace(tenant_id, actor_id)
+                self._require_actor(tenant_id, actor_id)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "governed operator projection rules are not published",
+                )
             if method == "GET" and route.startswith("/v1/workspace/journeys/"):
-                journey_id = unquote(route.removeprefix("/v1/workspace/journeys/"))
-                return 200, self._workspace_journey(tenant_id, actor_id, journey_id)
+                self._require_actor(tenant_id, actor_id)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "governed operator projection rules are not published",
+                )
             if method == "POST" and route == "/v1/workspace/appointments":
-                return 200, self._propose_appointment(tenant_id, actor_id, payload)
+                self._require_actor(tenant_id, actor_id)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "appointment mutation must use a published operator command",
+                )
             if method == "POST" and route == "/v1/workspace/assertions":
-                return 200, self._record_assertion(tenant_id, actor_id, payload)
+                self._require_actor(tenant_id, actor_id)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "assertion mutation must use a published operator command",
+                )
             if method == "POST" and route == "/v1/workspace/suppressions":
-                return 200, self._record_suppression(tenant_id, actor_id, payload)
+                self._require_actor(tenant_id, actor_id)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "suppression mutation must use a published operator command",
+                )
             if method == "POST" and route == "/v1/commands":
                 return 200, self._command(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/habitat/evaluate-authority":
