@@ -12,7 +12,6 @@ release-activation.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import secrets
@@ -25,7 +24,7 @@ from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from psycopg.types.json import Jsonb
 
-from .connector_authorization import HttpClient, _b64url, _pkce_verifier, urllib_http
+from .connector_authorization import HttpClient, urllib_http
 from .structural import validate_record
 from .tenant_setup import SetupRejected
 
@@ -48,8 +47,6 @@ CHATGPT_DEVICE_CODE_URL = "https://auth.openai.com/api/accounts/deviceauth/userc
 CHATGPT_DEVICE_TOKEN_URL = "https://auth.openai.com/api/accounts/deviceauth/token"
 CHATGPT_TOKEN_URL = "https://auth.openai.com/oauth/token"
 CHATGPT_DEVICE_REDIRECT_URI = "https://auth.openai.com/deviceauth/callback"
-CHATGPT_SCOPE = "openid profile email offline_access"
-
 PROVIDERS = {
     "openai.chatgpt": {
         "provider_id": "openai",
@@ -99,11 +96,6 @@ PROVIDERS = {
 
 def _stamp(value: datetime) -> str:
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _pkce_challenge(verifier: str) -> str:
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    return _b64url(digest)
 
 
 def _cognition_key(permit_secret: bytes) -> bytes:
@@ -173,16 +165,9 @@ class CognitionAuthorization:
         return out
 
     def start_chatgpt_device(self) -> dict[str, str | int]:
-        verifier = _pkce_verifier()
-        challenge = _pkce_challenge(verifier)
         status, payload = self._json(
             CHATGPT_DEVICE_CODE_URL,
-            {
-                "client_id": CHATGPT_CLIENT_ID,
-                "scope": CHATGPT_SCOPE,
-                "code_challenge": challenge,
-                "code_challenge_method": "S256",
-            },
+            {"client_id": CHATGPT_CLIENT_ID},
         )
         if status != 200 or not isinstance(payload, dict):
             raise SetupRejected("connector_authorization_failed", "chatgpt_device_start_failed")
@@ -219,7 +204,7 @@ class CognitionAuthorization:
                         self._actor_id,
                         "openai.chatgpt",
                         device_code,
-                        verifier,
+                        "",
                         user_code,
                         verification_uri,
                         interval,
@@ -244,7 +229,6 @@ class CognitionAuthorization:
         status, payload = self._json(
             CHATGPT_DEVICE_TOKEN_URL,
             {
-                "client_id": CHATGPT_CLIENT_ID,
                 "device_auth_id": session["device_code"],
                 "user_code": session["user_code"],
             },
@@ -252,12 +236,15 @@ class CognitionAuthorization:
         if not isinstance(payload, dict):
             raise SetupRejected("connector_authorization_failed", "chatgpt_device_poll_failed")
         error = _oauth_error(payload)
-        if status in {400, 403} and ("authorization_pending" in error or "slow_down" in error):
+        if status in {403, 404} or "authorization_pending" in error or "slow_down" in error:
             return {"status": "pending", "sessionId": session_id}
-        if error and "authorization_pending" not in error and "slow_down" not in error:
-            raise SetupRejected("connector_authorization_failed", error)
+        if status != 200:
+            raise SetupRejected(
+                "connector_authorization_failed", error or "chatgpt_device_poll_failed"
+            )
         code = str(payload.get("authorization_code") or "")
-        if not code:
+        verifier = str(payload.get("code_verifier") or "")
+        if not code or not verifier:
             return {"status": "pending", "sessionId": session_id}
         token_status, token = self._form(
             CHATGPT_TOKEN_URL,
@@ -266,11 +253,15 @@ class CognitionAuthorization:
                 "code": code,
                 "redirect_uri": CHATGPT_DEVICE_REDIRECT_URI,
                 "client_id": CHATGPT_CLIENT_ID,
-                "code_verifier": session["code_verifier"],
+                "code_verifier": verifier,
             },
         )
         if token_status != 200 or not isinstance(token, dict) or not token.get("access_token"):
-            raise SetupRejected("connector_authorization_failed", "chatgpt_token_exchange_failed")
+            detail = _oauth_error(token) if isinstance(token, dict) else str(token)
+            raise SetupRejected(
+                "connector_authorization_failed",
+                detail or "chatgpt_token_exchange_failed",
+            )
         self._consume_session(session_id)
         account = str(token.get("account_id") or self._actor_id)
         identity = self._bind(

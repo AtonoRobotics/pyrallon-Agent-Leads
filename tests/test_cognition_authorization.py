@@ -167,7 +167,15 @@ def test_chatgpt_device_poll_binds_subscription_identity() -> None:
                     "expires_at": "2026-08-19T18:15:00+00:00",
                 },
             ),
-            "deviceauth/token": (200, {"authorization_code": "auth-code-1"}),
+            "deviceauth/token": (
+                200,
+                {
+                    "authorization_code": "auth-code-1",
+                    "code_verifier": "openai-device-verifier",
+                    "code_challenge": "openai-device-challenge",
+                    "status": "success",
+                },
+            ),
             "oauth/token": (
                 200,
                 {
