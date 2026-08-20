@@ -310,11 +310,42 @@ def main() -> None:
             raise SystemExit(f"platform OAuth client migration missing: {fragment}")
     if "rollback refused" not in platform_oauth_rollback.read_text():
         raise SystemExit("platform OAuth client rollback must refuse client evidence loss")
+    twilio_oauth = ROOT / "migrations" / "0018_platform_oauth_twilio.sql"
+    twilio_oauth_rollback = ROOT / "migrations" / "0018_platform_oauth_twilio.rollback.sql"
+    if not twilio_oauth.is_file() or not twilio_oauth_rollback.is_file():
+        raise SystemExit("missing Twilio platform OAuth migration or rollback refusal")
+    for fragment in ("platform_oauth_clients_issuer_check", "'twilio'"):
+        if fragment not in twilio_oauth.read_text():
+            raise SystemExit(f"Twilio platform OAuth migration missing: {fragment}")
+    if "rollback refused" not in twilio_oauth_rollback.read_text():
+        raise SystemExit("Twilio platform OAuth rollback must refuse client evidence loss")
+    cognitive_credentials = ROOT / "migrations" / "0019_cognitive_credentials.sql"
+    cognitive_credentials_rollback = ROOT / "migrations" / "0019_cognitive_credentials.rollback.sql"
+    if not cognitive_credentials.is_file() or not cognitive_credentials_rollback.is_file():
+        raise SystemExit("missing cognitive credential migration or rollback refusal")
+    for fragment in (
+        "CREATE TABLE IF NOT EXISTS cognitive_oauth_sessions",
+        "CREATE TABLE IF NOT EXISTS cognitive_credentials",
+        "FORCE ROW LEVEL SECURITY",
+        "ciphertext bytea NOT NULL",
+    ):
+        if fragment not in cognitive_credentials.read_text():
+            raise SystemExit(f"cognitive credential migration missing: {fragment}")
+    if "rollback refused" not in cognitive_credentials_rollback.read_text():
+        raise SystemExit("cognitive credential rollback must refuse credential evidence loss")
+    oauth_return = ROOT / "migrations" / "0020_oauth_return_origin.sql"
+    oauth_return_rollback = ROOT / "migrations" / "0020_oauth_return_origin.rollback.sql"
+    if not oauth_return.is_file() or not oauth_return_rollback.is_file():
+        raise SystemExit("missing OAuth return-origin migration or rollback")
+    if "ADD COLUMN IF NOT EXISTS return_origin text" not in oauth_return.read_text():
+        raise SystemExit("OAuth return-origin migration missing return_origin")
+    if "DROP COLUMN IF EXISTS return_origin" not in oauth_return_rollback.read_text():
+        raise SystemExit("OAuth return-origin rollback missing return_origin removal")
     print(
         "canonical, evidence, identity, ontology 0.2/0.3, Habitat, inbound, operator 1.0/1.1, "
         "OT01 acknowledgment, OPEN-025 authorization, OPEN-026 activation, Release Activation "
-        "1.1 concurrency, connector credentials, platform OAuth clients, and control-plane "
-        "migration integrity verified"
+        "1.1 concurrency, connector credentials, platform OAuth clients, Twilio OAuth, cognitive "
+        "credentials, OAuth return origin, and control-plane migration integrity verified"
     )
 
 

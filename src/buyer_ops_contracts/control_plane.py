@@ -115,11 +115,12 @@ class ControlPlane:
                     return 401, _error("authentication_required", "actor required")
                 return 200, self._setup_tenant(actor_id, payload)
             if method == "POST" and route == "/v1/connectors/oauth/complete":
-                if not actor_id:
-                    return 401, _error("authentication_required", "actor required")
                 return 200, self._oauth_complete(actor_id, payload)
             if method == "GET" and route == "/v1/platform/oauth-clients":
-                return 200, {"clients": self._platform_oauth_clients()}
+                return 200, {
+                    "clients": self._platform_oauth_clients(),
+                    "publicOrigin": os.environ.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/"),
+                }
             if method == "GET" and route == "/v1/platform/oauth-clients/material":
                 return 200, {"clients": self._platform_oauth_material()}
             if method == "POST" and route == "/v1/platform/oauth-clients":
@@ -566,6 +567,7 @@ class ControlPlane:
                 actor_id=actor_id,
                 connector_id=str(payload.get("connectorId") or ""),
                 redirect_uri=str(payload.get("redirectUri") or ""),
+                return_origin=str(payload.get("returnOrigin") or ""),
             )
         finally:
             connection.close()

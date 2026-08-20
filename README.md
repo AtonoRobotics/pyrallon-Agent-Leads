@@ -102,6 +102,11 @@ Apply migrations in filename order:
 13. `0013_actor_tenant_authorization.sql`
 14. `0014_release_activation.sql`
 15. `0015_release_activation_concurrency.sql`
+16. `0016_connector_credentials.sql`
+17. `0017_platform_oauth_clients.sql`
+18. `0018_platform_oauth_twilio.sql`
+19. `0019_cognitive_credentials.sql`
+20. `0020_oauth_return_origin.sql`
 
 Each migration has a rollback script for an empty, unactivated installation. Rollback deliberately
 refuses to discard populated canonical, evidence, identity, authority-decision, or permit stores;

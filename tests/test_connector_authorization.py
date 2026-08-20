@@ -41,6 +41,7 @@ class _Cursor:
                 "redirect_uri": parameters[5],
                 "code_verifier": parameters[6],
                 "expires_at": parameters[7],
+                "return_origin": parameters[8] if len(parameters) > 8 else "",
                 "consumed_at": None,
             }
         elif "FROM connector_oauth_sessions" in statement and "FOR UPDATE" in statement:
@@ -57,6 +58,7 @@ class _Cursor:
                     session["code_verifier"],
                     session["expires_at"],
                     session["consumed_at"],
+                    session.get("return_origin") or "",
                 )
         elif "UPDATE connector_oauth_sessions" in statement:
             session = self.store["sessions"].get(str(parameters[1]))
@@ -178,6 +180,22 @@ def test_start_oauth_requires_configured_client() -> None:
             connector_id="google.workspace.email",
             redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
         )
+
+
+def test_google_oauth_allows_https_hostname_redirect() -> None:
+    auth = _auth()
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}",
+        "grantState": "pending",
+    }
+    started = auth.start_oauth(
+        actor_id="actor-1",
+        connector_id="google.workspace",
+        redirect_uri="https://strix-alpha.tailfc1d45.ts.net/api/connectors/callback",
+        return_origin="http://192.168.0.50:8180",
+    )
+    assert "accounts.google.com" in started["authorizationUrl"]
+    assert "strix-alpha.tailfc1d45.ts.net" in started["authorizationUrl"]
 
 
 def test_google_oauth_rejects_private_http_redirect() -> None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import secrets
@@ -242,6 +243,7 @@ class ConnectorAuthorization:
         actor_id: str,
         connector_id: str,
         redirect_uri: str,
+        return_origin: str = "",
     ) -> dict[str, str]:
         spec = PROVIDERS.get(connector_id)
         if spec is None or spec["issuer"] not in {"google", "microsoft", "twilio"}:
@@ -260,6 +262,11 @@ class ConnectorAuthorization:
         session_id = secrets.token_urlsafe(18)
         verifier = _pkce_verifier()
         expires_at = self._clock() + timedelta(minutes=10)
+        origin = return_origin.strip().rstrip("/")
+        if origin and not _return_origin_allowed(origin):
+            raise SetupRejected(
+                "validation_failed", "return_origin is not an allowed operator origin"
+            )
         try:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
@@ -267,8 +274,8 @@ class ConnectorAuthorization:
                     """
                     INSERT INTO connector_oauth_sessions (
                         tenant_id, session_id, actor_id, connector_id, grant_id,
-                        redirect_uri, code_verifier, expires_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        redirect_uri, code_verifier, expires_at, return_origin
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """.strip(),
                     (
                         self._tenant_id,
@@ -279,6 +286,7 @@ class ConnectorAuthorization:
                         redirect_uri,
                         verifier,
                         expires_at,
+                        origin or None,
                     ),
                 )
             self._connection.commit()
@@ -328,6 +336,7 @@ class ConnectorAuthorization:
         if tenant_id != self._tenant_id:
             raise SetupRejected("authority_denied", "oauth tenant mismatch")
         session = self._consume_session(session_id, actor_id)
+        actor_id = session["actor_id"]
         spec = PROVIDERS[session["connector_id"]]
         issuer = str(spec["issuer"])
         if issuer == "twilio":
@@ -387,10 +396,11 @@ class ConnectorAuthorization:
             "authorization": "bound",
             "providerAccountRef": account,
             "channels": channels,
+            "returnOrigin": session.get("return_origin") or "",
         }
 
     def _complete_twilio_connect(self, session: dict[str, str], account_sid: str) -> dict[str, Any]:
-        del session
+        return_origin = session.get("return_origin") or ""
         sid = account_sid.strip()
         if not sid.startswith("AC") or len(sid) < 32:
             raise SetupRejected(
@@ -415,6 +425,7 @@ class ConnectorAuthorization:
             "authorization": "bound",
             "providerAccountRef": sid,
             "channels": ["twilio.sms"],
+            "returnOrigin": return_origin,
         }
 
     def bindings(self) -> dict[str, dict[str, str]]:
@@ -495,7 +506,7 @@ class ConnectorAuthorization:
                 cursor.execute(
                     """
                     SELECT session_id, actor_id, connector_id, grant_id, redirect_uri,
-                           code_verifier, expires_at, consumed_at
+                           code_verifier, expires_at, consumed_at, return_origin
                     FROM connector_oauth_sessions
                     WHERE tenant_id = %s AND session_id = %s
                     FOR UPDATE
@@ -533,6 +544,7 @@ class ConnectorAuthorization:
             "grant_id": str(row[3]),
             "redirect_uri": str(row[4]),
             "code_verifier": str(row[5]),
+            "return_origin": str(row[8] or ""),
         }
 
     def _store_binding(
@@ -848,6 +860,25 @@ def _platform_key(permit_secret: bytes) -> bytes:
         salt=b"buyer-ops-platform-oauth",
         info=b"platform-oauth-v1",
     ).derive(material[:64] if len(material) > 64 else material)
+
+
+def _return_origin_allowed(origin: str) -> bool:
+    parsed = urlparse(origin)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in {"http", "https"} or not host:
+        return False
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    public = os.environ.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/").lower()
+    if public and origin.lower() == public:
+        return True
+    if host.endswith(".ts.net"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_private or address.is_loopback or address.is_link_local
 
 
 def _require_provider_redirect(issuer: str, redirect_uri: str) -> None:
