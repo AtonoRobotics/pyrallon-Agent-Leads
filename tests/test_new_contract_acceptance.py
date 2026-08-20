@@ -128,6 +128,22 @@ def test_decline_freshness_contradiction_and_digest_are_deterministic() -> None:
     assert readiness_result(policy, contradicted) == ("not_ready", ["budget"])
 
 
+def test_buyer_decline_does_not_satisfy_a_required_criterion() -> None:
+    valid = _load("qualification_readiness/valid.json")
+    policy = copy.deepcopy(valid["policy"])
+    inputs = copy.deepcopy(valid["input"])
+    required = policy["criteria"][0]
+    required["acceptedObservationStates"].append("buyer_declined")
+    observation = inputs["observations"][0]
+    observation["observationState"] = "buyer_declined"
+    inputs["inputDigest"] = canonical_digest(
+        {key: inputs[key] for key in sorted(inputs) if key not in {"inputDigest", "inputSetId"}}
+    )
+
+    assert select_next_question(policy, inputs) == ("ask", required["criterionId"])
+    assert readiness_result(policy, inputs) == ("not_ready", [required["criterionId"]])
+
+
 def test_policy_blocking_optional_contradiction_blocks_readiness() -> None:
     valid = _load("qualification_readiness/valid.json")
     policy = copy.deepcopy(valid["policy"])

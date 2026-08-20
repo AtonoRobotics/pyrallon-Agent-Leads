@@ -93,12 +93,23 @@ def validate_qualification(policy: dict[str, Any], inputs: dict[str, Any]) -> di
     return observations
 
 
+def _criterion_resolved(criterion: dict[str, Any], observation: dict[str, Any] | None) -> bool:
+    return bool(
+        observation is not None
+        and observation["validAtEvaluation"]
+        and not (
+            criterion["disposition"] == "required"
+            and observation["observationState"] == "buyer_declined"
+        )
+    )
+
+
 def select_next_question(policy: dict[str, Any], inputs: dict[str, Any]) -> tuple[str, str | None]:
     observations = validate_qualification(policy, inputs)
     unresolved: list[tuple[int, str, str]] = []
     for criterion in policy["criteria"]:
         observation = observations.get(criterion["criterionId"])
-        if observation is not None and observation["validAtEvaluation"]:
+        if _criterion_resolved(criterion, observation):
             continue
         disposition = (
             criterion["contradictionDisposition"]
@@ -129,7 +140,7 @@ def readiness_result(policy: dict[str, Any], inputs: dict[str, Any]) -> tuple[st
             policy_blocking.append(criterion["criterionId"])
         if criterion["disposition"] not in {"required", "declinable"}:
             continue
-        if observation is None or not observation["validAtEvaluation"]:
+        if not _criterion_resolved(criterion, observation):
             blocking.append(criterion["criterionId"])
     if inputs["urgentEscalationRefs"] or policy_blocking:
         return ("blocked", sorted(set(blocking + policy_blocking)))
