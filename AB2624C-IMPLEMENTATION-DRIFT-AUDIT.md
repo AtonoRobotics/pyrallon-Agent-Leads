@@ -31,4 +31,3 @@ Tenant bootstrap remains unavailable. `JourneyView` and workspace projections re
 Workspace mutations remain unavailable and cannot bypass `OperatorCommand`, Habitat, current
 authority, policy, evidence, version, and atomic result boundaries. Production activation remains
 false. Unsupported local behavior was not admitted merely because tests could be made to pass.
-

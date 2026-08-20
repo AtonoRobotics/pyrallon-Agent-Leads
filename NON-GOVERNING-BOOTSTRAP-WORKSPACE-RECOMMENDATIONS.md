@@ -31,4 +31,3 @@ Appointment, assertion, suppression, and workflow actions should be added only t
 tenant authority, current policy, expected versions, idempotency, evidence, Habitat checks where
 applicable, and atomic canonical plus `CommandResult` persistence. No timezone, principal,
 capability, action scope, or evidence reference should be selected by the implementation.
-
