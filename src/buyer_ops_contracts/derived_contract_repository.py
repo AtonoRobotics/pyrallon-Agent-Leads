@@ -8,7 +8,12 @@ from contextlib import AbstractContextManager
 from typing import Any, cast
 
 from .canonical_repository import Connection, TenantIsolationViolation
-from .contract_acceptance import validate_qualification_decisions
+from .contract_acceptance import (
+    validate_booking_command,
+    validate_booking_result_context,
+    validate_qualification_decisions,
+    validate_reconciliation,
+)
 from .registry import ContractRegistry
 from .structural import validate_record
 
@@ -32,6 +37,110 @@ _VERSIONED_MESSAGE_TYPES = {
     "calendar_provider_binding",
     "availability_policy",
 }
+
+
+class BookingOutcomeRepository:
+    """Append validated booking outcomes without invoking or activating provider effects."""
+
+    def __init__(
+        self,
+        connection_factory: ConnectionFactory,
+        *,
+        tenant_id: str,
+        registry: ContractRegistry | None = None,
+    ) -> None:
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        self._connection_factory = connection_factory
+        self._tenant_id = tenant_id
+        self._registry = registry or ContractRegistry()
+
+    def append_booking_result(
+        self,
+        *,
+        command: dict[str, Any],
+        binding: dict[str, Any],
+        result: dict[str, Any],
+    ) -> None:
+        records = (command, binding, result)
+        self._validate_records(
+            records,
+            expected_types=("booking_command", "calendar_provider_binding", "booking_result"),
+        )
+        validate_booking_command(command)
+        validate_booking_result_context(command=command, binding=binding, result=result)
+        self._append(result, identity_field="resultId")
+
+    def append_booking_reconciliation(
+        self,
+        *,
+        command: dict[str, Any],
+        binding: dict[str, Any],
+        prior_result: dict[str, Any],
+        reconciliation: dict[str, Any],
+    ) -> None:
+        records = (command, binding, prior_result, reconciliation)
+        self._validate_records(
+            records,
+            expected_types=(
+                "booking_command",
+                "calendar_provider_binding",
+                "booking_result",
+                "booking_reconciliation",
+            ),
+        )
+        validate_booking_command(command)
+        validate_booking_result_context(command=command, binding=binding, result=prior_result)
+        validate_reconciliation(prior_result, reconciliation)
+        self._append(reconciliation, identity_field="reconciliationId")
+
+    def _validate_records(
+        self,
+        records: tuple[dict[str, Any], ...],
+        *,
+        expected_types: tuple[str, ...],
+    ) -> None:
+        for record in records:
+            validate_record(record, "availability_booking", self._registry)
+        if tuple(record["messageType"] for record in records) != expected_types:
+            raise ValueError("booking outcome has unexpected message types")
+        if any(record["tenantId"] != self._tenant_id for record in records):
+            raise TenantIsolationViolation("record tenantId does not match repository tenant")
+
+    def _append(self, record: dict[str, Any], *, identity_field: str) -> None:
+        with self._connection_factory() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('app.tenant_id', %s, true)",
+                        (self._tenant_id,),
+                    )
+                    cursor.execute(
+                        """
+                        INSERT INTO derived_contract_records
+                            (tenant_id, contract_family, message_type, record_id,
+                             record_version, schema_version, payload)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                        """.strip(),
+                        (
+                            self._tenant_id,
+                            "availability_booking",
+                            record["messageType"],
+                            record[identity_field],
+                            1,
+                            record["schemaVersion"],
+                            json.dumps(
+                                record,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                ensure_ascii=False,
+                            ),
+                        ),
+                    )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
 
 
 class QualificationDecisionPairRepository:

@@ -11,6 +11,7 @@ import pytest
 from buyer_ops_contracts.canonical_repository import TenantIsolationViolation
 from buyer_ops_contracts.contract_acceptance import ContractSemanticError
 from buyer_ops_contracts.derived_contract_repository import (
+    BookingOutcomeRepository,
     DerivedContractReader,
     QualificationDecisionPairRepository,
 )
@@ -104,6 +105,14 @@ def _qualification_records() -> tuple[dict[str, Any], ...]:
     return tuple(
         cast(dict[str, Any], fixture[key])
         for key in ("policy", "input", "nextQuestion", "readiness")
+    )
+
+
+def _booking_records() -> tuple[dict[str, Any], ...]:
+    fixture = json.loads((ROOT / "tests/fixtures/availability_booking/valid.json").read_text())
+    return tuple(
+        cast(dict[str, Any], fixture[key])
+        for key in ("binding", "command", "result", "reconciliation")
     )
 
 
@@ -249,6 +258,147 @@ def test_qualification_decision_pair_rolls_back_second_insert_failure() -> None:
             inputs=inputs,
             next_question=next_question,
             readiness=readiness,
+        )
+    assert connection.commits == 0
+    assert connection.rollbacks == 1
+
+
+def test_booking_outcome_repository_appends_result_and_reconciliation_separately() -> None:
+    result_connection = _WriteConnection()
+    reconciliation_connection = _WriteConnection()
+    connections = iter((result_connection, reconciliation_connection))
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield next(connections)
+
+    binding, command, result, reconciliation = _booking_records()
+    repository = BookingOutcomeRepository(connection_factory, tenant_id="tenant-a")
+    repository.append_booking_result(command=command, binding=binding, result=result)
+    repository.append_booking_reconciliation(
+        command=command,
+        binding=binding,
+        prior_result=result,
+        reconciliation=reconciliation,
+    )
+
+    assert result_connection.commits == reconciliation_connection.commits == 1
+    result_insert = result_connection.cursor_instance.executions[1][1]
+    reconciliation_insert = reconciliation_connection.cursor_instance.executions[1][1]
+    assert result_insert[1:5] == (
+        "availability_booking",
+        "booking_result",
+        result["resultId"],
+        1,
+    )
+    assert reconciliation_insert[1:5] == (
+        "availability_booking",
+        "booking_reconciliation",
+        reconciliation["reconciliationId"],
+        1,
+    )
+    assert json.loads(cast(str, result_insert[6])) == result
+    assert json.loads(cast(str, reconciliation_insert[6])) == reconciliation
+
+
+@pytest.mark.parametrize("reconciliation_result", ["still_unknown", "conflict_requires_resolution"])
+def test_booking_outcome_repository_persists_nonterminal_reconciliation(
+    reconciliation_result: str,
+) -> None:
+    connection = _WriteConnection()
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    binding, command, result, reconciliation = _booking_records()
+    reconciliation["result"] = reconciliation_result
+    reconciliation["appointmentRef"] = None
+    reconciliation["appointmentVersion"] = None
+    BookingOutcomeRepository(
+        connection_factory, tenant_id="tenant-a"
+    ).append_booking_reconciliation(
+        command=command,
+        binding=binding,
+        prior_result=result,
+        reconciliation=reconciliation,
+    )
+    assert connection.commits == 1
+
+
+@pytest.mark.parametrize("target", ["result", "reconciliation"])
+def test_booking_outcome_repository_rejects_semantic_mismatch_before_opening(
+    target: str,
+) -> None:
+    opened = False
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        nonlocal opened
+        opened = True
+        yield _WriteConnection()
+
+    binding, command, result, reconciliation = _booking_records()
+    repository = BookingOutcomeRepository(connection_factory, tenant_id="tenant-a")
+    with pytest.raises(ContractSemanticError):
+        if target == "result":
+            result["commandRef"]["recordId"] = "command-other"
+            repository.append_booking_result(command=command, binding=binding, result=result)
+        else:
+            reconciliation["priorResultRef"]["recordId"] = "result-other"
+            repository.append_booking_reconciliation(
+                command=command,
+                binding=binding,
+                prior_result=result,
+                reconciliation=reconciliation,
+            )
+    assert not opened
+
+
+@pytest.mark.parametrize("failure", ["structural", "roles", "tenant", "command"])
+def test_booking_outcome_repository_rejects_unadmitted_result_before_opening(
+    failure: str,
+) -> None:
+    opened = False
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        nonlocal opened
+        opened = True
+        yield _WriteConnection()
+
+    binding, command, result, _ = _booking_records()
+    expected: type[Exception]
+    if failure == "structural":
+        result.pop("evidenceIds")
+        expected = ContractViolation
+    elif failure == "roles":
+        command = result
+        expected = ValueError
+    elif failure == "tenant":
+        result["tenantId"] = "tenant-other"
+        expected = TenantIsolationViolation
+    else:
+        command["commandKind"] = "cancel"
+        expected = ContractSemanticError
+    with pytest.raises(expected):
+        BookingOutcomeRepository(connection_factory, tenant_id="tenant-a").append_booking_result(
+            command=command, binding=binding, result=result
+        )
+    assert not opened
+
+
+def test_booking_outcome_repository_rolls_back_insert_failure() -> None:
+    connection = _WriteConnection(fail_on_execute=2)
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    binding, command, result, _ = _booking_records()
+    with pytest.raises(RuntimeError, match="second decision failure"):
+        BookingOutcomeRepository(connection_factory, tenant_id="tenant-a").append_booking_result(
+            command=command, binding=binding, result=result
         )
     assert connection.commits == 0
     assert connection.rollbacks == 1

@@ -24,6 +24,7 @@ from buyer_ops_contracts.audit import verify_tenant_export
 from buyer_ops_contracts.canonical_repository import CanonicalRepository, VersionConflict
 from buyer_ops_contracts.closure_repository import PostgresClosureRepository
 from buyer_ops_contracts.derived_contract_repository import (
+    BookingOutcomeRepository,
     DerivedContractReader,
     QualificationDecisionPairRepository,
 )
@@ -1653,6 +1654,23 @@ def _qualification_decision_pair_fixture(
     return policy, inputs, next_question, readiness
 
 
+def _booking_outcome_fixture(
+    suffix: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    fixture = json.loads((ROOT / "tests/fixtures/availability_booking/valid.json").read_text())
+    binding = fixture["binding"]
+    command = fixture["command"]
+    result = fixture["result"]
+    reconciliation = fixture["reconciliation"]
+    command["commandId"] = f"booking-command-{suffix}"
+    result["resultId"] = f"booking-result-{suffix}"
+    result["commandRef"]["recordId"] = command["commandId"]
+    reconciliation["reconciliationId"] = f"booking-reconciliation-{suffix}"
+    reconciliation["commandRef"]["recordId"] = command["commandId"]
+    reconciliation["priorResultRef"]["recordId"] = result["resultId"]
+    return binding, command, result, reconciliation
+
+
 def _insert_derived_contract_record(
     connection: psycopg.Connection[Any],
     *,
@@ -1962,6 +1980,74 @@ def test_qualification_decision_pair_rolls_back_if_second_insert_conflicts(
             "SELECT count(*) FROM derived_contract_records "
             "WHERE message_type = 'readiness_decision' AND record_id = %s",
             (readiness["decisionId"],),
+        ).fetchone() == (1,)
+
+
+def test_booking_outcomes_append_independently_and_round_trip(postgres_dsn: str) -> None:
+    binding, command, result, reconciliation = _booking_outcome_fixture("round-trip")
+    repository = BookingOutcomeRepository(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    )
+    repository.append_booking_result(command=command, binding=binding, result=result)
+    repository.append_booking_reconciliation(
+        command=command,
+        binding=binding,
+        prior_result=result,
+        reconciliation=reconciliation,
+    )
+
+    reader = DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a")
+    assert (
+        reader.get(
+            contract_family="availability_booking",
+            message_type="booking_result",
+            record_id=result["resultId"],
+            record_version=1,
+        )
+        == result
+    )
+    assert (
+        reader.get(
+            contract_family="availability_booking",
+            message_type="booking_reconciliation",
+            record_id=reconciliation["reconciliationId"],
+            record_version=1,
+        )
+        == reconciliation
+    )
+
+
+@pytest.mark.parametrize("target", ["result", "reconciliation"])
+def test_booking_outcome_duplicate_is_raw_append_conflict_without_mutation(
+    postgres_dsn: str,
+    target: str,
+) -> None:
+    binding, command, result, reconciliation = _booking_outcome_fixture(f"duplicate-{target}")
+    repository = BookingOutcomeRepository(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    )
+    if target == "result":
+        append = lambda: repository.append_booking_result(  # noqa: E731
+            command=command, binding=binding, result=result
+        )
+        record_id = result["resultId"]
+    else:
+        append = lambda: repository.append_booking_reconciliation(  # noqa: E731
+            command=command,
+            binding=binding,
+            prior_result=result,
+            reconciliation=reconciliation,
+        )
+        record_id = reconciliation["reconciliationId"]
+    append()
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        append()
+
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM derived_contract_records WHERE record_id = %s",
+            (record_id,),
         ).fetchone() == (1,)
 
 
