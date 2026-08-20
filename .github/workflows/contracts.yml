@@ -52,5 +52,9 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest
+      - name: Build source and wheel distributions
+        run: |
+          uv build --sdist --wheel --out-dir dist
+          sha256sum dist/*
       - name: Scan for committed credential material
         run: uv run python scripts/scan_secrets.py

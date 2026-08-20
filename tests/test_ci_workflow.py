@@ -16,3 +16,8 @@ def test_every_github_action_is_pinned_to_an_immutable_commit() -> None:
     ]
     assert action_lines
     assert all(IMMUTABLE_ACTION.fullmatch(line) for line in action_lines)
+
+
+def test_contract_ci_builds_both_distribution_artifacts() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "contracts.yml").read_text()
+    assert "uv build --sdist --wheel" in workflow
