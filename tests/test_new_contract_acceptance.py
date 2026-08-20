@@ -248,6 +248,25 @@ def test_qualification_decisions_bind_exact_inputs_and_deterministic_results() -
         )
 
 
+@pytest.mark.parametrize("decision_name", ["nextQuestion", "readiness"])
+def test_qualification_decisions_cannot_predate_their_input(
+    decision_name: str,
+) -> None:
+    valid = _load("qualification_readiness/valid.json")
+    decision = copy.deepcopy(valid[decision_name])
+    decision["derivedAt"] = "2026-03-01T11:59:59Z"
+    records = {
+        "nextQuestion": copy.deepcopy(valid["nextQuestion"]),
+        "readiness": copy.deepcopy(valid["readiness"]),
+    }
+    records[decision_name] = decision
+
+    with pytest.raises(ContractSemanticError, match="decision_predates_input"):
+        validate_qualification_decisions(
+            valid["policy"], valid["input"], records["nextQuestion"], records["readiness"]
+        )
+
+
 def test_availability_semantic_fixture_matrix() -> None:
     valid = _load("availability_booking/valid.json")
     invalid = _load("availability_booking/invalid.json")

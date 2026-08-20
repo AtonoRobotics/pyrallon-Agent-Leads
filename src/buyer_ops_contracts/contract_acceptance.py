@@ -190,6 +190,9 @@ def validate_qualification_decisions(
         or readiness["inputDigest"] != inputs["inputDigest"]
     ):
         raise ContractSemanticError("decision_input_digest_mismatch")
+    evaluated_at = _time(inputs["evaluatedAt"])
+    if any(_time(record["derivedAt"]) < evaluated_at for record in (next_question, readiness)):
+        raise ContractSemanticError("decision_predates_input")
 
     expected_question_result, expected_criterion_id = select_next_question(policy, inputs)
     if (
