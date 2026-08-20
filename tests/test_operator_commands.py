@@ -40,6 +40,27 @@ class _Connection:
         return None
 
 
+class _DuplicateCursor(_Cursor):
+    def __init__(self, digest: str, result: dict[str, Any]) -> None:
+        self.digest = digest
+        self.result = result
+        self.executions: list[tuple[str, tuple[object, ...]]] = []
+
+    def execute(self, statement: str, parameters: tuple[object, ...]) -> None:
+        self.executions.append((statement, parameters))
+
+    def fetchone(self) -> tuple[str, dict[str, Any]]:
+        return self.digest, self.result
+
+
+class _DuplicateConnection(_Connection):
+    def __init__(self, cursor: _DuplicateCursor) -> None:
+        self.cursor_instance = cursor
+
+    def cursor(self) -> _DuplicateCursor:
+        return self.cursor_instance
+
+
 class _Repository:
     def __init__(self, target: dict[str, Any]) -> None:
         self.target = target
@@ -191,3 +212,35 @@ def test_unpublished_approval_transition_fails_before_policy_or_canonical_write(
     assert raised.value.code == "validation_failed"
     assert raised.value.detail == "operator command semantics are unavailable"
     assert repository.save_called is False
+
+
+def test_canonical_command_locks_idempotency_key_before_replay_lookup() -> None:
+    target = {"id": "target-1", "recordType": "Assertion", "version": 1}
+    command = _command("correct_invalidate", target)
+    stored = {
+        "message_type": "operator_command_result",
+        "schema_version": "operator-surface/1.1.0",
+        "command_id": command["command_id"],
+        "tenant_id": "tenant-1",
+        "status": "applied",
+        "decided_at": "2030-01-01T00:00:00Z",
+        "decision_evidence_id": "evidence-1",
+        "current_version": 2,
+        "result_refs": [],
+    }
+    cursor = _DuplicateCursor(command["payload_digest"], stored)
+    service = OperatorCommandService(
+        _DuplicateConnection(cursor),
+        _Repository(target),  # type: ignore[arg-type]
+        tenant_id="tenant-1",
+    )
+
+    result = service._dispatch_canonical_mutation(  # noqa: SLF001
+        command, actor_id="agent-1", now=datetime.now(UTC)
+    )
+
+    assert result["status"] == "duplicate"
+    assert "set_config" in cursor.executions[0][0]
+    assert "pg_advisory_xact_lock" in cursor.executions[1][0]
+    assert cursor.executions[1][1] == (f"operator-command:tenant-1:{command['idempotency_key']}",)
+    assert "operator_command_results" in cursor.executions[2][0]

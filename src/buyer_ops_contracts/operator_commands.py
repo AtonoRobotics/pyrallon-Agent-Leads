@@ -121,6 +121,10 @@ class OperatorCommandService:
         try:
             with self._connection.cursor() as cursor:
                 cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"operator-command:{self._tenant_id}:{command['idempotency_key']}",),
+                )
                 duplicate = self._existing_on(cursor, command["idempotency_key"])
                 if duplicate is not None:
                     if duplicate["payload_digest"] != command["payload_digest"]:

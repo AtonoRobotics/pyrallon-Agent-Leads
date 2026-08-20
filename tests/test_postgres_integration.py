@@ -53,10 +53,11 @@ from buyer_ops_contracts.ingress import (
 )
 from buyer_ops_contracts.ingress_service import IngressService
 from buyer_ops_contracts.operator_commands import (
-    OperatorCommandService as CanonicalOperatorCommandService,
+    OperatorCommandError,
+    command_payload_digest,
 )
 from buyer_ops_contracts.operator_commands import (
-    command_payload_digest,
+    OperatorCommandService as CanonicalOperatorCommandService,
 )
 from buyer_ops_contracts.operator_policy import OperatorPolicyRepository
 from buyer_ops_contracts.operator_surface import (
@@ -1579,6 +1580,131 @@ def test_operator_1_1_applies_evidenced_correction_and_result_atomically(
         assert connection.execute(
             "SELECT count(*) FROM operator_command_results WHERE command_id = %s",
             ("operator-command-correction-1",),
+        ).fetchone() == (1,)
+
+        concurrent_original = copy.deepcopy(original)
+        concurrent_original["id"] = "operator-assertion-idempotent-race"
+        canonical.save(concurrent_original)
+        concurrent_corrected = copy.deepcopy(concurrent_original)
+        concurrent_corrected.update(
+            version=2,
+            updatedAt="2030-01-02T00:00:00Z",
+            status="invalid",
+            assertionState="invalid",
+        )
+        concurrent_correction = copy.deepcopy(correction)
+        concurrent_correction.update(
+            id="operator-correction-idempotent-race",
+            correctedItemId="operator-assertion-idempotent-race",
+        )
+        concurrent_command = copy.deepcopy(command)
+        concurrent_command.update(
+            command_id="operator-command-idempotent-race",
+            target_record_id="operator-assertion-idempotent-race",
+            idempotency_key="operator-correction-key-idempotent-race",
+        )
+        concurrent_command["authority"]["resource_id"] = "operator-assertion-idempotent-race"
+        concurrent_command["mutation"] = {
+            "kind": "correction",
+            "correction_record": concurrent_correction,
+            "corrected_item_update": concurrent_corrected,
+        }
+        concurrent_command["payload_digest"] = command_payload_digest(concurrent_command)
+        barrier = threading.Barrier(2)
+
+        def dispatch_same_command(candidate: dict[str, Any]) -> dict[str, Any]:
+            with _runtime_connection(postgres_dsn) as worker_connection:
+                worker_repository = CanonicalRepository(worker_connection, tenant_id="tenant-a")
+                service = CanonicalOperatorCommandService(
+                    worker_connection, worker_repository, tenant_id="tenant-a"
+                )
+                barrier.wait()
+                return service.dispatch(candidate, actor_id="agent-1")
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            concurrent_results = list(
+                executor.map(
+                    dispatch_same_command,
+                    [concurrent_command, copy.deepcopy(concurrent_command)],
+                )
+            )
+        assert sorted(result["status"] for result in concurrent_results) == [
+            "applied",
+            "duplicate",
+        ]
+        assert canonical.get("operator-assertion-idempotent-race")["version"] == 2  # type: ignore[index]
+        assert canonical.get("operator-correction-idempotent-race") is not None
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM operator_command_results WHERE idempotency_key = %s",
+            ("operator-correction-key-idempotent-race",),
+        ).fetchone() == (1,)
+
+        payload_race_original = copy.deepcopy(original)
+        payload_race_original["id"] = "operator-assertion-payload-race"
+        canonical.save(payload_race_original)
+        payload_race_commands = []
+        for suffix in ("a", "b"):
+            candidate_update = copy.deepcopy(payload_race_original)
+            candidate_update.update(
+                version=2,
+                updatedAt="2030-01-02T00:00:00Z",
+                status="invalid",
+                assertionState="invalid",
+            )
+            candidate_correction = copy.deepcopy(correction)
+            candidate_correction.update(
+                id=f"operator-correction-payload-race-{suffix}",
+                correctedItemId="operator-assertion-payload-race",
+                reason=f"Distinct evidenced correction {suffix}.",
+            )
+            candidate_command = copy.deepcopy(command)
+            candidate_command.update(
+                command_id=f"operator-command-payload-race-{suffix}",
+                target_record_id="operator-assertion-payload-race",
+                idempotency_key="operator-correction-key-payload-race",
+                reason=f"Distinct evidenced correction {suffix}.",
+            )
+            candidate_command["authority"]["resource_id"] = "operator-assertion-payload-race"
+            candidate_command["mutation"] = {
+                "kind": "correction",
+                "correction_record": candidate_correction,
+                "corrected_item_update": candidate_update,
+            }
+            candidate_command["payload_digest"] = command_payload_digest(candidate_command)
+            payload_race_commands.append(candidate_command)
+        barrier = threading.Barrier(2)
+
+        def dispatch_conflicting_command(candidate: dict[str, Any]) -> dict[str, Any] | str:
+            with _runtime_connection(postgres_dsn) as worker_connection:
+                worker_repository = CanonicalRepository(worker_connection, tenant_id="tenant-a")
+                service = CanonicalOperatorCommandService(
+                    worker_connection, worker_repository, tenant_id="tenant-a"
+                )
+                barrier.wait()
+                try:
+                    return service.dispatch(candidate, actor_id="agent-1")
+                except OperatorCommandError as error:
+                    return error.code
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            payload_race_results = list(
+                executor.map(dispatch_conflicting_command, payload_race_commands)
+            )
+        assert sum(isinstance(result, dict) for result in payload_race_results) == 1
+        assert payload_race_results.count("payload_mismatch") == 1
+        assert canonical.get("operator-assertion-payload-race")["version"] == 2  # type: ignore[index]
+        assert (
+            sum(
+                canonical.get(f"operator-correction-payload-race-{suffix}") is not None
+                for suffix in ("a", "b")
+            )
+            == 1
+        )
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM operator_command_results WHERE idempotency_key = %s",
+            ("operator-correction-key-payload-race",),
         ).fetchone() == (1,)
 
         rollback_original = copy.deepcopy(original)
