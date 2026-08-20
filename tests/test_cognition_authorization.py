@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from buyer_ops_contracts.cognition_authorization import CognitionAuthorization
 from buyer_ops_contracts.errors import SetupRejected
-from buyer_ops_contracts.structural import validate_record
 
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=UTC)
 SECRET = b"x" * 32
@@ -133,90 +132,15 @@ def _auth(http: _Http) -> CognitionAuthorization:
     )
 
 
-def test_chatgpt_device_start_returns_provider_verification_url() -> None:
-    auth = _auth(
-        _Http(
-            {
-                "deviceauth/usercode": (
-                    200,
-                    {
-                        "device_auth_id": "deviceauth_1",
-                        "user_code": "ABCD-EFGH",
-                        "interval": "5",
-                        "expires_at": "2026-08-19T18:15:00+00:00",
-                    },
-                )
-            }
-        )
-    )
-    started = auth.start_chatgpt_device()
-    assert started["userCode"] == "ABCD-EFGH"
-    assert started["verificationUri"].startswith("https://auth.openai.com/")
-    assert started["connectorId"] == "openai.chatgpt"
+def test_chatgpt_device_start_fails_before_provider_call_without_identity_admission() -> None:
+    http = _Http({"deviceauth/usercode": (200, {})})
 
+    with pytest.raises(SetupRejected) as raised:
+        _auth(http).start_chatgpt_device()
 
-def test_chatgpt_device_poll_binds_subscription_identity() -> None:
-    http = _Http(
-        {
-            "deviceauth/usercode": (
-                200,
-                {
-                    "device_auth_id": "deviceauth_1",
-                    "user_code": "ABCD-EFGH",
-                    "interval": "5",
-                    "expires_at": "2026-08-19T18:15:00+00:00",
-                },
-            ),
-            "deviceauth/token": (
-                200,
-                {
-                    "authorization_code": "auth-code-1",
-                    "code_verifier": "openai-device-verifier",
-                    "code_challenge": "openai-device-challenge",
-                    "status": "success",
-                },
-            ),
-            "oauth/token": (
-                200,
-                {
-                    "access_token": "access-1",
-                    "refresh_token": "refresh-1",
-                    "id_token": "id-1",
-                    "expires_in": 3600,
-                    "account_id": "acct_chatgpt",
-                },
-            ),
-        }
-    )
-    auth = _auth(http)
-    started = auth.start_chatgpt_device()
-    bound = auth.poll_chatgpt_device(str(started["sessionId"]))
-    assert bound["status"] == "bound"
-    identity = bound["identity"]
-    assert identity["authClass"] == "subscription_oauth"
-    assert identity["billingClass"] == "subscription"
-    validate_record(
-        {
-            "identityRef": identity["identityRef"],
-            "tenantId": "1",
-            "providerId": "openai",
-            "authClass": "subscription_oauth",
-            "billingClass": "subscription",
-            "subjectType": "entitled_user",
-            "subjectRef": "actor-1",
-            "allowedActionClasses": ["lead_qualification"],
-            "allowedModelFamilies": ["approved-codex-family"],
-            "concurrencyLimit": 1,
-            "dataPolicyVersion": "data-policy/unactivated",
-            "state": "active",
-            "expiresAt": _stamp_plus(),
-        },
-        "gateway_runtime",
-    )
-
-
-def _stamp_plus() -> str:
-    return (NOW + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert raised.value.code == "configuration_incomplete"
+    assert raised.value.detail == "credential_identity_admission_unavailable"
+    assert http.calls == []
 
 
 def test_claude_subscription_oauth_is_refused() -> None:
@@ -225,9 +149,25 @@ def test_claude_subscription_oauth_is_refused() -> None:
         auth.refuse_unsupported("claude.subscription")
 
 
-def test_metered_openai_key_is_not_a_subscription() -> None:
-    auth = _auth(_Http({"api.openai.com/v1/models": (200, {"data": []})}))
-    bound = auth.bind_metered(connector_id="openai.api", api_key="sk-test-metered-key")
-    assert bound["authClass"] == "metered_api"
-    assert bound["billingClass"] == "metered"
-    assert bound["providerAccountRef"].endswith("key")
+def test_metered_binding_fails_before_provider_call_without_identity_admission() -> None:
+    http = _Http({"api.openai.com/v1/models": (200, {"data": []})})
+    auth = _auth(http)
+
+    with pytest.raises(SetupRejected) as raised:
+        auth.bind_metered(connector_id="openai.api", api_key="sk-test-metered-key")
+
+    assert raised.value.code == "configuration_incomplete"
+    assert raised.value.detail == "credential_identity_admission_unavailable"
+    assert http.calls == []
+
+
+def test_local_binding_fails_before_provider_call_without_identity_admission() -> None:
+    http = _Http({"/models": (200, {"data": []})})
+    auth = _auth(http)
+
+    with pytest.raises(SetupRejected) as raised:
+        auth.bind_local(base_url="http://model-runtime", model_id="owner-model")
+
+    assert raised.value.code == "configuration_incomplete"
+    assert raised.value.detail == "credential_identity_admission_unavailable"
+    assert http.calls == []

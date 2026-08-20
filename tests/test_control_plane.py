@@ -504,6 +504,42 @@ def test_connector_http_errors_preserve_typed_outcomes(code: str, expected_statu
     assert payload == {"code": code, "detail": "connector denial detail"}
 
 
+@pytest.mark.parametrize(
+    ("route", "request_payload"),
+    [
+        (
+            "/v1/cognition/metered",
+            {"connectorId": "openai.api", "apiKey": "sk-test-metered-key"},
+        ),
+        (
+            "/v1/cognition/local",
+            {"baseUrl": "http://model-runtime", "modelId": "owner-selected-model"},
+        ),
+        ("/v1/cognition/oauth/poll", {"sessionId": "oauth-session-1"}),
+    ],
+)
+def test_cognition_binding_routes_fail_closed_without_identity_admission(
+    route: str, request_payload: dict[str, Any]
+) -> None:
+    plane = _plane(Connection())
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+
+    status, payload = plane.handle(
+        "POST",
+        route,
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        json.dumps(request_payload).encode(),
+    )
+
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
+    assert payload["detail"] == "credential_identity_admission_unavailable"
+
+
 def test_invalid_operator_command_returns_typed_operator_error() -> None:
     connection = AuthorizationConnection()
     connection.cursor_instance.rows = [
