@@ -341,11 +341,19 @@ def main() -> None:
         raise SystemExit("OAuth return-origin migration missing return_origin")
     if "DROP COLUMN IF EXISTS return_origin" not in oauth_return_rollback.read_text():
         raise SystemExit("OAuth return-origin rollback missing return_origin removal")
+    xai_subscription = ROOT / "migrations" / "0021_xai_subscription_oauth.sql"
+    xai_subscription_rollback = ROOT / "migrations" / "0021_xai_subscription_oauth.rollback.sql"
+    if not xai_subscription.is_file() or not xai_subscription_rollback.is_file():
+        raise SystemExit("missing SuperGrok OAuth session migration or rollback")
+    if "xai.subscription" not in xai_subscription.read_text():
+        raise SystemExit("SuperGrok OAuth migration missing xai.subscription")
+    if "openai.chatgpt" not in xai_subscription_rollback.read_text():
+        raise SystemExit("SuperGrok OAuth rollback must restore ChatGPT-only session check")
     print(
         "canonical, evidence, identity, ontology 0.2/0.3, Habitat, inbound, operator 1.0/1.1, "
         "OT01 acknowledgment, OPEN-025 authorization, OPEN-026 activation, Release Activation "
         "1.1 concurrency, connector credentials, platform OAuth clients, Twilio OAuth, cognitive "
-        "credentials, OAuth return origin, and control-plane migration integrity verified"
+        "credentials, OAuth return origin, SuperGrok OAuth, and control-plane migration integrity verified"
     )
 
 

@@ -29,6 +29,7 @@ class _Cursor:
         if "INSERT INTO cognitive_oauth_sessions" in statement:
             self.store["sessions"][str(parameters[1])] = {
                 "actor_id": parameters[2],
+                "provider_id": parameters[3],
                 "device_code": parameters[4],
                 "code_verifier": parameters[5],
                 "user_code": parameters[6],
@@ -47,6 +48,7 @@ class _Cursor:
                     session["user_code"],
                     session["expires_at"],
                     session["consumed_at"],
+                    session["provider_id"],
                 )
         elif "UPDATE cognitive_oauth_sessions" in statement:
             session = self.store["sessions"].get(str(parameters[2]))
@@ -231,3 +233,150 @@ def test_metered_openai_key_is_not_a_subscription() -> None:
     assert bound["authClass"] == "metered_api"
     assert bound["billingClass"] == "metered"
     assert bound["providerAccountRef"].endswith("key")
+
+
+def test_xai_device_start_returns_provider_verification_url() -> None:
+    auth = _auth(
+        _Http(
+            {
+                "oauth2/device/code": (
+                    200,
+                    {
+                        "device_code": "xai-device-1",
+                        "user_code": "WXYZ-1234",
+                        "verification_uri": "https://auth.x.ai/device",
+                        "interval": 5,
+                        "expires_in": 1800,
+                    },
+                )
+            }
+        )
+    )
+    started = auth.start_xai_device()
+    assert started["userCode"] == "WXYZ-1234"
+    assert started["verificationUri"] == "https://auth.x.ai/device"
+    assert started["connectorId"] == "xai.subscription"
+
+
+def test_xai_device_poll_binds_subscription_identity() -> None:
+    http = _Http(
+        {
+            "oauth2/device/code": (
+                200,
+                {
+                    "device_code": "xai-device-1",
+                    "user_code": "WXYZ-1234",
+                    "verification_uri": "https://auth.x.ai/device",
+                    "interval": 5,
+                    "expires_in": 1800,
+                },
+            ),
+            "oauth2/token": (
+                200,
+                {
+                    "access_token": "xai-access-1",
+                    "refresh_token": "xai-refresh-1",
+                    "expires_in": 3600,
+                    "account_id": "acct_grok",
+                },
+            ),
+        }
+    )
+    auth = _auth(http)
+    started = auth.start_xai_device()
+    bound = auth.poll_device(str(started["sessionId"]))
+    assert bound["status"] == "bound"
+    identity = bound["identity"]
+    assert identity["authClass"] == "subscription_oauth"
+    assert identity["billingClass"] == "subscription"
+    assert identity["connectorId"] == "xai.subscription"
+    validate_record(
+        {
+            "identityRef": identity["identityRef"],
+            "tenantId": "1",
+            "providerId": "xai",
+            "authClass": "subscription_oauth",
+            "billingClass": "subscription",
+            "subjectType": "entitled_user",
+            "subjectRef": "actor-1",
+            "allowedActionClasses": ["lead_qualification"],
+            "allowedModelFamilies": ["approved-xai-family"],
+            "concurrencyLimit": 1,
+            "dataPolicyVersion": "data-policy/unactivated",
+            "state": "active",
+            "expiresAt": _stamp_plus(),
+        },
+        "gateway_runtime",
+    )
+
+
+def test_xai_device_poll_stays_pending_until_authorized() -> None:
+    http = _Http(
+        {
+            "oauth2/device/code": (
+                200,
+                {
+                    "device_code": "xai-device-1",
+                    "user_code": "WXYZ-1234",
+                    "verification_uri": "https://auth.x.ai/device",
+                    "interval": 5,
+                    "expires_in": 1800,
+                },
+            ),
+            "oauth2/token": (400, {"error": "authorization_pending"}),
+        }
+    )
+    auth = _auth(http)
+    started = auth.start_xai_device()
+    polled = auth.poll_device(str(started["sessionId"]))
+    assert polled == {"status": "pending", "sessionId": started["sessionId"]}
+
+
+def test_chatgpt_poll_after_bind_returns_bound_identity() -> None:
+    http = _Http(
+        {
+            "deviceauth/usercode": (
+                200,
+                {
+                    "device_auth_id": "deviceauth_1",
+                    "user_code": "ABCD-EFGH",
+                    "interval": "5",
+                    "expires_at": "2026-08-19T18:15:00+00:00",
+                },
+            ),
+            "deviceauth/token": (
+                200,
+                {
+                    "authorization_code": "auth-code-1",
+                    "code_verifier": "openai-device-verifier",
+                    "code_challenge": "openai-device-challenge",
+                    "status": "success",
+                },
+            ),
+            "oauth/token": (
+                200,
+                {
+                    "access_token": "access-1",
+                    "refresh_token": "refresh-1",
+                    "id_token": "id-1",
+                    "expires_in": 3600,
+                    "account_id": "acct_chatgpt",
+                },
+            ),
+        }
+    )
+    auth = _auth(http)
+    started = auth.start_chatgpt_device()
+    first = auth.poll_device(str(started["sessionId"]))
+    assert first["status"] == "bound"
+    second = auth.poll_device(str(started["sessionId"]))
+    assert second["status"] == "bound"
+    assert second["identity"]["connectorId"] == "openai.chatgpt"
+
+
+def test_metered_xai_key_is_not_a_subscription() -> None:
+    auth = _auth(_Http({"api.x.ai/v1/models": (200, {"data": []})}))
+    bound = auth.bind_metered(connector_id="xai.api", api_key="xai-test-metered-key")
+    assert bound["authClass"] == "metered_api"
+    assert bound["billingClass"] == "metered"
+    assert bound["connectorId"] == "xai.api"

@@ -1,6 +1,7 @@
 """Cognitive runtime credential identities.
 
 ChatGPT/Codex subscription uses OpenAI device-code OAuth (subscription_oauth).
+Grok SuperGrok / X Premium+ uses xAI RFC 8628 device-code OAuth (subscription_oauth).
 OpenAI and xAI platform keys are metered_api. Local OpenAI-compatible endpoints
 are local_endpoint. Claude Pro/Max subscription OAuth is refused: Anthropic
 restricts those tokens to Claude Code and claude.ai.
@@ -47,6 +48,16 @@ CHATGPT_DEVICE_CODE_URL = "https://auth.openai.com/api/accounts/deviceauth/userc
 CHATGPT_DEVICE_TOKEN_URL = "https://auth.openai.com/api/accounts/deviceauth/token"
 CHATGPT_TOKEN_URL = "https://auth.openai.com/oauth/token"
 CHATGPT_DEVICE_REDIRECT_URI = "https://auth.openai.com/deviceauth/callback"
+CHATGPT_VERIFICATION_URI = "https://auth.openai.com/codex/device"
+XAI_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"
+XAI_DEVICE_CODE_URL = "https://auth.x.ai/oauth2/device/code"
+XAI_TOKEN_URL = "https://auth.x.ai/oauth2/token"
+XAI_DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+XAI_REFERRER = "grok-build"
+XAI_SCOPE = (
+    "openid profile email offline_access grok-cli:access api:access "
+    "conversations:read conversations:write workspaces:read workspaces:write"
+)
 PROVIDERS = {
     "openai.chatgpt": {
         "provider_id": "openai",
@@ -64,6 +75,14 @@ PROVIDERS = {
         "model_family": "approved-openai-family",
         "action_class": "lead_qualification",
         "models_url": "https://api.openai.com/v1/models",
+    },
+    "xai.subscription": {
+        "provider_id": "xai",
+        "auth_class": "subscription_oauth",
+        "billing_class": "subscription",
+        "subject_type": "entitled_user",
+        "model_family": "approved-xai-family",
+        "action_class": "lead_qualification",
     },
     "xai.api": {
         "provider_id": "xai",
@@ -176,53 +195,116 @@ class CognitionAuthorization:
         verification_uri = str(
             payload.get("verification_uri_complete")
             or payload.get("verification_uri")
-            or "https://auth.openai.com/codex/device"
+            or CHATGPT_VERIFICATION_URI
         )
         if not device_code or not user_code:
             raise SetupRejected("connector_authorization_failed", "chatgpt_device_start_failed")
-        interval = int(payload.get("interval") or 5)
-        session_id = secrets.token_urlsafe(18)
-        raw_expiry = payload.get("expires_at")
-        if isinstance(raw_expiry, str) and raw_expiry:
-            expires_at = datetime.fromisoformat(raw_expiry.replace("Z", "+00:00"))
-        else:
-            expires_at = self._clock() + timedelta(seconds=int(payload.get("expires_in") or 900))
-        try:
-            with self._connection.cursor() as cursor:
-                self._set_tenant(cursor)
-                cursor.execute(
-                    """
-                    INSERT INTO cognitive_oauth_sessions (
-                        tenant_id, session_id, actor_id, provider_id, device_code,
-                        code_verifier, user_code, verification_uri, poll_interval_seconds,
-                        expires_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """.strip(),
-                    (
-                        self._tenant_id,
-                        session_id,
-                        self._actor_id,
-                        "openai.chatgpt",
-                        device_code,
-                        "",
-                        user_code,
-                        verification_uri,
-                        interval,
-                        expires_at,
-                    ),
-                )
-            self._connection.commit()
-        except Exception:
-            self._connection.rollback()
-            raise
-        return {
-            "sessionId": session_id,
-            "userCode": user_code,
-            "verificationUri": verification_uri,
-            "expiresAt": _stamp(expires_at),
-            "intervalSeconds": interval,
-            "connectorId": "openai.chatgpt",
-        }
+        return self._store_device_session(
+            connector_id="openai.chatgpt",
+            device_code=device_code,
+            user_code=user_code,
+            verification_uri=verification_uri,
+            interval=int(payload.get("interval") or 5),
+            expires_at=_expires_at(payload, self._clock(), default_seconds=900),
+        )
+
+    def start_xai_device(self) -> dict[str, str | int]:
+        status, payload = self._form(
+            XAI_DEVICE_CODE_URL,
+            {
+                "client_id": XAI_CLIENT_ID,
+                "scope": XAI_SCOPE,
+                "referrer": XAI_REFERRER,
+            },
+            extra_headers={
+                "user-agent": "grok-build",
+                "x-grok-client-surface": "ui",
+            },
+        )
+        if status == 404:
+            raise SetupRejected(
+                "connector_authorization_failed",
+                "grok_device_login_not_enabled",
+            )
+        if status != 200 or not isinstance(payload, dict):
+            raise SetupRejected("connector_authorization_failed", "xai_device_start_failed")
+        device_code = str(payload.get("device_code") or payload.get("deviceCode") or "")
+        user_code = str(payload.get("user_code") or payload.get("userCode") or "")
+        verification_uri = str(
+            payload.get("verification_uri_complete")
+            or payload.get("verification_uri")
+            or payload.get("verificationUri")
+            or ""
+        )
+        if not device_code or not user_code or not verification_uri:
+            raise SetupRejected("connector_authorization_failed", "xai_device_start_failed")
+        if not verification_uri.startswith("https://"):
+            raise SetupRejected("connector_authorization_failed", "xai_device_start_failed")
+        return self._store_device_session(
+            connector_id="xai.subscription",
+            device_code=device_code,
+            user_code=user_code,
+            verification_uri=verification_uri,
+            interval=int(payload.get("interval") or 5),
+            expires_at=_expires_at(payload, self._clock(), default_seconds=1800),
+        )
+
+    def poll_device(self, session_id: str) -> dict[str, Any]:
+        session = self._session(session_id, allow_consumed=True)
+        if session["consumed"]:
+            identity = self._identity_for(session["provider_id"])
+            if identity is None:
+                raise SetupRejected("validation_failed", "oauth session already consumed")
+            return {"status": "bound", "identity": identity}
+        if session["provider_id"] == "xai.subscription":
+            return self.poll_xai_device(session_id)
+        if session["provider_id"] == "openai.chatgpt":
+            return self.poll_chatgpt_device(session_id)
+        raise SetupRejected("validation_failed", "unknown cognition oauth provider")
+
+    def poll_xai_device(self, session_id: str) -> dict[str, Any]:
+        session = self._session(session_id)
+        status, payload = self._form(
+            XAI_TOKEN_URL,
+            {
+                "grant_type": XAI_DEVICE_GRANT,
+                "device_code": session["device_code"],
+                "client_id": XAI_CLIENT_ID,
+            },
+            extra_headers={
+                "user-agent": "grok-build",
+                "x-grok-client-surface": "ui",
+            },
+        )
+        if not isinstance(payload, dict):
+            raise SetupRejected("connector_authorization_failed", "xai_device_poll_failed")
+        error = _oauth_error(payload)
+        if error in {"authorization_pending", "slow_down"}:
+            return {"status": "pending", "sessionId": session_id}
+        if error in {"access_denied", "expired_token"}:
+            raise SetupRejected("connector_authorization_failed", error)
+        access = str(payload.get("access_token") or payload.get("accessToken") or "")
+        if status != 200 or not access:
+            raise SetupRejected(
+                "connector_authorization_failed",
+                error or "xai_device_poll_failed",
+            )
+        self._consume_session(session_id)
+        account = str(payload.get("account_id") or payload.get("email") or self._actor_id)
+        identity = self._bind(
+            connector_id="xai.subscription",
+            account=account,
+            secret={
+                "access_token": access,
+                "refresh_token": str(
+                    payload.get("refresh_token") or payload.get("refreshToken") or ""
+                ),
+                "id_token": str(payload.get("id_token") or ""),
+                "token_type": str(payload.get("token_type") or "Bearer"),
+            },
+            expires_in=int(payload.get("expires_in") or 3600),
+        )
+        return {"status": "bound", "identity": identity}
 
     def poll_chatgpt_device(self, session_id: str) -> dict[str, Any]:
         session = self._session(session_id)
@@ -276,6 +358,54 @@ class CognitionAuthorization:
             expires_in=int(token.get("expires_in") or 3600),
         )
         return {"status": "bound", "identity": identity}
+
+    def _store_device_session(
+        self,
+        *,
+        connector_id: str,
+        device_code: str,
+        user_code: str,
+        verification_uri: str,
+        interval: int,
+        expires_at: datetime,
+    ) -> dict[str, str | int]:
+        session_id = secrets.token_urlsafe(18)
+        try:
+            with self._connection.cursor() as cursor:
+                self._set_tenant(cursor)
+                cursor.execute(
+                    """
+                    INSERT INTO cognitive_oauth_sessions (
+                        tenant_id, session_id, actor_id, provider_id, device_code,
+                        code_verifier, user_code, verification_uri, poll_interval_seconds,
+                        expires_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """.strip(),
+                    (
+                        self._tenant_id,
+                        session_id,
+                        self._actor_id,
+                        connector_id,
+                        device_code,
+                        "",
+                        user_code,
+                        verification_uri,
+                        interval,
+                        expires_at,
+                    ),
+                )
+            self._connection.commit()
+        except Exception:
+            self._connection.rollback()
+            raise
+        return {
+            "sessionId": session_id,
+            "userCode": user_code,
+            "verificationUri": verification_uri,
+            "expiresAt": _stamp(expires_at),
+            "intervalSeconds": interval,
+            "connectorId": connector_id,
+        }
 
     def bind_metered(self, *, connector_id: str, api_key: str) -> dict[str, str]:
         spec = PROVIDERS.get(connector_id)
@@ -422,15 +552,24 @@ class CognitionAuthorization:
             "connectorId": connector_id,
         }
 
-    def _form(self, url: str, fields: dict[str, str]) -> tuple[int, Any]:
+    def _form(
+        self,
+        url: str,
+        fields: dict[str, str],
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[int, Any]:
+        headers = {
+            "content-type": "application/x-www-form-urlencoded",
+            "accept": "application/json",
+            "user-agent": "codex-cli",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
         return self._http.request(
             "POST",
             url,
-            headers={
-                "content-type": "application/x-www-form-urlencoded",
-                "accept": "application/json",
-                "user-agent": "codex-cli",
-            },
+            headers=headers,
             data=urlencode(fields).encode(),
             timeout=20,
         )
@@ -448,13 +587,14 @@ class CognitionAuthorization:
             timeout=20,
         )
 
-    def _session(self, session_id: str) -> dict[str, str]:
+    def _session(self, session_id: str, *, allow_consumed: bool = False) -> dict[str, str]:
         try:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
                 cursor.execute(
                     """
-                    SELECT actor_id, device_code, code_verifier, user_code, expires_at, consumed_at
+                    SELECT actor_id, device_code, code_verifier, user_code, expires_at,
+                           consumed_at, provider_id
                     FROM cognitive_oauth_sessions
                     WHERE tenant_id = %s AND session_id = %s
                     FOR UPDATE
@@ -470,16 +610,29 @@ class CognitionAuthorization:
             raise SetupRejected("validation_failed", "oauth session missing")
         if str(row[0]) != self._actor_id:
             raise SetupRejected("authority_denied", "oauth actor mismatch")
-        if row[5] is not None:
+        consumed = row[5] is not None
+        if consumed and not allow_consumed:
             raise SetupRejected("validation_failed", "oauth session already consumed")
         expires = row[4]
-        if hasattr(expires, "astimezone") and expires.astimezone(UTC) <= self._clock():
+        if (
+            not consumed
+            and hasattr(expires, "astimezone")
+            and expires.astimezone(UTC) <= self._clock()
+        ):
             raise SetupRejected("validation_failed", "oauth session expired")
         return {
             "device_code": str(row[1]),
             "code_verifier": str(row[2]),
             "user_code": str(row[3]),
+            "provider_id": str(row[6]),
+            "consumed": "true" if consumed else "",
         }
+
+    def _identity_for(self, connector_id: str) -> dict[str, str] | None:
+        for item in self.identities():
+            if item.get("connectorId") == connector_id:
+                return item
+        return None
 
     def _consume_session(self, session_id: str) -> None:
         try:
@@ -511,11 +664,20 @@ def _oauth_error(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _expires_at(payload: dict[str, Any], now: datetime, *, default_seconds: int) -> datetime:
+    raw_expiry = payload.get("expires_at")
+    if isinstance(raw_expiry, str) and raw_expiry:
+        return datetime.fromisoformat(raw_expiry.replace("Z", "+00:00"))
+    return now + timedelta(seconds=int(payload.get("expires_in") or default_seconds))
+
+
 def _public_connector_id(provider_id: str, auth_class: str) -> str:
     if provider_id == "openai" and auth_class == "subscription_oauth":
         return "openai.chatgpt"
     if provider_id == "openai":
         return "openai.api"
+    if provider_id == "xai" and auth_class == "subscription_oauth":
+        return "xai.subscription"
     if provider_id == "xai":
         return "xai.api"
     if provider_id == "anthropic":

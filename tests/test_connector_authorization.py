@@ -226,6 +226,8 @@ def test_google_workspace_connect_asks_for_mail_and_calendar() -> None:
     assert "calendar.events" in started["authorizationUrl"]
     assert "gmail.send" in started["authorizationUrl"]
     assert started["connectorId"] == "google.workspace"
+    assert "prompt=consent" not in started["authorizationUrl"]
+    assert "include_granted_scopes=true" in started["authorizationUrl"]
 
 
 def test_start_oauth_refuses_unknown_connector() -> None:

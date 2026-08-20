@@ -312,11 +312,13 @@ class ConnectorAuthorization:
             "code_challenge": _pkce_challenge(verifier),
             "code_challenge_method": "S256",
             "access_type": "offline",
-            "prompt": "consent",
+            "include_granted_scopes": "true",
         }
         if spec["issuer"] == "microsoft":
             params.pop("access_type")
+            params.pop("include_granted_scopes")
             params["response_mode"] = "query"
+            params["prompt"] = "consent"
         return {
             "authorizationUrl": f"{authorize}?{urlencode(params)}",
             "connectorId": connector_id,

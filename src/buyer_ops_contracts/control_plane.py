@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import psycopg
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -91,7 +91,7 @@ class ControlPlane:
         if headers.get("x-buyer-ops-token") != self._control_token:
             return 401, _error("authentication_required", "control token required")
         parsed = urlparse(path)
-        route = parsed.path.rstrip("/") or "/"
+        route = unquote(parsed.path).rstrip("/") or "/"
         tenant_id = headers.get("x-buyer-ops-tenant", "")
         actor_id = headers.get("x-buyer-ops-actor", "")
         try:
@@ -488,11 +488,11 @@ class ControlPlane:
             auth = self._cognition_auth(connection, tenant_id, actor_id)
             connector_id = str(payload.get("connectorId") or "")
             auth.refuse_unsupported(connector_id)
-            if connector_id != "openai.chatgpt":
-                raise SetupRejected(
-                    "validation_failed", "only ChatGPT subscription uses device OAuth"
-                )
-            return auth.start_chatgpt_device()
+            if connector_id == "openai.chatgpt":
+                return auth.start_chatgpt_device()
+            if connector_id == "xai.subscription":
+                return auth.start_xai_device()
+            raise SetupRejected("validation_failed", "connector does not use device OAuth")
         finally:
             connection.close()
 
@@ -501,7 +501,7 @@ class ControlPlane:
     ) -> dict[str, Any]:
         connection = self._connection()
         try:
-            return self._cognition_auth(connection, tenant_id, actor_id).poll_chatgpt_device(
+            return self._cognition_auth(connection, tenant_id, actor_id).poll_device(
                 str(payload.get("sessionId") or "")
             )
         finally:
