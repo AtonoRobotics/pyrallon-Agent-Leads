@@ -3,7 +3,7 @@ name: Contract CI gates
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, review/kernel-0.3.0-authority]
 
 permissions:
   contents: read
@@ -45,6 +45,8 @@ jobs:
         run: uv run python scripts/verify_completion_ledger.py
       - name: Verify canonical migration integrity
         run: uv run python scripts/verify_migrations.py
+      - name: Verify contract synchronization without writes
+        run: uv run python scripts/sync_contracts.py --check
       - run: uv run python scripts/verify_contracts.py
       - run: uv run ruff check .
       - run: uv run ruff format --check .

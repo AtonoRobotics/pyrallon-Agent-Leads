@@ -1,0 +1,9 @@
+{
+  "semanticCases": [
+    {"name": "unknown_time_zone", "target": "policy", "operation": "replace", "path": "timeZone", "value": "Mars/Olympus_Mons"},
+    {"name": "non_positive_snapshot_range", "target": "snapshot", "operation": "replace", "path": "rangeEnd", "value": "2026-03-08T08:00:00Z"},
+    {"name": "cancel_forbids_slot", "target": "command", "operation": "replace", "path": "commandKind", "value": "cancel"},
+    {"name": "stale_provider_watermark", "target": "command", "operation": "context", "path": "providerWatermark", "value": "watermark-43"},
+    {"name": "reconciliation_requires_unknown_outcome", "target": "result", "operation": "replace", "path": "state", "value": "confirmed"}
+  ]
+}

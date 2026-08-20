@@ -1,0 +1,108 @@
+{
+  "policy": {
+    "messageType": "qualification_policy",
+    "schemaVersion": "qualification-readiness/1.0.0",
+    "tenantId": "tenant-a",
+    "policyId": "qualification-policy-a",
+    "version": 1,
+    "owner": {"ownerType": "brokerage", "ownerId": "brokerage-a"},
+    "lifecycle": "active",
+    "effectiveFrom": "2026-01-01T00:00:00Z",
+    "criteria": [
+      {
+        "criterionId": "budget",
+        "predicate": "budget_range_recorded",
+        "disposition": "required",
+        "acceptedObservationStates": ["asserted", "verified"],
+        "maxAgeSeconds": 2592000,
+        "priority": 10,
+        "questionTemplateRef": {"recordId": "question-budget", "recordType": "QuestionTemplate", "version": 1},
+        "missingDisposition": "ask",
+        "contradictionDisposition": "ask_clarification"
+      },
+      {
+        "criterionId": "timeframe",
+        "predicate": "move_timeframe_recorded",
+        "disposition": "declinable",
+        "acceptedObservationStates": ["asserted", "verified", "buyer_declined"],
+        "maxAgeSeconds": 2592000,
+        "priority": 5,
+        "questionTemplateRef": {"recordId": "question-timeframe", "recordType": "QuestionTemplate", "version": 1},
+        "missingDisposition": "ask",
+        "contradictionDisposition": "agent_handle"
+      }
+    ],
+    "questionTieBreak": "priority_then_criterion_id_ascending",
+    "readinessAlgorithm": "all_required_resolved_no_blocking_contradiction_zone_and_capacity_v1",
+    "serviceZonePolicyRef": {"recordId": "zone-policy-a", "recordType": "ServiceZonePolicy", "version": 1},
+    "capacityPolicyRef": {"recordId": "capacity-policy-a", "recordType": "CapacityPolicy", "version": 1},
+    "urgentEscalationPolicyRef": {"recordId": "escalation-policy-a", "recordType": "UrgentEscalationPolicy", "version": 1},
+    "sourceEvidenceIds": ["owner-approval-a"]
+  },
+  "input": {
+    "messageType": "qualification_input_set",
+    "schemaVersion": "qualification-readiness/1.0.0",
+    "tenantId": "tenant-a",
+    "inputSetId": "input-a",
+    "journeyRef": {"recordId": "journey-a", "recordType": "BuyerJourney", "version": 3},
+    "policyRef": {"recordId": "qualification-policy-a", "recordType": "QualificationPolicy", "version": 1},
+    "evaluatedAt": "2026-03-01T12:00:00Z",
+    "observations": [
+      {
+        "criterionId": "budget",
+        "observationRef": {"recordId": "obs-budget", "recordType": "Assertion", "version": 1},
+        "observationState": "verified",
+        "observedAt": "2026-02-28T12:00:00Z",
+        "validAtEvaluation": true,
+        "contradictionRefs": []
+      },
+      {
+        "criterionId": "timeframe",
+        "observationRef": {"recordId": "obs-timeframe", "recordType": "Assertion", "version": 1},
+        "observationState": "buyer_declined",
+        "observedAt": "2026-02-28T12:00:00Z",
+        "validAtEvaluation": true,
+        "contradictionRefs": []
+      }
+    ],
+    "serviceZoneDecisionRef": {"recordId": "zone-decision-a", "recordType": "ServiceZoneDecision", "version": 1},
+    "serviceZoneEligible": true,
+    "capacityDecisionRef": {"recordId": "capacity-decision-a", "recordType": "CapacityDecision", "version": 1},
+    "capacityAvailable": true,
+    "urgentEscalationRefs": [],
+    "canonicalWatermark": "canonical-42",
+    "inputDigest": "sha256:eaa7f74a3544f7cebd3fbb8d6738fb756a920aee32715399bae340686c0ba981"
+  },
+  "nextQuestion": {
+    "messageType": "next_question_decision",
+    "schemaVersion": "qualification-readiness/1.0.0",
+    "tenantId": "tenant-a",
+    "decisionId": "question-decision-a",
+    "inputSetRef": {"recordId": "input-a", "recordType": "QualificationInputSet", "version": 1},
+    "policyRef": {"recordId": "qualification-policy-a", "recordType": "QualificationPolicy", "version": 1},
+    "result": "no_question",
+    "criterionId": null,
+    "questionTemplateRef": null,
+    "reasonCodes": ["all_resolved"],
+    "derivedAt": "2026-03-01T12:00:01Z",
+    "derivedBy": {"principalId": "compiler-a", "implementationId": "qualification_readiness_v1", "implementationVersion": "1.0.0"},
+    "inputDigest": "sha256:eaa7f74a3544f7cebd3fbb8d6738fb756a920aee32715399bae340686c0ba981"
+  },
+  "readiness": {
+    "messageType": "readiness_decision",
+    "schemaVersion": "qualification-readiness/1.0.0",
+    "tenantId": "tenant-a",
+    "decisionId": "readiness-a",
+    "journeyRef": {"recordId": "journey-a", "recordType": "BuyerJourney", "version": 3},
+    "inputSetRef": {"recordId": "input-a", "recordType": "QualificationInputSet", "version": 1},
+    "policyRef": {"recordId": "qualification-policy-a", "recordType": "QualificationPolicy", "version": 1},
+    "result": "ready",
+    "reasonCodes": ["all_required_resolved"],
+    "blockingCriterionIds": [],
+    "derivedAt": "2026-03-01T12:00:01Z",
+    "derivedBy": {"principalId": "compiler-a", "implementationId": "qualification_readiness_v1", "implementationVersion": "1.0.0"},
+    "inputDigest": "sha256:eaa7f74a3544f7cebd3fbb8d6738fb756a920aee32715399bae340686c0ba981",
+    "expiresAt": "2026-03-01T12:15:00Z",
+    "evidenceIds": ["obs-budget", "obs-timeframe", "zone-decision-a", "capacity-decision-a"]
+  }
+}

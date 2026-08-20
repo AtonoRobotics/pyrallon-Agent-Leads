@@ -1,92 +1,132 @@
+"""Synchronize root contract schemas into the installable package.
+
+The default and ``--check`` modes are strictly read-only.  The explicit
+``--write`` mode is the only code path allowed to mutate package resources or
+the manifest.
+"""
+
+from __future__ import annotations
+
+import argparse
 import hashlib
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "buyer_ops_contracts"
 MAPPINGS = {
     "authority_activation_fair_housing": (
-        ROOT / "OPEN-025-027.schema.json",
-        PACKAGE / "schemas/authority-activation-fair-housing.schema.json",
+        "OPEN-025-027.schema.json",
+        "authority-activation-fair-housing.schema.json",
     ),
-    "closure": (
-        ROOT / "OPEN-019-024.schema.json",
-        PACKAGE / "schemas/closure.schema.json",
-    ),
-    "gateway": (
-        ROOT / "COGNITIVE-RUNTIME-GATEWAY.schema.json",
-        PACKAGE / "schemas/gateway.schema.json",
-    ),
+    "closure": ("OPEN-019-024.schema.json", "closure.schema.json"),
+    "gateway": ("COGNITIVE-RUNTIME-GATEWAY.schema.json", "gateway.schema.json"),
     "gateway_runtime": (
-        ROOT / "GATEWAY-RUNTIME-CONFIG.schema.json",
-        PACKAGE / "schemas/gateway_runtime.schema.json",
+        "GATEWAY-RUNTIME-CONFIG.schema.json",
+        "gateway_runtime.schema.json",
     ),
-    "ontology": (ROOT / "ONTOLOGY-V0.schema.json", PACKAGE / "schemas/ontology.schema.json"),
-    "habitat": (ROOT / "HABITAT-EFFECT.schema.json", PACKAGE / "schemas/habitat.schema.json"),
-    "temporal": (
-        ROOT / "TEMPORAL-WORKFLOW.schema.json",
-        PACKAGE / "schemas/temporal.schema.json",
-    ),
-    "context": (
-        ROOT / "CONTEXT-COMPILER.schema.json",
-        PACKAGE / "schemas/context.schema.json",
-    ),
+    "ontology": ("ONTOLOGY-V0.schema.json", "ontology.schema.json"),
+    "habitat": ("HABITAT-EFFECT.schema.json", "habitat.schema.json"),
+    "temporal": ("TEMPORAL-WORKFLOW.schema.json", "temporal.schema.json"),
+    "context": ("CONTEXT-COMPILER.schema.json", "context.schema.json"),
     "operator_surface": (
-        ROOT / "OPERATOR-SURFACE.schema.json",
-        PACKAGE / "schemas/operator_surface.schema.json",
+        "OPERATOR-SURFACE.schema.json",
+        "operator_surface.schema.json",
     ),
-    "telemetry_slo": (
-        ROOT / "TELEMETRY-SLO.schema.json",
-        PACKAGE / "schemas/telemetry_slo.schema.json",
-    ),
-    "ot01_ingress": (
-        ROOT / "OT01-INGRESS.schema.json",
-        PACKAGE / "schemas/ot01_ingress.schema.json",
-    ),
+    "telemetry_slo": ("TELEMETRY-SLO.schema.json", "telemetry_slo.schema.json"),
+    "ot01_ingress": ("OT01-INGRESS.schema.json", "ot01_ingress.schema.json"),
     "connector_gateway": (
-        ROOT / "CONNECTOR-GATEWAY.schema.json",
-        PACKAGE / "schemas/connector_gateway.schema.json",
+        "CONNECTOR-GATEWAY.schema.json",
+        "connector_gateway.schema.json",
     ),
     "release_activation": (
-        ROOT / "RELEASE-ACTIVATION.schema.json",
-        PACKAGE / "schemas/release_activation.schema.json",
+        "RELEASE-ACTIVATION.schema.json",
+        "release_activation.schema.json",
     ),
     "qualification_readiness": (
-        ROOT / "QUALIFICATION-READINESS.schema.json",
-        PACKAGE / "schemas/qualification_readiness.schema.json",
+        "QUALIFICATION-READINESS.schema.json",
+        "qualification_readiness.schema.json",
     ),
     "availability_booking": (
-        ROOT / "AVAILABILITY-BOOKING.schema.json",
-        PACKAGE / "schemas/availability_booking.schema.json",
+        "AVAILABILITY-BOOKING.schema.json",
+        "availability_booking.schema.json",
     ),
 }
 
 
+def _reader_range(name: str, version: str) -> str:
+    if name == "ontology":
+        return ">=0.3.0,<0.4.0"
+    if name in {"closure", "context", "operator_surface", "ot01_ingress"}:
+        return ">=1.1.0,<2.0.0"
+    major = int(version.split(".", 1)[0])
+    return f">={major}.0.0,<{major + 1}.0.0"
+
+
+def _expected_entry(name: str, target_name: str, source: Path) -> dict[str, Any]:
+    schema = json.loads(source.read_text())
+    version = schema["$id"].rsplit("/", 1)[-1]
+    return {
+        "name": name,
+        "resource": f"schemas/{target_name}",
+        "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "schemaId": schema["$id"],
+        "schemaVersion": version,
+        "readerRange": _reader_range(name, version),
+        "writerVersion": version,
+    }
+
+
+def expected_manifest() -> dict[str, Any]:
+    current = json.loads((PACKAGE / "contracts.manifest.json").read_text())
+    contracts = []
+    for name, (source_name, target_name) in MAPPINGS.items():
+        contracts.append(_expected_entry(name, target_name, ROOT / source_name))
+    return {"manifestVersion": current["manifestVersion"], "contracts": contracts}
+
+
+def check() -> None:
+    errors: list[str] = []
+    for name, (source_name, target_name) in MAPPINGS.items():
+        source = ROOT / source_name
+        target = PACKAGE / "schemas" / target_name
+        if not target.is_file() or source.read_bytes() != target.read_bytes():
+            errors.append(f"packaged schema drift: {name}")
+    actual = json.loads((PACKAGE / "contracts.manifest.json").read_text())
+    expected = expected_manifest()
+    if actual != expected:
+        errors.append("contract manifest drift")
+    if errors:
+        raise SystemExit("\n".join(errors))
+    print("contract sources, packaged schemas, and manifest are synchronized")
+
+
+def write() -> None:
+    for source_name, target_name in MAPPINGS.values():
+        shutil.copyfile(ROOT / source_name, PACKAGE / "schemas" / target_name)
+    manifest = expected_manifest()
+    (PACKAGE / "contracts.manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n"
+    )
+    print("contract package synchronized")
+
+
 def main() -> None:
-    manifest_path = PACKAGE / "contracts.manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    entries = {entry["name"]: entry for entry in manifest["contracts"]}
-    for name, (source, target) in MAPPINGS.items():
-        shutil.copyfile(source, target)
-        entries.setdefault(name, {"name": name, "resource": f"schemas/{name}.schema.json"})
-        entries[name]["resource"] = f"schemas/{target.name}"
-        entries[name]["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
-        entries[name]["schemaId"] = json.loads(target.read_text())["$id"]
-        entries[name]["schemaVersion"] = entries[name]["schemaId"].rsplit("/", 1)[-1]
-        if name == "ontology":
-            entries[name]["readerRange"] = ">=0.3.0,<0.4.0"
-            entries[name]["writerVersion"] = entries[name]["schemaVersion"]
-        elif name in {"closure", "context", "operator_surface", "ot01_ingress"}:
-            entries[name]["readerRange"] = ">=1.1.0,<2.0.0"
-            entries[name]["writerVersion"] = entries[name]["schemaVersion"]
-        else:
-            entries[name]["readerRange"] = (
-                f">={entries[name]['schemaVersion'].split('.')[0]}.0.0,<{int(entries[name]['schemaVersion'].split('.')[0]) + 1}.0.0"
-            )
-            entries[name]["writerVersion"] = entries[name]["schemaVersion"]
-    manifest["contracts"] = [entries[name] for name in MAPPINGS]
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    parser = argparse.ArgumentParser()
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check", action="store_true", help="verify without writing (default)"
+    )
+    mode.add_argument(
+        "--write", action="store_true", help="update packaged schemas and manifest"
+    )
+    args = parser.parse_args()
+    if args.write:
+        write()
+    else:
+        check()
 
 
 if __name__ == "__main__":

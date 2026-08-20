@@ -4,7 +4,7 @@
     {
       "name": "authority_activation_fair_housing",
       "resource": "schemas/authority-activation-fair-housing.schema.json",
-      "sha256": "33c17a8d70cb1f50c5d1836a7bb1297bc8f0b40cb6f2fc91502d08170f2b87e0",
+      "sha256": "99c0c2d5ee6a226ee038492ca28418d5b1b9559c06fe9e880b483e182d6b6b3a",
       "schemaId": "https://buyer-ops.example/schemas/open-025-027-closure/1.0.0",
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",
@@ -13,7 +13,7 @@
     {
       "name": "closure",
       "resource": "schemas/closure.schema.json",
-      "sha256": "bddc67bb51fa293926976bb80318ea3ef879e25d5b2a8766489c41544f8f1bef",
+      "sha256": "6f9215a5bb532f416f874bfcf6abd4a03c49ee785401e9a857ca01a53fc14b7b",
       "schemaId": "https://buyer-ops.example/schemas/open-019-024-closure/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.1.0,<2.0.0",
@@ -24,7 +24,7 @@
       "resource": "schemas/gateway.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/cognitive-runtime-gateway/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "55654af655e86f57f5117162a8061a6bff076fc7bd99844f2b744dcfbce4efd3",
+      "sha256": "bb92926cd369e75e7f47112a46f77bef7b210be6ded8439fe8093349e4af6482",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
@@ -33,7 +33,7 @@
       "resource": "schemas/gateway_runtime.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/gateway-runtime-config/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "ddf165a5bee4885eea7c99ce7a16e06cb6e0ad08c4f1d64c2fcd3c1473cfbbf1",
+      "sha256": "058458d5a122bdae2afe82cabd8016b7470d24d2bb23dd78e3e7c318e4b3efea",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
@@ -42,7 +42,7 @@
       "resource": "schemas/ontology.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/ontology/buyer-ops/0.3.0",
       "schemaVersion": "0.3.0",
-      "sha256": "af9d26943df39869540c4459c10c4f3c5116fbb5fda0f397df4291832cd39a82",
+      "sha256": "30e3ebfc1b2756cd3dedd0b83fb7a849d8ca66589255a62afb8dc98058cb9f2b",
       "readerRange": ">=0.3.0,<0.4.0",
       "writerVersion": "0.3.0"
     },
@@ -51,7 +51,7 @@
       "resource": "schemas/habitat.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/habitat/effect-intent/1.0.0",
       "schemaVersion": "1.0.0",
-      "sha256": "d0717b1d55b94225c8448fb3e596a9342f924208bd90ade7b2e9bcd66b383870",
+      "sha256": "be417326ab84220822ad9f94da888e806cba7d11a9a2235ce828887e519d7cad",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.0.0"
     },
@@ -60,7 +60,7 @@
       "resource": "schemas/temporal.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/temporal/ot01-workflow/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "2745583c13e507006b8c32b68403987ba20e8776781b95e5727612dd1003fe12",
+      "sha256": "d4ba5449f44f7ac29bc7f262f77b68c2b345231233e54e60b2cdf8e00b60a1fb",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
@@ -69,14 +69,14 @@
       "resource": "schemas/context.schema.json",
       "schemaId": "https://buyer-ops.example/schemas/context-compiler/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "c1a3230df7d45e1d5ddaf88b46c228994aee3aa799958c73158461af0b0087ed",
+      "sha256": "47d4678deba7b45e61bb9f38ba7b403ac0c484b12339e7e0a9a1d6494e3748cd",
       "readerRange": ">=1.1.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
     {
       "name": "operator_surface",
       "resource": "schemas/operator_surface.schema.json",
-      "sha256": "7e7ca34ba61111a22452577a000dceb4f367ec333a30c578ec00c43f348f282f",
+      "sha256": "7fed6bd1604d4265d1588dd6424d744829044bdf475b12b35d86063230ac4752",
       "schemaId": "https://buyer-ops.example/schemas/operator-surface/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.1.0,<2.0.0",
@@ -85,7 +85,7 @@
     {
       "name": "telemetry_slo",
       "resource": "schemas/telemetry_slo.schema.json",
-      "sha256": "628a20f976603fb40f38a1228228a07f609ef993527a18d070d964ca5c804d86",
+      "sha256": "2c76186f857d38da79cfbde35d8d6c111212e4b25f2d43ba6debdb50b25a",
       "schemaId": "https://buyer-ops.example/schemas/telemetry-slo/1.0.0",
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",
@@ -94,7 +94,7 @@
     {
       "name": "ot01_ingress",
       "resource": "schemas/ot01_ingress.schema.json",
-      "sha256": "13eabdf7ba7dab0d08fdb70309079e2470f4e9a1a529edfe994b552ee93a893f",
+      "sha256": "33807386f791893686b9310c3c5a5be4af449a52cb896ead314f80a5780ef506",
       "schemaId": "https://buyer-ops.example/schemas/ot01-ingress/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.1.0,<2.0.0",
@@ -103,7 +103,7 @@
     {
       "name": "connector_gateway",
       "resource": "schemas/connector_gateway.schema.json",
-      "sha256": "f8fbbf995e93a5e6c5824285db56f089f508229e8098a1acce1e91812210b681",
+      "sha256": "f6aad043bd2be4fe41908c75325f0c5ac5fc4fdfd07f53ba619c4b40bfca6ae8",
       "schemaId": "https://buyer-ops.example/schemas/connector-gateway/1.0.0",
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",
@@ -112,7 +112,7 @@
     {
       "name": "release_activation",
       "resource": "schemas/release_activation.schema.json",
-      "sha256": "44a7a7182862c14d6521bfd18f3ba1e3da775057b1ff8b466f65e0586cc4c666",
+      "sha256": "42d847efd6d8386ad6772d977788d9e4f6c012a4423d35901c26b76a98953ecb",
       "schemaId": "https://buyer-ops.example/schemas/release-activation/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.0.0,<2.0.0",
@@ -138,3 +138,4 @@
     }
   ]
 }
+

@@ -1,0 +1,8 @@
+{
+  "semanticCases": [
+    {"name": "duplicate_criterion", "target": "policy", "operation": "duplicate", "path": "criteria.0"},
+    {"name": "cross_tenant_reference", "target": "input", "operation": "replace", "path": "tenantId", "value": "tenant-b"},
+    {"name": "input_digest_mismatch", "target": "input", "operation": "replace", "path": "inputDigest", "value": "sha256:00000000000000000000000000000000"},
+    {"name": "invalid_freshness_or_state_marker", "target": "input", "operation": "replace", "path": "observations.0.validAtEvaluation", "value": false}
+  ]
+}

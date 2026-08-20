@@ -59,6 +59,9 @@ def main() -> None:
         "qualification_readiness": ROOT / "QUALIFICATION-READINESS.schema.json",
         "availability_booking": ROOT / "AVAILABILITY-BOOKING.schema.json",
     }
+    manifest_names = {entry["name"] for entry in manifest["contracts"]}
+    if manifest_names != set(sources):
+        raise SystemExit("manifest family set drift")
     for entry in manifest["contracts"]:
         packaged = PACKAGE / entry["resource"]
         source = sources[entry["name"]]

@@ -1,0 +1,21 @@
+{
+  "contractFamily": "qualification_readiness",
+  "schemaVersion": "1.0.0",
+  "changeKind": "new_additive_family",
+  "predecessorWriterVersion": null,
+  "readerRange": ">=1.0.0,<2.0.0",
+  "migrationCompatibility": {
+    "existingThirteenFamilyReaders": "unaffected",
+    "existingRecords": "no_rewrite_required",
+    "durableWriterActivation": "blocked_until_storage_migration_is_applied_and_rollback_tested",
+    "rollback": "disable_family_writer_then_remove_empty_family_storage_only",
+    "mixedVersionOperation": "old_readers_ignore_unregistered_family; new_readers_must_reject_unknown_major_versions"
+  },
+  "generatedModelDriftGate": "scripts/verify_contracts.py",
+  "semanticAcceptance": "tests/test_new_contract_acceptance.py",
+  "fixtures": {
+    "valid": "tests/fixtures/qualification_readiness/valid.json",
+    "invalid": "tests/fixtures/qualification_readiness/invalid.json"
+  },
+  "activationDecision": "schema_and_readers_admitted; production_writer_not_activated"
+}
