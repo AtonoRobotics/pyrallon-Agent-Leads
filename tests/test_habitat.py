@@ -202,6 +202,7 @@ def test_habitat_denies_when_approved_payload_changed() -> None:
     )
     approval = {
         "id": "approval-1",
+        "status": "active",
         "decision": "approved",
         "actionClass": "send_message",
         "actionIntentId": "intent-1",
@@ -310,6 +311,90 @@ def test_habitat_hard_stops_residential_showing_without_qualification() -> None:
     assert decision.reason == "representation_conflict"
 
 
+def test_habitat_rereads_exact_current_agreement_before_showing() -> None:
+    intent = _intent()
+    intent["action_class"] = "residential_showing"
+    authorization = _authorization()
+    authorization["actionClass"] = "residential_showing"
+    state = HabitatState(
+        records=_matching_records(),
+        principal=_principal(),
+        authorization=authorization,
+        workflow_reference=_workflow_reference(),
+        connector_grant={
+            "connectorBindingId": "connector-1",
+            "principalId": "principal-1",
+            "state": "active",
+            "actionClasses": ["residential_showing"],
+            "requiresConsent": False,
+        },
+        agreement_qualification={
+            "status": "active",
+            "result": "qualified",
+            "actionType": "residential_showing",
+            "actionIntentId": "intent-1",
+            "actionPayloadDigest": "sha256:" + "a" * 64,
+            "expiresAt": "2030-01-02T00:00:00Z",
+            "agreementId": "agreement-1",
+            "agreementVersion": 3,
+        },
+        agreement={
+            "id": "agreement-1",
+            "version": 3,
+            "status": "active",
+            "executionState": "effective",
+            "effectiveAt": "2029-12-01T00:00:00Z",
+            "terminatesAt": "2030-01-01T00:03:00Z",
+        },
+    )
+    decision = HabitatKernel(_StateReader(state), _Policy()).admit(
+        intent,
+        expected_tenant_id="tenant-1",
+        evaluated_at=datetime(2030, 1, 1, 0, 4, tzinfo=UTC),
+    )
+    assert decision.reason == "representation_conflict"
+
+
+def test_habitat_rejects_unknown_iabs_delivery_at_effect_time() -> None:
+    intent = _intent()
+    intent["action_class"] = "residential_showing"
+    authorization = _authorization()
+    authorization["actionClass"] = "residential_showing"
+    state = HabitatState(
+        records=_matching_records(),
+        principal=_principal(),
+        authorization=authorization,
+        workflow_reference=_workflow_reference(),
+        connector_grant={
+            "connectorBindingId": "connector-1",
+            "principalId": "principal-1",
+            "state": "active",
+            "actionClasses": ["residential_showing"],
+            "requiresConsent": False,
+        },
+        agreement_qualification={
+            "status": "active",
+            "result": "qualified",
+            "actionType": "residential_showing",
+            "actionIntentId": "intent-1",
+            "actionPayloadDigest": "sha256:" + "a" * 64,
+            "expiresAt": "2030-01-02T00:00:00Z",
+            "iabsDeliveryId": "iabs-1",
+        },
+        iabs_delivery={
+            "id": "iabs-1",
+            "status": "active",
+            "validityState": "delivery_unknown",
+        },
+    )
+    decision = HabitatKernel(_StateReader(state), _Policy()).admit(
+        intent,
+        expected_tenant_id="tenant-1",
+        evaluated_at=datetime(2030, 1, 1, 0, 4, tzinfo=UTC),
+    )
+    assert decision.reason == "representation_conflict"
+
+
 def test_habitat_policy_can_require_exact_approval() -> None:
     state = HabitatState(
         records=_matching_records(),
@@ -331,3 +416,36 @@ def test_habitat_policy_can_require_exact_approval() -> None:
     )
     assert decision.reason == "approval_required"
     assert decision.policy_version == "7"
+
+
+def test_habitat_rejects_superseded_exact_approval() -> None:
+    intent = _intent()
+    intent.update(approval_ref="approval-1", approved_digest=intent["payload_digest"])
+    state = HabitatState(
+        records=_matching_records(),
+        principal=_principal(),
+        authorization=_authorization(),
+        workflow_reference=_workflow_reference(),
+        approval={
+            "id": "approval-1",
+            "status": "superseded",
+            "decision": "approved",
+            "actionClass": "send_message",
+            "actionIntentId": "intent-1",
+            "payloadDigest": intent["payload_digest"],
+            "expiresAt": "2030-01-02T00:00:00Z",
+        },
+        connector_grant={
+            "connectorBindingId": "connector-1",
+            "principalId": "principal-1",
+            "state": "active",
+            "actionClasses": ["send_message"],
+            "requiresConsent": False,
+        },
+    )
+    decision = HabitatKernel(_StateReader(state), _Policy("approval_required")).admit(
+        intent,
+        expected_tenant_id="tenant-1",
+        evaluated_at=datetime(2030, 1, 1, 0, 4, tzinfo=UTC),
+    )
+    assert decision.reason == "approval_required"

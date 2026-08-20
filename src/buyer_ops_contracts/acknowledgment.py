@@ -41,7 +41,7 @@ def validate_acknowledgment_config(record: dict[str, Any]) -> None:
             raise ValueError("opt-out expressions must be nonempty and unique after normalization")
     elif record["messageType"] == "acknowledgment_policy":
         rule_ids = [rule["ruleId"] for rule in record["rules"]]
-        if len(rule_ids) != len(set(rule_ids)) or record["selectionOrder"] != rule_ids:
+        if len(rule_ids) != len(set(rule_ids)) or set(record["selectionOrder"]) != set(rule_ids):
             raise ValueError("selectionOrder must name each rule exactly once in evaluation order")
     else:
         raise ValueError("record is not acknowledgment configuration")

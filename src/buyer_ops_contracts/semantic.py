@@ -234,17 +234,6 @@ def validate_semantics(record: dict[str, Any], policy: SemanticPolicy | None = N
                         "effective agreement requires ascertainable compensation and negotiability disclosure",
                     )
                 )
-            signed_parties = {item["signerPartyId"] for item in record["signatureEvidence"]}
-            missing_buyers = set(record["buyerPartyIds"]) - signed_parties
-            if missing_buyers:
-                violations.append(
-                    Violation(
-                        "MISSING_BUYER_SIGNATURE",
-                        "$.signatureEvidence",
-                        f"missing signatures for buyer parties: {sorted(missing_buyers)}",
-                    )
-                )
-
     if record_type == "AgreementQualification":
         has_agreement = "agreementId" in record
         has_exception = "exceptionCode" in record
@@ -394,9 +383,29 @@ def validate_semantics(record: dict[str, Any], policy: SemanticPolicy | None = N
             )
         )
 
+    expiring_active_states = {
+        "Authorization": ("authorizationState", "active"),
+        "Approval": ("decision", "approved"),
+        "ConnectorGrant": ("grantState", "active"),
+    }
+    expiring_state = expiring_active_states.get(str(record_type))
+    if (
+        expiring_state is not None
+        and record.get(expiring_state[0]) == expiring_state[1]
+        and record.get("expiresAt") is not None
+        and _time(record["expiresAt"]) <= active.now
+    ):
+        violations.append(
+            Violation(
+                "ACTIVE_AUTHORITY_EXPIRED",
+                "$.expiresAt",
+                "active authority or approval must be unexpired at admission",
+            )
+        )
+
     if (
         record_type == "EffectAttempt"
-        and record["attemptState"] in {"confirmed", "reconciled_succeeded"}
+        and record["attemptState"] == "confirmed"
         and not record.get("providerReceiptId")
     ):
         violations.append(

@@ -32,7 +32,6 @@ class ConnectorGateway:
         grants = self._repository.list_by_type("ConnectorGrant")
         rows = []
         for grant in grants:
-            capability_id = f"connector:{grant.get('connectorId')}"
             rows.append(
                 {
                     "connector_id": grant.get("connectorId"),
@@ -41,9 +40,6 @@ class ConnectorGateway:
                     "delegated_principal_id": grant.get("delegatedPrincipalId"),
                     "capabilities": grant.get("capabilities"),
                     "scopes": grant.get("scopes"),
-                    "activation": "active"
-                    if self._activation.capability_activated(capability_id)
-                    else "inactive",
                 }
             )
         return rows
@@ -54,9 +50,6 @@ class ConnectorGateway:
             raise ConnectorDenied("validation_failed", "not a connector_request")
         if request["tenantId"] != self._tenant_id:
             raise ConnectorDenied("authority_denied", "tenant mismatch")
-        connector_id = str(request["connectorId"])
-        if "voice" in connector_id.lower():
-            raise ConnectorDenied("policy_denied", "outbound AI voice is prohibited")
         if not permit_digest:
             raise ConnectorDenied("authority_denied", "permit digest required")
         grant = self._repository.get(str(request["grantId"]))
@@ -68,12 +61,6 @@ class ConnectorGateway:
             raise ConnectorDenied("version_conflict", "grant version mismatch")
         if request["capability"] not in [str(item) for item in grant.get("capabilities", [])]:
             raise ConnectorDenied("authority_denied", "grant lacks required capability")
-        capability_id = f"connector:{grant.get('connectorId')}"
-        if not self._activation.capability_activated(capability_id):
-            raise ConnectorDenied(
-                "connector_revoked",
-                "capability is not activated; no provider call is made",
-            )
         raise ConnectorDenied(
             "connector_revoked",
             "live provider adapters are not activated for this environment",

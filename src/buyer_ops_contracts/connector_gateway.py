@@ -12,7 +12,6 @@ from .closure import validate_closure_semantics
 from .habitat_repository import HabitatRegistration, RedeemedEffectPermit
 from .structural import validate_record
 
-_EFFECT_CAPABILITIES = frozenset({"create", "update", "send", "schedule"})
 _BOUND_BASE_FIELDS = (
     "schemaVersion",
     "tenantId",
@@ -89,7 +88,12 @@ class ConnectorGateway:
             raise ConnectorRejected("connector_grant_revoked")
         now = self._clock().astimezone(UTC)
         inventory = self._verify_inventory(request, now)
-        if request["capability"] in _EFFECT_CAPABILITIES:
+        effect_mappings = [
+            mapping
+            for mapping in inventory["capabilityEffects"]
+            if mapping["capability"] == request["capability"]
+        ]
+        if effect_mappings:
             if not self._activation.authorizes(request, evaluated_at=now):
                 raise ConnectorRejected("release_capability_not_activated")
             self._verify_draft_preview(request, preview, inventory, now)

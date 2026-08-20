@@ -8,20 +8,6 @@ from typing import Any
 from .habitat import HabitatState, PolicyDisposition
 from .habitat_repository import Cursor, LockedHabitatStateReader
 
-ACTION_CLASS_CAPABILITY = {
-    "send_message": "send",
-    "outbound_email": "send",
-    "outbound_sms": "send",
-    "outbound_acknowledgment": "send",
-    "calendar_write": "schedule",
-    "calendar_read": "read",
-    "provider_write": "update",
-}
-
-PROHIBITED_ACTION_CLASSES = frozenset(
-    {"outbound_ai_voice", "outbound_ai_voice_call", "autonomous_showing_selection"}
-)
-
 
 def _load_by_id(cursor: Cursor, tenant_id: str, record_id: str) -> dict[str, Any] | None:
     cursor.execute(
@@ -36,7 +22,7 @@ def _load_by_id(cursor: Cursor, tenant_id: str, record_id: str) -> dict[str, Any
     return record if isinstance(record, dict) else None
 
 
-def _load_matching(
+def _load_unique_matching(
     cursor: Cursor,
     tenant_id: str,
     record_type: str,
@@ -47,11 +33,12 @@ def _load_matching(
         "WHERE tenant_id = %s AND record_type = %s FOR SHARE",
         (tenant_id, record_type),
     )
+    matches: list[dict[str, Any]] = []
     for row in cursor.fetchall():
         record = row[0]
         if isinstance(record, dict) and predicate(record):
-            return record
-    return None
+            matches.append(record)
+    return matches[0] if len(matches) == 1 else None
 
 
 class CanonicalLockedHabitatStateReader(LockedHabitatStateReader):
@@ -59,8 +46,13 @@ class CanonicalLockedHabitatStateReader(LockedHabitatStateReader):
 
     def load_current(self, cursor: Cursor, intent: dict[str, Any]) -> HabitatState:
         tenant_id = intent["tenant_id"]
+        records: dict[str, dict[str, Any]] = {}
+        for record_id in intent["canonical_version_vector"]:
+            loaded = _load_by_id(cursor, tenant_id, str(record_id))
+            if loaded is not None:
+                records[str(record_id)] = loaded
         principal = _load_by_id(cursor, tenant_id, intent["principal_id"])
-        authorization = _load_matching(
+        authorization = _load_unique_matching(
             cursor,
             tenant_id,
             "Authorization",
@@ -71,7 +63,7 @@ class CanonicalLockedHabitatStateReader(LockedHabitatStateReader):
                 and rec.get("resourceId") == intent["target_resource"]["resource_id"]
             ),
         )
-        workflow_reference = _load_matching(
+        workflow_reference = _load_unique_matching(
             cursor,
             tenant_id,
             "WorkflowReference",
@@ -81,53 +73,28 @@ class CanonicalLockedHabitatStateReader(LockedHabitatStateReader):
             ),
         )
         grant = _load_by_id(cursor, tenant_id, intent["connector_binding_id"])
-        connector_view = None
-        if grant is not None and grant.get("recordType") == "ConnectorGrant":
-            capabilities = [str(item) for item in grant.get("capabilities", [])]
-            required = ACTION_CLASS_CAPABILITY.get(intent["action_class"])
-            connector_view = {
-                "state": grant.get("grantState"),
-                "connectorBindingId": grant.get("id"),
-                "principalId": grant.get("delegatedPrincipalId"),
-                "actionClasses": [intent["action_class"]] if required in capabilities else [],
-                "requiresConsent": required == "send",
-                "channel": next(
-                    (
-                        scope
-                        for scope in grant.get("scopes", [])
-                        if scope in {"email", "sms", "phone", "form", "calendar"}
-                    ),
-                    None,
-                ),
-            }
+        connector_view = consent = suppression = None
+        del grant
         approval = None
         if "approval_ref" in intent:
             approval = _load_by_id(cursor, tenant_id, intent["approval_ref"])
-        recipient_id = intent["recipient"]["recipient_id"]
-        suppression = _load_matching(
-            cursor,
-            tenant_id,
-            "Suppression",
-            lambda rec: rec.get("subjectId") == recipient_id
-            and rec.get("validityState") == "active",
-        )
-        consent = _load_matching(
-            cursor,
-            tenant_id,
-            "ConsentGrant",
-            lambda rec: rec.get("personId") == recipient_id
-            and rec.get("principalId") == intent["principal_id"]
-            and rec.get("purpose") == intent["purpose"]
-            and rec.get("validityState") == "active",
-        )
-        qualification = _load_matching(
+        qualification = _load_unique_matching(
             cursor,
             tenant_id,
             "AgreementQualification",
             lambda rec: rec.get("actionIntentId") == intent["intent_id"],
         )
+        agreement = None
+        iabs_delivery = None
+        if qualification is not None:
+            agreement_id = qualification.get("agreementId")
+            if agreement_id is not None:
+                agreement = _load_by_id(cursor, tenant_id, str(agreement_id))
+            delivery_id = qualification.get("iabsDeliveryId")
+            if delivery_id is not None:
+                iabs_delivery = _load_by_id(cursor, tenant_id, str(delivery_id))
         return HabitatState(
-            records={},
+            records=records,
             principal=principal,
             authorization=authorization,
             workflow_reference=workflow_reference,
@@ -136,11 +103,13 @@ class CanonicalLockedHabitatStateReader(LockedHabitatStateReader):
             consent=consent,
             suppression=suppression,
             agreement_qualification=qualification,
+            agreement=agreement,
+            iabs_delivery=iabs_delivery,
         )
 
 
 class PlatformPolicyEvaluator:
-    """Fail closed: platform prohibitions, else require an active Authorization already loaded."""
+    """Fail-closed placeholder used until an owner policy evaluator is configured."""
 
     def evaluate(
         self,
@@ -148,15 +117,5 @@ class PlatformPolicyEvaluator:
         state: HabitatState,
         evaluated_at: datetime,
     ) -> PolicyDisposition:
-        del evaluated_at
-        if intent["action_class"] in PROHIBITED_ACTION_CLASSES:
-            return PolicyDisposition("prohibited", "platform-invariant", "prd-7.1")
-        if ACTION_CLASS_CAPABILITY.get(intent["action_class"]) is None:
-            return PolicyDisposition("prohibited", "platform-invariant", "prd-7.1")
-        if state.authorization is None:
-            return PolicyDisposition("prohibited", "platform-invariant", "prd-7.1")
-        return PolicyDisposition(
-            "allowed",
-            str(state.authorization.get("id", "authorization")),
-            str(state.authorization.get("version", "1")),
-        )
+        del intent, state, evaluated_at
+        return PolicyDisposition("prohibited", "policy-unavailable", "unconfigured")

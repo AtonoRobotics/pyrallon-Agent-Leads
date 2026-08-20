@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from psycopg.types.json import Jsonb
 
@@ -32,16 +32,6 @@ _CANONICAL_MUTATION_COMMANDS = frozenset(
 )
 
 
-class WorkflowOperator(Protocol):
-    def pause(self, *, tenant_id: str, journey_id: str, workflow_id: str) -> None: ...
-
-    def resume(self, *, tenant_id: str, journey_id: str, workflow_id: str) -> None: ...
-
-    def request_reconciliation(
-        self, *, tenant_id: str, journey_id: str, event_id: str, canonical_version: int
-    ) -> None: ...
-
-
 class OperatorCommandError(RuntimeError):
     def __init__(self, code: str, *, retryable: bool, detail: str) -> None:
         self.code = code
@@ -57,20 +47,23 @@ class OperatorCommandService:
         repository: CanonicalRepository,
         *,
         tenant_id: str,
-        workflow: WorkflowOperator | None = None,
         policy_repository: OperatorPolicyRepository | None = None,
     ) -> None:
         self._connection = connection
         self._repository = repository
         self._tenant_id = tenant_id
-        self._workflow = workflow
         self._policy_repository = policy_repository or OperatorPolicyRepository(
             connection, tenant_id=tenant_id
         )
 
     def dispatch(self, command: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
-        validate_record(command, "operator_surface")
-        validate_operator_semantics(command)
+        try:
+            validate_record(command, "operator_surface")
+            validate_operator_semantics(command)
+        except ContractViolation as exc:
+            raise OperatorCommandError(
+                "validation_failed", retryable=False, detail=str(exc)
+            ) from exc
         if command.get("message_type") != "operator_command":
             raise OperatorCommandError("validation_failed", retryable=False, detail="not a command")
         if command["tenant_id"] != self._tenant_id:
@@ -78,8 +71,13 @@ class OperatorCommandService:
                 "authority_denied", retryable=False, detail="tenant mismatch"
             )
         now = datetime.now(UTC)
-        issued = datetime.fromisoformat(command["issued_at"].replace("Z", "+00:00"))
-        expires = datetime.fromisoformat(command["expires_at"].replace("Z", "+00:00"))
+        try:
+            issued = datetime.fromisoformat(command["issued_at"].replace("Z", "+00:00"))
+            expires = datetime.fromisoformat(command["expires_at"].replace("Z", "+00:00"))
+        except (TypeError, ValueError) as exc:
+            raise OperatorCommandError(
+                "validation_failed", retryable=False, detail="invalid command timestamp"
+            ) from exc
         if expires <= now:
             raise OperatorCommandError(
                 "approval_expired", retryable=False, detail="command expired"
@@ -411,49 +409,6 @@ class OperatorCommandService:
             }
             saved = self._repository.save(next_record, expected_version=int(target["version"]))
             return [_ref(saved)], saved["id"], "applied"
-        if command_type in {"pause_workflow", "resume_workflow"}:
-            if target.get("recordType") != "WorkflowReference":
-                raise OperatorCommandError(
-                    "validation_failed", retryable=False, detail="not a WorkflowReference"
-                )
-            if self._workflow is None:
-                raise OperatorCommandError(
-                    "workflow_conflict", retryable=True, detail="temporal worker unavailable"
-                )
-            if command_type == "pause_workflow":
-                self._workflow.pause(
-                    tenant_id=self._tenant_id,
-                    journey_id=command["journey_id"],
-                    workflow_id=str(target["workflowId"]),
-                )
-                execution = "waiting"
-            else:
-                self._workflow.resume(
-                    tenant_id=self._tenant_id,
-                    journey_id=command["journey_id"],
-                    workflow_id=str(target["workflowId"]),
-                )
-                execution = "running"
-            next_record = {
-                **target,
-                "version": int(target["version"]) + 1,
-                "updatedAt": stamp,
-                "executionState": execution,
-            }
-            saved = self._repository.save(next_record, expected_version=int(target["version"]))
-            return [_ref(saved)], saved["id"], "applied"
-        if command_type == "request_reconciliation":
-            if self._workflow is None:
-                raise OperatorCommandError(
-                    "workflow_conflict", retryable=True, detail="temporal worker unavailable"
-                )
-            self._workflow.request_reconciliation(
-                tenant_id=self._tenant_id,
-                journey_id=command["journey_id"],
-                event_id=command["command_id"],
-                canonical_version=int(target["version"]),
-            )
-            return [_ref(target)], target["id"], "applied"
         raise OperatorCommandError("validation_failed", retryable=False, detail="unknown command")
 
     def _existing(self, idempotency_key: str) -> dict[str, Any] | None:

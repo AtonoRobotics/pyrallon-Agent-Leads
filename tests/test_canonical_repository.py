@@ -201,7 +201,6 @@ def test_save_runs_semantic_admission_before_database_write() -> None:
 
 def test_active_representation_cardinality_uses_narrow_serialization_key() -> None:
     connection = Connection()
-
     CanonicalRepository(connection, tenant_id="tenant-1").save(_relationship())
 
     assert any(

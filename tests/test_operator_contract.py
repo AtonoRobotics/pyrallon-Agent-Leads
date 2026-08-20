@@ -42,6 +42,24 @@ def _mutation_command(command_type: str, target_type: str, target_id: str) -> di
     return command
 
 
+def _authorization_command() -> dict:
+    command = _mutation_command("revoke_authorization", "Authorization", "authorization-1")
+    authorization = _ontology("Authorization", "authorization-1")
+    authorization.update(
+        version=2,
+        authorizationState="revoked",
+        grantedAt="2029-01-01T00:00:00Z",
+        expiresAt="2031-01-01T00:00:00Z",
+        revokedAt="2030-01-01T00:00:00Z",
+        revocationEvidenceId="evidence-1",
+    )
+    command["mutation"] = {
+        "kind": "authorization_revocation",
+        "authorization_update": authorization,
+    }
+    return command
+
+
 def test_operator_policy_requires_one_unambiguous_rule_per_command() -> None:
     policy = _valid("OperatorPolicy")
     validate_operator_semantics(policy)
@@ -59,7 +77,7 @@ def test_operator_policy_requires_one_unambiguous_rule_per_command() -> None:
 
 
 def test_operator_command_binds_target_to_authority_and_complete_payload_digest() -> None:
-    command = _valid("OperatorCommand")
+    command = _authorization_command()
     command["payload_digest"] = command_payload_digest(command)
     validate_operator_semantics(command)
 
@@ -71,7 +89,7 @@ def test_operator_command_binds_target_to_authority_and_complete_payload_digest(
 
 
 def test_operator_command_rejects_digest_that_omits_mutation_payload() -> None:
-    command = _valid("OperatorCommand")
+    command = _authorization_command()
     command["payload_digest"] = command_payload_digest(command)
     command["reason"] = "Changed after digest."
 

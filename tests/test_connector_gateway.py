@@ -234,6 +234,36 @@ def test_read_connector_call_has_no_effect_permit_but_still_requires_current_gra
     )
 
 
+def test_signed_inventory_not_capability_name_determines_effect_bearing_call() -> None:
+    inventory = _inventory(capabilities=["read", "reconcile"])
+    inventory["effectClasses"] = ["reconcile_provider_state"]
+    inventory["capabilityEffects"] = [
+        {
+            "capability": "reconcile",
+            "actionClasses": ["reconcile_provider_state"],
+            "constraintDigest": "sha256:" + "4" * 64,
+        }
+    ]
+    preview = {
+        **_preview(),
+        "capability": "reconcile",
+        "actionClass": "reconcile_provider_state",
+    }
+    adapter = _Adapter()
+    gateway = _gateway(adapter, _InventoryAuthority(inventory))
+
+    with pytest.raises(ConnectorRejected) as raised:
+        gateway.invoke(
+            _request("reconcile"),
+            b"normalized-payload",
+            registration=None,
+            preview=preview,
+        )
+
+    assert raised.value.code == "effect_permit_required"
+    assert adapter.calls == 0
+
+
 def test_connector_rejects_revoked_grant_before_adapter_invocation() -> None:
     class Revoked:
         def authorize(self, request: dict) -> bool:

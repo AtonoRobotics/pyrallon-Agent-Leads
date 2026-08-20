@@ -20,6 +20,8 @@ class HabitatState:
     consent: dict[str, Any] | None = None
     suppression: dict[str, Any] | None = None
     agreement_qualification: dict[str, Any] | None = None
+    agreement: dict[str, Any] | None = None
+    iabs_delivery: dict[str, Any] | None = None
 
 
 class HabitatStateReader(Protocol):
@@ -168,6 +170,10 @@ class HabitatKernel:
                 return HabitatDecision(
                     False, "approval_required", versions, policy.policy_id, policy.policy_version
                 )
+            if approval.get("status") != "active":
+                return HabitatDecision(
+                    False, "approval_required", versions, policy.policy_id, policy.policy_version
+                )
             if (
                 approval.get("actionClass") != intent["action_class"]
                 or approval.get("actionIntentId") != intent["intent_id"]
@@ -193,6 +199,7 @@ class HabitatKernel:
             suppression = state.suppression
             if (
                 suppression is not None
+                and suppression.get("status") == "active"
                 and suppression.get("validityState") == "active"
                 and suppression.get("subjectId") == recipient_id
                 and _timestamp(suppression["suppressedAt"]) <= evaluated_at.astimezone(UTC)
@@ -203,6 +210,7 @@ class HabitatKernel:
             consent = state.consent
             if (
                 consent is None
+                or consent.get("status") != "active"
                 or consent.get("validityState") != "active"
                 or consent.get("personId") != recipient_id
                 or consent.get("principalId") != intent["principal_id"]
@@ -224,6 +232,7 @@ class HabitatKernel:
             qualification = state.agreement_qualification
             if (
                 qualification is None
+                or qualification.get("status") != "active"
                 or qualification.get("result") != "qualified"
                 or qualification.get("actionType") != intent["action_class"]
                 or qualification.get("actionIntentId") != intent["intent_id"]
@@ -237,6 +246,40 @@ class HabitatKernel:
                     policy.policy_id,
                     policy.policy_version,
                 )
+            if "agreementId" in qualification:
+                agreement = state.agreement
+                if (
+                    agreement is None
+                    or agreement.get("id") != qualification["agreementId"]
+                    or int(agreement.get("version", 0))
+                    != int(qualification.get("agreementVersion", 0))
+                    or agreement.get("status") != "active"
+                    or agreement.get("executionState") != "effective"
+                    or _timestamp(agreement["effectiveAt"]) > evaluated_at.astimezone(UTC)
+                    or _timestamp(agreement["terminatesAt"]) <= evaluated_at.astimezone(UTC)
+                ):
+                    return HabitatDecision(
+                        False,
+                        "representation_conflict",
+                        versions,
+                        policy.policy_id,
+                        policy.policy_version,
+                    )
+            if "iabsDeliveryId" in qualification:
+                delivery = state.iabs_delivery
+                if (
+                    delivery is None
+                    or delivery.get("id") != qualification["iabsDeliveryId"]
+                    or delivery.get("status") != "active"
+                    or delivery.get("validityState") != "delivered"
+                ):
+                    return HabitatDecision(
+                        False,
+                        "representation_conflict",
+                        versions,
+                        policy.policy_id,
+                        policy.policy_version,
+                    )
         return HabitatDecision(True, "admitted", versions, policy.policy_id, policy.policy_version)
 
 

@@ -35,6 +35,40 @@ def test_lifecycle_registry_covers_every_schema_state_field_and_value() -> None:
         assert represented == set(property_schema["enum"]), (record_type, field)
 
 
+@pytest.mark.parametrize(
+    ("record_type", "field", "source", "unpublished_target"),
+    [
+        ("LicenseHolder", "licenseState", "pending_verification", "inactive"),
+        ("Person", "identityState", "ambiguous", "conflict"),
+        ("ContactEndpoint", "ownershipState", "authorized", "revoked"),
+        ("ContactEndpoint", "verificationState", "unverified", "verified"),
+        ("BuyingParty", "decisionAuthorityState", "individual", "disputed"),
+        ("BuyerJourney", "qualificationState", "stale", "collecting"),
+        ("ConsentGrant", "validityState", "disputed", "superseded"),
+        ("LeadSource", "attributionState", "confirmed", "disputed"),
+        ("QualificationObservation", "observationState", "stale", "verified"),
+        ("BuyerRequirement", "requirementState", "contradicted", "confirmed"),
+        ("FinancingReadiness", "readinessState", "stale", "documented"),
+        ("Transaction", "transactionState", "disputed", "active"),
+        ("TransactionMilestone", "confirmationState", "disputed", "confirmed"),
+        ("Authorization", "authorizationState", "disputed", "superseded"),
+        ("EffectAttempt", "attemptState", "registered", "rejected"),
+        ("Assertion", "assertionState", "stale", "superseded"),
+        ("VerifiedFact", "factState", "contradicted", "revoked"),
+        ("Inference", "inferenceState", "stale", "invalid"),
+        ("Memory", "memoryState", "invalidated", "superseded"),
+        ("ConnectorGrant", "grantState", "pending", "revoked"),
+    ],
+)
+def test_lifecycle_graph_does_not_admit_unpublished_forward_edges(
+    record_type: str,
+    field: str,
+    source: str,
+    unpublished_target: str,
+) -> None:
+    assert unpublished_target not in _DECLARED_TRANSITIONS[(record_type, field)].get(source, set())
+
+
 def _epistemic(*, version: int, validity: str = "current"):
     return {
         "id": "item-1",
@@ -183,6 +217,66 @@ def test_transaction_confirmed_date_binding_requires_owner_and_confirmed_state()
         "TRANSACTION_DATE_OWNER_MISMATCH",
         "TRANSACTION_DATE_NOT_CONFIRMED",
     }
+
+
+def test_confirmed_transaction_date_source_must_bind_owning_transaction() -> None:
+    record = {
+        "recordType": "ConfirmedTransactionDate",
+        "tenantId": "tenant-1",
+        "createdBy": {"actorType": "system_migration", "actorId": "migration-1"},
+        "sourceEvidenceIds": ["evidence-1"],
+        "transactionId": "transaction-1",
+        "confirmationSourceType": "DocumentArtifact",
+        "confirmationSourceId": "artifact-other",
+        "confirmationSourceDigest": "sha256:" + "a" * 64,
+    }
+    records = {
+        "evidence-1": {"tenantId": "tenant-1", "recordType": "Evidence"},
+        "transaction-1": {
+            "tenantId": "tenant-1",
+            "recordType": "Transaction",
+            "executedArtifactId": "artifact-1",
+            "executedArtifactDigest": "sha256:" + "a" * 64,
+            "sourceEvidenceIds": ["evidence-1"],
+        },
+        "artifact-other": {
+            "tenantId": "tenant-1",
+            "recordType": "DocumentArtifact",
+            "digest": "sha256:" + "a" * 64,
+        },
+    }
+    with pytest.raises(ContractViolation, match="TRANSACTION_DATE_SOURCE_UNBOUND"):
+        validate_reference_graph(record, records.get)
+
+
+def test_confirmed_transaction_date_accepts_exact_transaction_artifact() -> None:
+    digest = "sha256:" + "a" * 64
+    record = {
+        "recordType": "ConfirmedTransactionDate",
+        "tenantId": "tenant-1",
+        "createdBy": {"actorType": "system_migration", "actorId": "migration-1"},
+        "sourceEvidenceIds": ["evidence-1"],
+        "transactionId": "transaction-1",
+        "confirmationSourceType": "DocumentArtifact",
+        "confirmationSourceId": "artifact-1",
+        "confirmationSourceDigest": digest,
+    }
+    records = {
+        "evidence-1": {"tenantId": "tenant-1", "recordType": "Evidence"},
+        "transaction-1": {
+            "tenantId": "tenant-1",
+            "recordType": "Transaction",
+            "executedArtifactId": "artifact-1",
+            "executedArtifactDigest": digest,
+            "sourceEvidenceIds": ["evidence-1"],
+        },
+        "artifact-1": {
+            "tenantId": "tenant-1",
+            "recordType": "DocumentArtifact",
+            "digest": digest,
+        },
+    }
+    validate_reference_graph(record, records.get)
 
 
 def test_typed_reference_graph_rejects_missing_wrong_type_and_cross_tenant() -> None:

@@ -83,7 +83,7 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
         "suspended": {"active", "inactive"},
     },
     ("LicenseHolder", "licenseState"): {
-        "pending_verification": {"active", "inactive"},
+        "pending_verification": {"active"},
         "active": {"inactive", "suspended", "expired", "revoked"},
         "suspended": {"active", "inactive", "revoked"},
     },
@@ -94,19 +94,15 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
     },
     ("Person", "identityState"): {
         "provisional": {"resolved", "ambiguous", "conflict"},
-        "ambiguous": {"resolved", "conflict"},
-        "conflict": {"resolved", "ambiguous"},
+        "ambiguous": {"resolved"},
+        "conflict": {"resolved"},
     },
     ("ContactEndpoint", "ownershipState"): {
         "asserted": {"authorized", "disputed", "revoked"},
-        "authorized": {"disputed", "revoked"},
-        "disputed": {"authorized", "revoked"},
     },
     ("ContactEndpoint", "verificationState"): {
-        "unverified": {"provider_observed", "verified", "disputed"},
+        "unverified": {"provider_observed"},
         "provider_observed": {"verified", "disputed"},
-        "verified": {"disputed"},
-        "disputed": {"verified"},
     },
     ("ContactEndpoint", "contactabilityState"): {
         "unknown": {"contactable", "temporarily_unavailable", "suppressed", "invalid"},
@@ -115,18 +111,13 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
     },
     ("BuyingParty", "decisionAuthorityState"): {
         "unconfirmed": {"individual", "joint", "delegated", "disputed"},
-        "individual": {"disputed"},
-        "joint": {"disputed"},
-        "delegated": {"disputed"},
         "disputed": {"individual", "joint", "delegated"},
     },
     ("BuyerJourney", "qualificationState"): {
         "not_started": {"collecting"},
         "collecting": {"sufficient_for_consult", "stale", "contradicted"},
         "sufficient_for_consult": {"stale", "contradicted"},
-        "stale": {"collecting"},
-        "contradicted": {"collecting"},
-        "declined": {"collecting"},
+        "declined": set(),
     },
     ("BuyerJourney", "representationState"): {
         "unconfirmed": {"not_represented", "agreement_pending", "conflict"},
@@ -193,13 +184,13 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
     },
     ("ConsentGrant", "validityState"): {
         "active": {"expired", "revoked", "superseded", "disputed"},
-        "disputed": {"active", "revoked", "superseded"},
+        "disputed": {"active", "revoked"},
     },
     ("Suppression", "validityState"): {"active": {"lifted", "superseded"}},
     ("LeadSource", "attributionState"): {
         "observed": {"confirmed", "disputed", "superseded"},
-        "confirmed": {"disputed", "superseded"},
-        "disputed": {"confirmed", "superseded"},
+        "confirmed": {"superseded"},
+        "disputed": {"superseded"},
     },
     ("QualificationCriterion", "criterionState"): {
         "draft": {"active"},
@@ -211,22 +202,16 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
         "asserted": {"verified", "inferred", "stale", "contradicted"},
         "verified": {"stale", "contradicted"},
         "inferred": {"verified", "stale", "contradicted"},
-        "stale": {"asserted", "inferred", "verified"},
-        "contradicted": {"asserted", "inferred", "verified"},
     },
     ("BuyerRequirement", "requirementState"): {
         "asserted": {"confirmed", "stale", "contradicted", "withdrawn", "superseded"},
         "confirmed": {"stale", "contradicted", "withdrawn", "superseded"},
-        "stale": {"confirmed", "withdrawn", "superseded"},
-        "contradicted": {"confirmed", "withdrawn", "superseded"},
     },
     ("FinancingReadiness", "readinessState"): {
         "unknown": {"buyer_reported", "documentation_pending", "not_applicable"},
         "buyer_reported": {"documentation_pending", "documented", "stale", "contradicted"},
         "documentation_pending": {"documented", "stale", "contradicted"},
         "documented": {"stale", "contradicted"},
-        "stale": {"buyer_reported", "documentation_pending", "documented"},
-        "contradicted": {"buyer_reported", "documentation_pending", "documented"},
     },
     ("Commitment", "commitmentState"): {
         "open": {"in_progress", "blocked", "fulfilled", "failed", "cancelled", "superseded"},
@@ -262,12 +247,9 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
         "under_contract": {"active", "terminated", "cancelled", "disputed"},
         "active": {"closing_pending", "terminated", "cancelled", "disputed"},
         "closing_pending": {"closed", "terminated", "disputed"},
-        "disputed": {"active", "closing_pending", "terminated", "cancelled"},
     },
     ("TransactionMilestone", "confirmationState"): {
         "proposed": {"confirmed", "disputed"},
-        "confirmed": {"disputed"},
-        "disputed": {"confirmed"},
     },
     ("TransactionMilestone", "milestoneState"): {
         "pending": {"due", "completed", "waived", "cancelled", "superseded"},
@@ -276,7 +258,7 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
     ("Authorization", "authorizationState"): {
         "pending": {"active", "revoked"},
         "active": {"expired", "revoked", "superseded", "disputed"},
-        "disputed": {"active", "revoked", "superseded"},
+        "disputed": {"active", "revoked"},
     },
     ("Approval", "decision"): {"approved": set(), "denied": set(), "revoked": set()},
     ("Appointment", "appointmentState"): {
@@ -287,7 +269,7 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
         "unknown_outcome": {"confirmed", "cancelled", "no_show"},
     },
     ("EffectAttempt", "attemptState"): {
-        "registered": {"dispatching", "rejected"},
+        "registered": {"dispatching"},
         "dispatching": {"accepted", "confirmed", "rejected", "unknown_outcome"},
         "accepted": {"confirmed", "rejected", "unknown_outcome"},
         "unknown_outcome": {"reconciled_failed", "reconciled_succeeded"},
@@ -295,23 +277,15 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
     ("Evidence", "evidenceState"): {"current": {"superseded", "deleted", "anonymized", "invalid"}},
     ("Assertion", "assertionState"): {
         "current": {"stale", "contradicted", "superseded", "withdrawn", "invalid"},
-        "stale": {"superseded", "invalid"},
-        "contradicted": {"superseded", "withdrawn", "invalid"},
     },
     ("VerifiedFact", "factState"): {
         "current": {"stale", "contradicted", "superseded", "revoked", "invalid"},
-        "stale": {"superseded", "revoked", "invalid"},
-        "contradicted": {"superseded", "revoked", "invalid"},
     },
     ("Inference", "inferenceState"): {
         "current": {"stale", "contradicted", "superseded", "invalid"},
-        "stale": {"superseded", "invalid"},
-        "contradicted": {"superseded", "invalid"},
     },
     ("Memory", "memoryState"): {
         "current": {"stale", "invalidated", "superseded", "invalid"},
-        "stale": {"invalidated", "superseded", "invalid"},
-        "invalidated": {"superseded"},
     },
     ("Contradiction", "resolutionState"): {
         "open": {
@@ -340,7 +314,7 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
         "unknown": {"running", "waiting", "completed", "failed", "terminated"},
     },
     ("ConnectorGrant", "grantState"): {
-        "pending": {"active", "revoked", "expired"},
+        "pending": {"active"},
         "active": {"suspended", "revoked", "expired", "superseded"},
         "suspended": {"active", "revoked", "expired", "superseded"},
     },
@@ -393,7 +367,6 @@ _REFERENCE_RULES: dict[str, dict[str, frozenset[str]]] = {
     },
     "FinancingReadiness": {
         "journeyId": frozenset({"BuyerJourney"}),
-        "verificationSourceIds": frozenset({"Evidence", "VerifiedFact"}),
     },
     "Appointment": {
         "journeyId": frozenset({"BuyerJourney"}),
@@ -619,20 +592,9 @@ def validate_reference_graph(
     elif record["recordType"] == "ContactEndpoint":
         require(str(record["ownerId"]), _actor_types_for_label(record["ownerType"]), "$.ownerId")
     elif record["recordType"] == "Commitment":
-        require(str(record["obligorId"]), _ACTOR_TYPES, "$.obligorId")
         for index, reference_id in enumerate(record["beneficiaryIds"]):
             require(
                 str(reference_id), frozenset({"Person", "BuyingParty"}), f"$.beneficiaryIds.{index}"
-            )
-    elif record["recordType"] == "Appointment":
-        for index, reference_id in enumerate(record["participantIds"]):
-            require(str(reference_id), _ACTOR_TYPES, f"$.participantIds.{index}")
-    elif record["recordType"] == "Transaction":
-        for index, reference_id in enumerate(record["partyIds"]):
-            require(
-                str(reference_id),
-                frozenset({"Person", "BuyingParty", "Brokerage", "LicenseHolder"}),
-                f"$.partyIds.{index}",
             )
     elif record["recordType"] == "Authorization":
         require(
@@ -664,6 +626,7 @@ def validate_reference_graph(
             )
     elif record["recordType"] == "ConfirmedTransactionDate":
         source = resolver(str(record["confirmationSourceId"]))
+        transaction = resolver(str(record["transactionId"]))
         require(
             str(record["confirmationSourceId"]),
             frozenset({record["confirmationSourceType"]}),
@@ -681,6 +644,27 @@ def validate_reference_graph(
                     "digest does not match confirmation source",
                 )
             )
+        if (
+            transaction is not None
+            and transaction.get("recordType") == "Transaction"
+            and transaction.get("tenantId") == record["tenantId"]
+        ):
+            if record["confirmationSourceType"] == "DocumentArtifact":
+                bound = (
+                    transaction.get("executedArtifactId") == record["confirmationSourceId"]
+                    and transaction.get("executedArtifactDigest")
+                    == record["confirmationSourceDigest"]
+                )
+            else:
+                bound = record["confirmationSourceId"] in transaction.get("sourceEvidenceIds", [])
+            if not bound:
+                violations.append(
+                    Violation(
+                        "TRANSACTION_DATE_SOURCE_UNBOUND",
+                        "$.confirmationSourceId",
+                        "confirmation source is not the transaction artifact or cited evidence",
+                    )
+                )
     elif record["recordType"] == "Memory":
         memory_scope_types = {
             "conversation": frozenset({"Conversation"}),

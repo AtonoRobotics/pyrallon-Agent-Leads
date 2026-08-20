@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.operator_commands import (
+    OperatorCommandError,
     OperatorCommandService,
     command_payload_digest,
 )
@@ -142,7 +142,8 @@ def test_incomplete_canonical_mutation_fails_before_repository_write(
         tenant_id="tenant-1",
     )
 
-    with pytest.raises(ContractViolation):
+    with pytest.raises(OperatorCommandError) as raised:
         service.dispatch(_command(command_type, target), actor_id="agent-1")
 
+    assert raised.value.code == "validation_failed"
     assert repository.save_called is False

@@ -69,6 +69,26 @@ def test_policy_selection_order_must_cover_each_rule_once() -> None:
         validate_acknowledgment_config(policy)
 
 
+def test_policy_selection_order_controls_rule_precedence_independently_of_storage_order() -> None:
+    policy, lexicon, request = (
+        _valid("AcknowledgmentPolicy"),
+        _valid("OptOutLexicon"),
+        _valid("AcknowledgmentDecisionRequest"),
+    )
+    template = b"Hello {{first_name}}"
+    policy["rules"][0]["templateDigest"] = f"sha256:{hashlib.sha256(template).hexdigest()}"
+    second = copy.deepcopy(policy["rules"][0])
+    second["ruleId"] = "rule-2"
+    second["templateArtifactId"] = "template-2"
+    policy["rules"].append(second)
+    policy["selectionOrder"] = ["rule-2", "rule-1"]
+
+    decision = build_acknowledgment_decision(request, policy, lexicon, "hello", template)
+
+    assert decision["selectedRuleId"] == "rule-2"
+    assert decision["templateArtifactId"] == "template-2"
+
+
 def test_configuration_lifecycle_and_temporal_interval_are_closed() -> None:
     policy = _valid("AcknowledgmentPolicy")
     policy.update(recordVersion=2, supersedesRecordId="another-policy")
