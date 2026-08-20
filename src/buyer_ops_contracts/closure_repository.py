@@ -56,6 +56,10 @@ class PostgresClosureRepository:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"closure:{self._tenant_id}:{record['recordType']}:{identity_key}",),
+                )
+                cursor.execute(
                     """
                     SELECT record_id, record_version, payload
                     FROM closure_records_current

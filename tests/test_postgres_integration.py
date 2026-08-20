@@ -22,7 +22,10 @@ from buyer_ops_contracts.actor_authorization import ActorTenantAuthorizationRepo
 from buyer_ops_contracts.artifacts import ArtifactPointer
 from buyer_ops_contracts.audit import verify_tenant_export
 from buyer_ops_contracts.canonical_repository import CanonicalRepository, VersionConflict
-from buyer_ops_contracts.closure_repository import PostgresClosureRepository
+from buyer_ops_contracts.closure_repository import (
+    ClosureVersionConflict,
+    PostgresClosureRepository,
+)
 from buyer_ops_contracts.contract_acceptance import (
     ContractSemanticError,
     require_unknown_outcome_resolution,
@@ -554,6 +557,44 @@ def test_real_postgres_closure_history_and_current_projection(postgres_dsn: str)
                 "UPDATE closure_records SET status = 'superseded' "
                 "WHERE tenant_id = 'tenant-a' AND record_id = 'inventory-1'"
             )
+
+
+def test_concurrent_closure_version_one_admission_has_one_lineage_winner(
+    postgres_dsn: str,
+) -> None:
+    candidates = [
+        _capability_inventory(record_id=f"inventory-lineage-race-{suffix}", version=1)
+        for suffix in ("a", "b")
+    ]
+    for candidate in candidates:
+        candidate["connectorId"] = "connector-lineage-race"
+    barrier = threading.Barrier(2)
+
+    def admit(candidate: dict[str, Any]) -> str:
+        with _runtime_connection(postgres_dsn) as connection:
+            repository = PostgresClosureRepository(connection, tenant_id="tenant-a")
+            barrier.wait()
+            try:
+                repository.save(candidate)
+                return "admitted"
+            except ClosureVersionConflict:
+                return "version_conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(admit, candidates))
+    assert sorted(outcomes) == ["admitted", "version_conflict"]
+
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM closure_records WHERE record_id IN (%s,%s)",
+            tuple(candidate["recordId"] for candidate in candidates),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT count(*) FROM closure_records_current "
+            "WHERE record_type = 'CapabilityInventory' AND identity_key = %s",
+            (json.dumps(["connector-lineage-race"], separators=(",", ":")),),
+        ).fetchone() == (1,)
 
 
 def test_real_postgres_activation_requires_release_and_build_bound_evidence(
