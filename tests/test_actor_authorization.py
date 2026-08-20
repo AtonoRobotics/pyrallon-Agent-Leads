@@ -12,6 +12,7 @@ from buyer_ops_contracts.actor_authorization import (
 from buyer_ops_contracts.authority_activation_fair_housing import (
     validate_authority_activation_fair_housing_semantics,
 )
+from buyer_ops_contracts.canonical_repository import VersionConflict
 from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.structural import validate_record
 
@@ -42,6 +43,7 @@ class _Cursor:
     def __init__(self) -> None:
         self.statements: list[tuple[str, tuple[object, ...]]] = []
         self.rows: list[tuple[object, ...]] = []
+        self.row: tuple[object, ...] | None = None
 
     def __enter__(self) -> _Cursor:
         return self
@@ -55,8 +57,8 @@ class _Cursor:
     def fetchall(self) -> list[tuple[object, ...]]:
         return self.rows
 
-    def fetchone(self) -> None:
-        return None
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self.row
 
 
 class _Connection:
@@ -165,6 +167,50 @@ def test_repository_save_refuses_non_authorization_record() -> None:
                 "status": "active",
             }
         )
+
+
+def test_new_actor_authorization_lineage_must_start_at_version_one() -> None:
+    connection = _Connection()
+
+    with pytest.raises(VersionConflict, match="start at version 1"):
+        ActorTenantAuthorizationRepository(connection, tenant_id="tenant-1").save(
+            _grant(authorizationVersion=2),
+            now=datetime(2030, 1, 2, tzinfo=UTC),
+        )
+
+    assert connection.commits == 0
+    assert not any(
+        "INSERT INTO actor_tenant_authorization_versions" in statement
+        for statement, _ in connection.cursor_instance.statements
+    )
+
+
+def test_actor_authorization_successor_must_increment_current_version() -> None:
+    connection = _Connection()
+    connection.cursor_instance.row = (1,)
+
+    with pytest.raises(VersionConflict, match="version conflict"):
+        ActorTenantAuthorizationRepository(connection, tenant_id="tenant-1").save(
+            _grant(authorizationVersion=3),
+            now=datetime(2030, 1, 2, tzinfo=UTC),
+        )
+
+    assert connection.commits == 0
+
+
+def test_actor_authorization_exact_next_version_is_admitted() -> None:
+    connection = _Connection()
+    connection.cursor_instance.row = (1,)
+    successor = _grant(authorizationVersion=2, observedAt="2030-01-02T00:00:00Z")
+
+    assert (
+        ActorTenantAuthorizationRepository(connection, tenant_id="tenant-1").save(
+            successor,
+            now=datetime(2030, 1, 2, tzinfo=UTC),
+        )
+        == successor
+    )
+    assert connection.commits == 1
 
 
 def _command() -> dict:

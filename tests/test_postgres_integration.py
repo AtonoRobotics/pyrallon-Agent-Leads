@@ -373,6 +373,55 @@ def test_open025_026_append_only_persistence_and_readback(postgres_dsn: str) -> 
         connection.close()
 
 
+def test_concurrent_actor_authorization_initial_versions_have_one_winner(
+    postgres_dsn: str,
+) -> None:
+    grant = {
+        "schemaVersion": "open-025-027/1.0.0",
+        "recordType": "ActorTenantAuthorization",
+        "tenantId": "tenant-a",
+        "recordId": "actor-grant-version-race",
+        "observedAt": "2030-01-01T00:00:00Z",
+        "actorId": "operator-version-race",
+        "principalId": "principal-version-race",
+        "role": "release_manager",
+        "allowedCommands": ["activate_release"],
+        "recordScopes": ["release-version-race"],
+        "policyVersion": "policy-version-race",
+        "authorizationVersion": 1,
+        "effectiveAt": "2030-01-01T00:00:00Z",
+        "expiresAt": "2030-02-01T00:00:00Z",
+        "status": "active",
+    }
+    barrier = threading.Barrier(2)
+
+    def admit(candidate: dict[str, Any]) -> str:
+        with _runtime_connection(postgres_dsn) as connection:
+            repository = ActorTenantAuthorizationRepository(connection, tenant_id="tenant-a")
+            barrier.wait()
+            try:
+                repository.save(candidate, now=datetime(2030, 1, 2, tzinfo=UTC))
+                return "admitted"
+            except VersionConflict:
+                return "version_conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(admit, [grant, copy.deepcopy(grant)]))
+    assert sorted(outcomes) == ["admitted", "version_conflict"]
+
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM actor_tenant_authorization_versions WHERE record_id = %s",
+            (grant["recordId"],),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT authorization_version FROM actor_tenant_authorizations_current "
+            "WHERE record_id = %s",
+            (grant["recordId"],),
+        ).fetchone() == (1,)
+
+
 def _inbound_envelope(
     provider_event_id: str = "provider-event-1", *, digest: str | None = None
 ) -> InboundEnvelope:

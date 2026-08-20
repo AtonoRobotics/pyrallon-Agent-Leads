@@ -8,7 +8,7 @@ from typing import Any, cast
 from psycopg.types.json import Jsonb
 
 from .authority_activation_fair_housing import validate_authority_activation_fair_housing_semantics
-from .canonical_repository import CanonicalRepository, Connection
+from .canonical_repository import CanonicalRepository, Connection, VersionConflict
 from .structural import validate_record
 
 
@@ -47,6 +47,28 @@ class ActorTenantAuthorizationRepository:
             with self._connection.cursor() as cursor:
                 cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"actor-authorization:{tenant_id}:{record['recordId']}",),
+                )
+                cursor.execute(
+                    """
+                    SELECT authorization_version
+                    FROM actor_tenant_authorizations_current
+                    WHERE tenant_id = %s AND record_id = %s
+                    FOR UPDATE
+                    """.strip(),
+                    (tenant_id, record["recordId"]),
+                )
+                current = cursor.fetchone()
+                version = int(record["authorizationVersion"])
+                if current is None:
+                    if version != 1:
+                        raise VersionConflict(
+                            "new actor authorization lineages must start at version 1"
+                        )
+                elif version != int(cast(int, current[0])) + 1:
+                    raise VersionConflict("actor authorization version conflict")
+                cursor.execute(
                     """
                     INSERT INTO actor_tenant_authorization_versions (
                         tenant_id, record_id, authorization_version, actor_id, status, payload
@@ -55,7 +77,7 @@ class ActorTenantAuthorizationRepository:
                     (
                         tenant_id,
                         record["recordId"],
-                        int(record["authorizationVersion"]),
+                        version,
                         record["actorId"],
                         record["status"],
                         Jsonb(record),
@@ -78,7 +100,7 @@ class ActorTenantAuthorizationRepository:
                     (
                         tenant_id,
                         record["recordId"],
-                        int(record["authorizationVersion"]),
+                        version,
                         record["actorId"],
                         record["status"],
                         Jsonb(record),
