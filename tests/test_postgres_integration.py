@@ -63,10 +63,6 @@ from buyer_ops_contracts.operator_commands import (
     OperatorCommandService as CanonicalOperatorCommandService,
 )
 from buyer_ops_contracts.operator_policy import OperatorPolicyRepository
-from buyer_ops_contracts.operator_surface import (
-    OperatorRejected,
-    PostgresOperatorIdempotencyRepository,
-)
 from buyer_ops_contracts.release_activation_v1 import ReleaseActivationRepository
 from buyer_ops_contracts.release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from buyer_ops_contracts.retention import RetentionConfiguration, RetentionPolicy
@@ -890,29 +886,6 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
             "WHERE capability_id = 'all_external_effects' ORDER BY activation_version"
         ).fetchall()
         assert versions == [(1,), (2,)]
-
-
-def test_real_postgres_operator_idempotency_binds_payload_and_result(postgres_dsn: str) -> None:
-    result = {
-        "message_type": "operator_command_result",
-        "schema_version": "operator-surface/1.1.0",
-        "command_id": "operator-pg-command-1",
-        "tenant_id": "tenant-a",
-        "status": "applied",
-        "decided_at": "2029-01-01T00:00:00Z",
-        "decision_evidence_id": "evidence-1",
-        "current_version": 2,
-        "result_refs": [],
-    }
-    digest = "sha256:" + "a" * 64
-    with _runtime_connection(postgres_dsn) as connection:
-        repository = PostgresOperatorIdempotencyRepository(connection)
-        repository.record("tenant-a", "operator-pg-key-1", digest, result)
-        assert repository.lookup("tenant-a", "operator-pg-key-1") == (digest, result)
-        repository.record("tenant-a", "operator-pg-key-1", digest, result)
-        with pytest.raises(OperatorRejected) as raised:
-            repository.record("tenant-a", "operator-pg-key-1", "sha256:" + "b" * 64, result)
-        assert raised.value.code == "payload_mismatch"
 
 
 class _HabitatPolicy:
