@@ -211,6 +211,9 @@ class ConnectorGateway:
                 permit.payload_digest != request["payloadDigest"],
                 preview is not None and permit.payload_digest != preview.get("payloadDigest"),
                 preview is not None and permit.action_class != preview.get("actionClass"),
+                preview is not None
+                and permit.target_resource_id not in preview.get("targetRefs", ()),
+                preview is not None and permit.recipient_id not in preview.get("recipientRefs", ()),
                 permit.idempotency_key != request["idempotencyKey"],
                 now is not None and permit.issued_at > now,
                 now is not None and permit.expires_at <= now,

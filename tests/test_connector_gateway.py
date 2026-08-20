@@ -235,6 +235,29 @@ def test_connector_response_must_bind_the_exact_request_payload_digest() -> None
     assert adapter.calls == 1
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("targetRefs", ["conversation-other"]),
+        ("recipientRefs", ["endpoint-other"]),
+    ],
+)
+def test_effect_permit_target_and_recipient_must_be_present_in_preview(
+    field: str, value: list[str]
+) -> None:
+    adapter = _Adapter()
+    preview = _preview()
+    preview[field] = value
+
+    with pytest.raises(ConnectorRejected) as raised:
+        _gateway(adapter).invoke(
+            _request(), b"normalized-payload", registration=_registration(), preview=preview
+        )
+
+    assert raised.value.code == "permit_mismatch"
+    assert adapter.calls == 0
+
+
 def test_provider_changing_connector_call_rejects_permit_at_expiry_boundary() -> None:
     adapter = _Adapter()
     gateway = _gateway(adapter)
