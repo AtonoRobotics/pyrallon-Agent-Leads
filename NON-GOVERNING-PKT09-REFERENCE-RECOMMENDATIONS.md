@@ -20,6 +20,13 @@ how their versions contribute to the SlotSet input digest or any governed invali
 A runtime can therefore validate a caller-supplied `SlotSet`, but cannot independently derive its
 governed slot contents from the published records.
 
+The base slot-enumeration text also leaves several choices non-executable. It does not identify the
+origin of the `slotIncrementSeconds` grid; state whether a candidate end or its buffered interval
+must remain within a weekly window, search horizon, or snapshot range; bind `Slot.timeZone` to the
+policy timezone; or define whether before/after buffers apply to busy intervals, blackouts,
+candidate-to-candidate separation, or some combination. The implementation therefore enforces the
+published consultation duration but does not choose those remaining predicates.
+
 `BookingCommand.actorRef` is a generic record reference whose valid fixture names `Actor`, another
 type absent from the governing schemas and generated models. The publication does not provide an
 exact governed replacement or define how that actor reference binds to the separately required
@@ -56,6 +63,9 @@ The publication also needs:
 
 - stable identities, tenant ownership, versions, lifecycle, effective intervals, and supersession;
 - deterministic travel, location, service-zone, and capacity exclusion inputs and predicates;
+- the slot-increment origin and exact boundary and inclusivity/exclusivity rules for windows,
+  horizon, snapshot range, blackouts, busy intervals, and buffers;
+- the required relationship, if any, between a slot timezone and its policy timezone;
 - precedence and conflict behavior when multiple exclusions apply;
 - exact current-record and SlotSet input-digest construction rules, provider-watermark invalidation,
   and an explicit decision about whether and how policy-version changes bind to any other governed
