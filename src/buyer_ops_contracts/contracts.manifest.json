@@ -135,15 +135,6 @@
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.0.0"
-    },
-    {
-      "name": "production_runtime",
-      "resource": "schemas/production_runtime.schema.json",
-      "sha256": "b56e696607c8db76b9e5b22c3a653bf9f6ae96c46a2e986268a3b1874b928098",
-      "schemaId": "https://buyer-ops.example/schemas/production-runtime/1.0.0",
-      "schemaVersion": "1.0.0",
-      "readerRange": ">=1.0.0,<2.0.0",
-      "writerVersion": "1.0.0"
     }
   ]
 }
