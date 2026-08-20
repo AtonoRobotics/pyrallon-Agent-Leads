@@ -21,7 +21,7 @@ Canonical reference mappings and the bindings that remain unavailable are enumer
 Install the exact locked runtime and development dependencies:
 
 ```bash
-uv sync --extra dev
+uv sync --locked --extra dev
 ```
 
 The lock currently includes the PostgreSQL driver, generated-model tooling, JSON Schema validation,
@@ -121,7 +121,7 @@ After an authorized change to a governing JSON Schema, synchronize the packaged 
 and generated Pydantic models:
 
 ```bash
-uv run python scripts/sync_contracts.py
+uv run python scripts/sync_contracts.py --write
 bash scripts/generate_models.sh
 uv run python scripts/generate_ontology_fixtures.py
 uv run python scripts/report_ontology_compatibility.py

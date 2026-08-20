@@ -101,7 +101,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.4.2" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "referencing", specifier = "==0.37.0" },
-    { name = "rfc8785", specifier = ">=0.1.4" },
+    { name = "rfc8785", specifier = "==0.1.4" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.12" },
     { name = "temporalio", specifier = "==1.30.0" },
     { name = "types-jsonschema", marker = "extra == 'dev'", specifier = "==4.26.0.20260202" },
@@ -109,7 +109,7 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "types-pyyaml", specifier = ">=6.0.12.20260815" }]
+dev = [{ name = "types-pyyaml", specifier = "==6.0.12.20260815" }]
 
 [[package]]
 name = "cffi"

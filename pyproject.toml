@@ -15,7 +15,7 @@ dependencies = [
   "PyYAML==6.0.3",
   "referencing==0.37.0",
   "temporalio==1.30.0",
-  "rfc8785>=0.1.4",
+  "rfc8785==0.1.4",
 ]
 
 [project.optional-dependencies]
@@ -60,5 +60,5 @@ exclude = ["src/buyer_ops_contracts/generated"]
 
 [dependency-groups]
 dev = [
-    "types-pyyaml>=6.0.12.20260815",
+    "types-pyyaml==6.0.12.20260815",
 ]
