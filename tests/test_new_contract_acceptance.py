@@ -322,6 +322,28 @@ def test_slot_set_binds_current_readiness_policy_binding_and_snapshot() -> None:
         )
 
 
+def test_derived_records_bind_their_assigned_implementations() -> None:
+    booking = _load("availability_booking/valid.json")
+    readiness = copy.deepcopy(_load("qualification_readiness/valid.json")["readiness"])
+    readiness["expiresAt"] = "2026-03-08T08:05:00Z"
+    wrong_slot_deriver = copy.deepcopy(booking["slotSet"])
+    wrong_slot_deriver["derivedBy"]["implementationId"] = "booking_reconciliation_v1"
+
+    with pytest.raises(ContractSemanticError, match="slot_set_deriver_mismatch"):
+        validate_slot_set_context(
+            wrong_slot_deriver,
+            policy=booking["policy"],
+            readiness=readiness,
+            binding=booking["binding"],
+            snapshot=booking["snapshot"],
+        )
+
+    wrong_reconciliation_deriver = copy.deepcopy(booking["reconciliation"])
+    wrong_reconciliation_deriver["derivedBy"]["implementationId"] = "availability_v1"
+    with pytest.raises(ContractSemanticError, match="reconciliation_deriver_mismatch"):
+        validate_reconciliation(booking["result"], wrong_reconciliation_deriver)
+
+
 def test_slot_set_rejects_wrong_consultation_duration() -> None:
     booking = _load("availability_booking/valid.json")
     readiness = copy.deepcopy(_load("qualification_readiness/valid.json")["readiness"])

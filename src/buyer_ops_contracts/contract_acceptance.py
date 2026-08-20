@@ -266,6 +266,8 @@ def local_window_instants(
 
 def validate_slot_set(slot_set: dict[str, Any], policy: dict[str, Any]) -> None:
     validate_availability_policy(policy)
+    if slot_set["derivedBy"]["implementationId"] != "availability_v1":
+        raise ContractSemanticError("slot_set_deriver_mismatch")
     derived = _time(slot_set["derivedAt"])
     expires = _time(slot_set["expiresAt"])
     if (
@@ -468,6 +470,8 @@ def admit_idempotency(command: dict[str, Any], existing_payload_digest: str | No
 
 
 def validate_reconciliation(prior_result: dict[str, Any], reconciliation: dict[str, Any]) -> None:
+    if reconciliation["derivedBy"]["implementationId"] != "booking_reconciliation_v1":
+        raise ContractSemanticError("reconciliation_deriver_mismatch")
     if prior_result["tenantId"] != reconciliation["tenantId"]:
         raise ContractSemanticError("cross_tenant_reference")
     expected_prior_ref = {
