@@ -60,10 +60,11 @@ flowchart TD
 
 **Evidence:** Schema compilation, valid/invalid fixture suite, generated-file drift check.
 
-**Execution status (2026-08-19): Complete for SCP-01 admission.** Ontology `buyer-ops/0.3.0`
+**Execution status (2026-08-19): Complete for current package admission.** Ontology `buyer-ops/0.3.0`
 admits 40 roots, including executable connector-grant and confirmed-transaction-date semantics. All
-11 contract families are hash-pinned, generated, fixture-tested, compatibility-declared, and pass the
-full local gate chain recorded in `SPECIFICATION-CLOSURE-PACKET.md`.
+15 current contract families are hash-pinned, generated, fixture-tested, and compatibility-declared.
+`SPECIFICATION-CLOSURE-PACKET.md` retains the original 11-family SCP-01 evidence;
+`CONTRACT-PACKAGE-VERIFICATION.md` governs admission of the extended 15-family package.
 
 ### PKT-01 — PostgreSQL canonical CRM and ontology
 

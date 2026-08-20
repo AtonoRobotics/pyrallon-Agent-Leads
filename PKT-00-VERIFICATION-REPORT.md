@@ -4,10 +4,10 @@
 **Verified:** 2026-08-19  
 **Disposition:** Complete for SCP-01 admission against ontology `buyer-ops/0.3.0`
 
-This report preserves the 0.2 verification history below. Its current controlling evidence is
-`SPECIFICATION-CLOSURE-PACKET.md`: 11 packaged contract families, 40 ontology roots, compatibility
-and migration 0006, 167 passing tests including 21 PostgreSQL and 7 Temporal tests, static and format
-checks, drift verification, secret scan, and package build.
+This report preserves the 0.2 and original SCP-01 verification history below. The current authority
+contains 15 packaged contract families and 40 ontology roots. Its controlling package-admission
+procedure is `CONTRACT-PACKAGE-VERIFICATION.md`; the 11-family counts, hashes, and test totals below
+are historical evidence and must not be presented as verification of the current package.
 
 ## 1. Requirement trace
 
@@ -82,5 +82,5 @@ clean repository checkout.
 
 PKT-01 has resumed against ontology 0.3.0. OPEN-013 is resolved by canonical
 `ConfirmedTransactionDate` with executable typed ownership, state, and source-digest admission.
-PKT-02 compatibility is admitted against the 11-family manifest, and subsequent packets may proceed
+PKT-02 compatibility is admitted against the current 15-family manifest, and subsequent packets may proceed
 in dependency order subject to their own gates and remaining deployment decisions.

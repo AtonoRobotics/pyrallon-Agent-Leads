@@ -45,13 +45,20 @@ after the full clean verification suite passes.
 
 ## 5. Verification evidence
 
+The following hashes and test totals record the original SCP-01 baseline and are retained as
+historical evidence. That baseline contained 11 contract families:
+
 - 167 tests pass in one clean run, including 21 PostgreSQL and 7 Temporal integration tests.
 - Ruff lint and format, strict mypy, migration integrity, gate registry, completion ledger,
   contract/source/model drift, high-confidence secret scan, and `git diff --check` pass.
-- The package builds from source with all 11 schemas and generated model families.
+- The baseline package builds from source with all 11 schemas and generated model families.
 - Manifest SHA-256: `58e8c0afe24420bce7b5826b559f49435a29d58cd3907321225be64eefa34755`.
 - Wheel SHA-256: `379bdfe8da96a1641099bb8abe718be77351b123203162c27a89de6d690ab295`.
 - Source archive SHA-256: `6720dd64a26efbd29d155e5173d2f707d0e33772af2cd84ca223147f96af7ab5`.
+
+The current authority extends that baseline to 15 contract families. Its controlling admission
+procedure and evidence are recorded in `CONTRACT-PACKAGE-VERIFICATION.md`; the original hashes above
+must not be used to identify or activate the current 15-family package.
 
 OPEN-010 through OPEN-018 are resolved. PKT-01 is resumed against ontology 0.3.0. Later packets are
 eligible in dependency order, subject to their own gates and the still-open deployment decisions;
