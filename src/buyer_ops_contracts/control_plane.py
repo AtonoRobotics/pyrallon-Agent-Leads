@@ -138,7 +138,10 @@ class ControlPlane:
                         "authority_denied",
                         "admit brokerage identity before registering this application's OAuth clients",
                     )
-                return 200, self._save_platform_oauth_client(payload)
+                return 422, _error(
+                    "configuration_incomplete",
+                    "platform OAuth client owner admission semantics are not published",
+                )
             if not tenant_id:
                 return 403, _error("authority_denied", "tenant header required")
             if method == "GET" and route == "/v1/journeys":
@@ -415,18 +418,6 @@ class ControlPlane:
         connection = self._connection()
         try:
             return self._platform_oauth(connection).list_public()
-        finally:
-            connection.close()
-
-    def _save_platform_oauth_client(self, payload: dict[str, Any]) -> dict[str, Any]:
-        connection = self._connection()
-        try:
-            return self._platform_oauth(connection).save(
-                issuer=str(payload.get("issuer") or ""),
-                client_id=str(payload.get("clientId") or ""),
-                client_secret=str(payload.get("clientSecret") or ""),
-                directory_id=str(payload.get("directoryId") or "") or None,
-            )
         finally:
             connection.close()
 

@@ -598,7 +598,7 @@ def test_malformed_operator_command_json_returns_typed_operator_error() -> None:
     validate_record(payload, "operator_surface")
 
 
-def test_platform_oauth_client_save_requires_actor_and_tenancy() -> None:
+def test_platform_oauth_client_save_requires_actor_tenancy_and_owner_contract() -> None:
     plane = _plane(AuthorizationConnection())
     status, payload = plane.handle(
         "POST",
@@ -620,11 +620,8 @@ def test_platform_oauth_client_save_requires_actor_and_tenancy() -> None:
 
     class _Store:
         def save(self, **kwargs: object) -> dict[str, str]:
-            return {
-                "issuer": str(kwargs["issuer"]),
-                "clientId": str(kwargs["client_id"]),
-                "configured": "true",
-            }
+            del kwargs
+            raise AssertionError("unpublished HTTP authority reached platform OAuth storage")
 
     plane._tenancies = lambda actor_id: [{"tenant_id": "1"}]  # type: ignore[method-assign]
     plane._platform_oauth = lambda connection: _Store()  # type: ignore[method-assign]
@@ -636,8 +633,8 @@ def test_platform_oauth_client_save_requires_actor_and_tenancy() -> None:
             {"issuer": "google", "clientId": "google-client", "clientSecret": "google-secret"}
         ).encode(),
     )
-    assert status == 200
-    assert payload == {"issuer": "google", "clientId": "google-client", "configured": "true"}
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
 
 
 def test_platform_oauth_secret_material_has_no_http_readback_surface() -> None:
