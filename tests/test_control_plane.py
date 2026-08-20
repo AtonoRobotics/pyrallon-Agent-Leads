@@ -267,6 +267,22 @@ def test_platform_oauth_client_save_requires_actor_and_tenancy() -> None:
     assert payload == {"issuer": "google", "clientId": "google-client", "configured": "true"}
 
 
+def test_platform_oauth_secret_material_has_no_http_readback_surface() -> None:
+    plane = _plane(AuthorizationConnection())
+    status, payload = plane.handle(
+        "GET",
+        "/v1/platform/oauth-clients/material",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"",
+    )
+    assert status == 404
+    assert payload["code"] == "validation_failed"
+
+
 def test_activation_readback_is_empty_until_signed_evidence_exists() -> None:
     status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
         "GET",

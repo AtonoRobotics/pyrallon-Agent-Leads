@@ -121,8 +121,6 @@ class ControlPlane:
                     "clients": self._platform_oauth_clients(),
                     "publicOrigin": os.environ.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/"),
                 }
-            if method == "GET" and route == "/v1/platform/oauth-clients/material":
-                return 200, {"clients": self._platform_oauth_material()}
             if method == "POST" and route == "/v1/platform/oauth-clients":
                 if not actor_id:
                     return 401, _error("authentication_required", "actor required")
@@ -441,13 +439,6 @@ class ControlPlane:
         connection = self._connection()
         try:
             return self._platform_oauth(connection).list_public()
-        finally:
-            connection.close()
-
-    def _platform_oauth_material(self) -> dict[str, dict[str, str]]:
-        connection = self._connection()
-        try:
-            return self._platform_oauth(connection).material()
         finally:
             connection.close()
 
