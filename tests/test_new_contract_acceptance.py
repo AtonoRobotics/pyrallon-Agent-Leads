@@ -20,6 +20,7 @@ from buyer_ops_contracts.contract_acceptance import (
     validate_calendar_snapshot,
     validate_policy_version,
     validate_qualification,
+    validate_qualification_decisions,
     validate_reconciliation,
     validate_slot_set,
 )
@@ -171,6 +172,27 @@ def test_policy_supersession_is_contiguous_and_tenant_bound() -> None:
     successor["version"] = 3
     with pytest.raises(ContractSemanticError, match="non_contiguous_policy_version"):
         validate_policy_version(successor, current)
+
+
+def test_qualification_decisions_bind_exact_inputs_and_deterministic_results() -> None:
+    valid = _load("qualification_readiness/valid.json")
+    validate_qualification_decisions(
+        valid["policy"], valid["input"], valid["nextQuestion"], valid["readiness"]
+    )
+
+    wrong_digest = copy.deepcopy(valid["nextQuestion"])
+    wrong_digest["inputDigest"] = "sha256:00000000000000000000000000000000"
+    with pytest.raises(ContractSemanticError, match="decision_input_digest_mismatch"):
+        validate_qualification_decisions(
+            valid["policy"], valid["input"], wrong_digest, valid["readiness"]
+        )
+
+    wrong_result = copy.deepcopy(valid["readiness"])
+    wrong_result["result"] = "not_ready"
+    with pytest.raises(ContractSemanticError, match="readiness_result_mismatch"):
+        validate_qualification_decisions(
+            valid["policy"], valid["input"], valid["nextQuestion"], wrong_result
+        )
 
 
 def test_availability_semantic_fixture_matrix() -> None:

@@ -126,6 +126,73 @@ def readiness_result(policy: dict[str, Any], inputs: dict[str, Any]) -> tuple[st
     return ("ready", [])
 
 
+def validate_qualification_decisions(
+    policy: dict[str, Any],
+    inputs: dict[str, Any],
+    next_question: dict[str, Any],
+    readiness: dict[str, Any],
+) -> None:
+    """Validate that derived qualification decisions bind their exact governed inputs."""
+
+    expected_policy_ref = {
+        "recordId": policy["policyId"],
+        "recordType": "QualificationPolicy",
+        "version": policy["version"],
+    }
+    expected_input_ref = {
+        "recordId": inputs["inputSetId"],
+        "recordType": "QualificationInputSet",
+        "version": 1,
+    }
+    if any(
+        record["tenantId"] != policy["tenantId"] for record in (inputs, next_question, readiness)
+    ):
+        raise ContractSemanticError("cross_tenant_reference")
+    if inputs["policyRef"] != expected_policy_ref:
+        raise ContractSemanticError("input_policy_reference_mismatch")
+    if (
+        next_question["policyRef"] != expected_policy_ref
+        or readiness["policyRef"] != expected_policy_ref
+    ):
+        raise ContractSemanticError("decision_policy_reference_mismatch")
+    if (
+        next_question["inputSetRef"] != expected_input_ref
+        or readiness["inputSetRef"] != expected_input_ref
+    ):
+        raise ContractSemanticError("decision_input_reference_mismatch")
+    if readiness["journeyRef"] != inputs["journeyRef"]:
+        raise ContractSemanticError("decision_journey_reference_mismatch")
+    if (
+        next_question["inputDigest"] != inputs["inputDigest"]
+        or readiness["inputDigest"] != inputs["inputDigest"]
+    ):
+        raise ContractSemanticError("decision_input_digest_mismatch")
+
+    expected_question_result, expected_criterion_id = select_next_question(policy, inputs)
+    if (
+        next_question["result"],
+        next_question["criterionId"],
+    ) != (expected_question_result, expected_criterion_id):
+        raise ContractSemanticError("next_question_result_mismatch")
+    expected_template = None
+    if expected_criterion_id is not None:
+        expected_template = next(
+            criterion["questionTemplateRef"]
+            for criterion in policy["criteria"]
+            if criterion["criterionId"] == expected_criterion_id
+        )
+    if next_question["questionTemplateRef"] != expected_template:
+        raise ContractSemanticError("question_template_reference_mismatch")
+
+    expected_readiness_result, expected_blocking = readiness_result(policy, inputs)
+    if readiness["result"] != expected_readiness_result:
+        raise ContractSemanticError("readiness_result_mismatch")
+    if readiness["blockingCriterionIds"] != expected_blocking:
+        raise ContractSemanticError("readiness_blocking_criteria_mismatch")
+    if _time(readiness["derivedAt"]) >= _time(readiness["expiresAt"]):
+        raise ContractSemanticError("readiness_expiry_mismatch")
+
+
 def validate_availability_policy(policy: dict[str, Any]) -> None:
     if policy["lifecycle"] != "active":
         raise ContractSemanticError("policy_not_active")
