@@ -422,6 +422,63 @@ def test_concurrent_actor_authorization_initial_versions_have_one_winner(
         ).fetchone() == (1,)
 
 
+def test_concurrent_operator_policy_initial_versions_have_one_winner(
+    postgres_dsn: str,
+) -> None:
+    policy = {
+        "message_type": "operator_policy",
+        "schema_version": "operator-surface/1.1.0",
+        "policy_id": "operator-policy-version-race",
+        "tenant_id": "tenant-a",
+        "record_version": 1,
+        "effective_from": "2026-01-01T00:00:00Z",
+        "status": "active",
+        "command_rules": [
+            {
+                "command_type": "correct_invalidate",
+                "action_class": "correct_epistemic_item",
+                "target_record_types": ["Assertion"],
+                "actor_types": ["license_holder"],
+            },
+        ],
+        "evidence_refs": [
+            {
+                "record_id": "operator-policy-version-race-evidence",
+                "record_type": "Evidence",
+                "version": 1,
+                "digest": "sha256:" + "a" * 64,
+                "captured_at": "2026-01-01T00:00:00Z",
+            }
+        ],
+    }
+    barrier = threading.Barrier(2)
+
+    def admit(candidate: dict[str, Any]) -> str:
+        with _runtime_connection(postgres_dsn) as connection:
+            repository = OperatorPolicyRepository(connection, tenant_id="tenant-a")
+            barrier.wait()
+            try:
+                repository.admit(candidate)
+                return "admitted"
+            except VersionConflict:
+                return "version_conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(admit, [policy, copy.deepcopy(policy)]))
+    assert sorted(outcomes) == ["admitted", "version_conflict"]
+
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM operator_policy_versions WHERE policy_id = %s",
+            (policy["policy_id"],),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT record_version FROM operator_policies_current WHERE policy_id = %s",
+            (policy["policy_id"],),
+        ).fetchone() == (1,)
+
+
 def _inbound_envelope(
     provider_event_id: str = "provider-event-1", *, digest: str | None = None
 ) -> InboundEnvelope:

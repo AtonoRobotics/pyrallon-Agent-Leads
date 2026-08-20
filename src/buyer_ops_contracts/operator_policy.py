@@ -33,6 +33,10 @@ class OperatorPolicyRepository:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"operator-policy:{self._tenant_id}:{policy['policy_id']}",),
+                )
+                cursor.execute(
                     """
                     SELECT record_version FROM operator_policies_current
                     WHERE tenant_id = %s AND policy_id = %s FOR UPDATE
