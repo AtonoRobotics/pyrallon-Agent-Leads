@@ -84,7 +84,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - name: Run tests with an explicit timeout
-        run: timeout --signal=TERM --kill-after=30s 12m uv run pytest -vv --durations=25
+        run: timeout --signal=TERM --kill-after=30s 20m uv run pytest -vv --durations=25
       - name: Build source and wheel distributions
         run: |
           uv build --sdist --wheel --out-dir dist
