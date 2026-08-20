@@ -76,6 +76,19 @@ def test_qualification_semantic_fixture_matrix() -> None:
             validate_qualification(policy, inputs)
 
 
+def test_qualification_inputs_bind_the_exact_policy_version() -> None:
+    valid = _load("qualification_readiness/valid.json")
+    policy = valid["policy"]
+    inputs = copy.deepcopy(valid["input"])
+    inputs["policyRef"]["version"] = policy["version"] + 1
+    inputs["inputDigest"] = canonical_digest(
+        {key: inputs[key] for key in sorted(inputs) if key not in {"inputDigest", "inputSetId"}}
+    )
+
+    with pytest.raises(ContractSemanticError, match="input_policy_reference_mismatch"):
+        validate_qualification(policy, inputs)
+
+
 def test_question_tie_break_and_readiness_are_order_independent() -> None:
     valid = _load("qualification_readiness/valid.json")
     policy = valid["policy"]

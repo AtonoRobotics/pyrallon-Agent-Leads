@@ -49,6 +49,13 @@ def validate_policy_version(current: dict[str, Any], predecessor: dict[str, Any]
 def validate_qualification(policy: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
     if policy["tenantId"] != inputs["tenantId"]:
         raise ContractSemanticError("cross_tenant_reference")
+    expected_policy_ref = {
+        "recordId": policy["policyId"],
+        "recordType": "QualificationPolicy",
+        "version": policy["version"],
+    }
+    if inputs["policyRef"] != expected_policy_ref:
+        raise ContractSemanticError("input_policy_reference_mismatch")
     if policy["lifecycle"] != "active":
         raise ContractSemanticError("policy_not_active")
     evaluated_at = _time(inputs["evaluatedAt"])
