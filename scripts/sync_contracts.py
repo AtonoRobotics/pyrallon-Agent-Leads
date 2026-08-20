@@ -16,6 +16,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "buyer_ops_contracts"
+TELEMETRY_CATALOG = ("TELEMETRY-SLO-CATALOG.json", "telemetry_catalog.json")
 MAPPINGS = {
     "authority_activation_fair_housing": (
         "OPEN-025-027.schema.json",
@@ -94,6 +95,10 @@ def check() -> None:
         target = PACKAGE / "schemas" / target_name
         if not target.is_file() or source.read_bytes() != target.read_bytes():
             errors.append(f"packaged schema drift: {name}")
+    catalog_source = ROOT / TELEMETRY_CATALOG[0]
+    catalog_target = PACKAGE / TELEMETRY_CATALOG[1]
+    if not catalog_target.is_file() or catalog_source.read_bytes() != catalog_target.read_bytes():
+        errors.append("packaged telemetry catalog drift")
     actual = json.loads((PACKAGE / "contracts.manifest.json").read_text())
     expected = expected_manifest()
     if actual != expected:
@@ -106,6 +111,7 @@ def check() -> None:
 def write() -> None:
     for source_name, target_name in MAPPINGS.values():
         shutil.copyfile(ROOT / source_name, PACKAGE / "schemas" / target_name)
+    shutil.copyfile(ROOT / TELEMETRY_CATALOG[0], PACKAGE / TELEMETRY_CATALOG[1])
     manifest = expected_manifest()
     (PACKAGE / "contracts.manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print("contract package synchronized")

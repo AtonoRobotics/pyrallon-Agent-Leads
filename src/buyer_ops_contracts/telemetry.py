@@ -230,14 +230,10 @@ class RatioTelemetryRecorder:
 def load_metric_catalog(path: Any | None = None) -> dict[str, Any]:
     if path is not None:
         return cast(dict[str, Any], json.loads(path.read_text()))
-    root = files("buyer_ops_contracts")
-    try:
-        return cast(dict[str, Any], json.loads(root.joinpath("telemetry_catalog.json").read_text()))
-    except FileNotFoundError:
-        from pathlib import Path
-
-        fallback = Path(__file__).resolve().parents[2] / "TELEMETRY-SLO-CATALOG.json"
-        return cast(dict[str, Any], json.loads(fallback.read_text()))
+    return cast(
+        dict[str, Any],
+        json.loads(files("buyer_ops_contracts").joinpath("telemetry_catalog.json").read_text()),
+    )
 
 
 class TelemetryRecorder:

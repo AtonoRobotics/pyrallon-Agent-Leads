@@ -34,7 +34,7 @@ buyer-ops-contracts = "buyer_ops_contracts.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-buyer_ops_contracts = ["schemas/*.json", "contracts.manifest.json", "py.typed"]
+buyer_ops_contracts = ["schemas/*.json", "contracts.manifest.json", "telemetry_catalog.json", "py.typed"]
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"

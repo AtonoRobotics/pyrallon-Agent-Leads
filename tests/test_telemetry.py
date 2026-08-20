@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import copy
+import json
+from importlib.resources import files
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -13,6 +16,18 @@ from buyer_ops_contracts.telemetry import (
     load_metric_catalog,
     validate_dashboard_definition,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_authoritative_telemetry_catalog_is_an_installable_package_resource() -> None:
+    authoritative = json.loads((ROOT / "TELEMETRY-SLO-CATALOG.json").read_text())
+    packaged = json.loads(
+        files("buyer_ops_contracts").joinpath("telemetry_catalog.json").read_text()
+    )
+
+    assert packaged == authoritative
+    assert load_metric_catalog() == authoritative
 
 
 class _Cursor:

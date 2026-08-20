@@ -18,7 +18,7 @@ def _module() -> ModuleType:
     return module
 
 
-def _tree(tmp_path: Path, module: ModuleType) -> tuple[Path, Path]:
+def _tree(tmp_path: Path, module: ModuleType) -> tuple[Path, Path, Path]:
     root = tmp_path / "root"
     package = root / "src" / "buyer_ops_contracts"
     (package / "schemas").mkdir(parents=True)
@@ -34,31 +34,51 @@ def _tree(tmp_path: Path, module: ModuleType) -> tuple[Path, Path]:
     module.ROOT = root
     module.PACKAGE = package
     module.MAPPINGS = {"example": ("EXAMPLE.schema.json", "example.schema.json")}
+    catalog_source = root / "TELEMETRY-SLO-CATALOG.json"
+    catalog_source.write_text('{"catalogVersion":"telemetry-slo-catalog/1.0.0"}\n')
+    module.TELEMETRY_CATALOG = (
+        "TELEMETRY-SLO-CATALOG.json",
+        "telemetry_catalog.json",
+    )
     manifest = {"manifestVersion": "1.1.0", "contracts": []}
     (package / "contracts.manifest.json").write_text(json.dumps(manifest) + "\n")
     module.write()
-    return source, target
+    return source, target, package / "telemetry_catalog.json"
 
 
 def test_check_is_byte_for_byte_read_only(tmp_path: Path) -> None:
     module = _module()
-    source, target = _tree(tmp_path, module)
+    source, target, catalog = _tree(tmp_path, module)
     manifest = module.PACKAGE / "contracts.manifest.json"
     before = {
-        path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (source, target, manifest)
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (source, target, catalog, manifest)
     }
     module.check()
     after = {
-        path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (source, target, manifest)
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (source, target, catalog, manifest)
     }
     assert after == before
 
 
 def test_check_reports_drift_without_repairing_it(tmp_path: Path) -> None:
     module = _module()
-    _, target = _tree(tmp_path, module)
+    _, target, _ = _tree(tmp_path, module)
     target.write_text("{}\n")
     before = target.read_bytes()
     with pytest.raises(SystemExit, match="packaged schema drift"):
         module.check()
     assert target.read_bytes() == before
+
+
+def test_check_reports_packaged_catalog_drift_without_repairing_it(tmp_path: Path) -> None:
+    module = _module()
+    _, _, catalog = _tree(tmp_path, module)
+    catalog.write_text("{}\n")
+    before = catalog.read_bytes()
+
+    with pytest.raises(SystemExit, match="packaged telemetry catalog drift"):
+        module.check()
+
+    assert catalog.read_bytes() == before

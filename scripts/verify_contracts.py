@@ -1,7 +1,7 @@
 import hashlib
 import json
-import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -12,13 +12,11 @@ PACKAGE = ROOT / "src" / "buyer_ops_contracts"
 
 
 def _generate(schema: Path, output: Path) -> None:
-    environment = os.environ.copy()
-    environment.setdefault("UV_CACHE_DIR", "/tmp/buyer-ops-uv-cache")
     subprocess.run(
         [
-            "uv",
-            "run",
-            "datamodel-codegen",
+            sys.executable,
+            "-m",
+            "datamodel_code_generator",
             "--input",
             str(schema),
             "--input-file-type",
@@ -36,11 +34,17 @@ def _generate(schema: Path, output: Path) -> None:
             "--disable-timestamp",
         ],
         check=True,
-        env=environment,
     )
 
 
 def main() -> None:
+    catalog_source = ROOT / "TELEMETRY-SLO-CATALOG.json"
+    catalog_packaged = PACKAGE / "telemetry_catalog.json"
+    if (
+        not catalog_packaged.is_file()
+        or catalog_packaged.read_bytes() != catalog_source.read_bytes()
+    ):
+        raise SystemExit("packaged telemetry catalog drift")
     manifest = json.loads((PACKAGE / "contracts.manifest.json").read_text())
     sources = {
         "authority_activation_fair_housing": ROOT / "OPEN-025-027.schema.json",

@@ -1,0 +1,30 @@
+{
+  "catalogVersion":"telemetry-slo-catalog/1.0.0",
+  "dimensionPolicy":{"allowed":["environment","region","channel","provider","result"],"prohibited":["tenant_id","person_id","journey_id","message_id","free_text"],"maximumSeriesPerMetric":5000},
+  "metrics":[
+    {"id":"capture_latency_seconds","unit":"seconds","start":"ingress_received","end":"canonical_capture_committed","aggregation":["p50","p95","p99"],"retention":"operational_90d"},
+    {"id":"acknowledgment_latency_seconds","unit":"seconds","start":"canonical_capture_committed","end":"acknowledgment_effect_confirmed","aggregation":["p50","p95","p99"],"retention":"operational_90d"},
+    {"id":"identity_ambiguity_ratio","unit":"ratio","numerator":"ingress_identity_ambiguous","denominator":"ingress_identity_evaluated","aggregation":["ratio"],"retention":"operational_90d"},
+    {"id":"duplicate_suppression_total","unit":"count","start":"duplicate_suppression_committed","end":"duplicate_suppression_committed","aggregation":["sum"],"retention":"operational_90d"},
+    {"id":"qualification_completion_ratio","unit":"ratio","numerator":"qualification_completed","denominator":"qualification_started","aggregation":["ratio"],"retention":"operational_90d"},
+    {"id":"consult_readiness_ratio","unit":"ratio","numerator":"journey_consult_ready","denominator":"journey_qualification_active","aggregation":["ratio"],"retention":"operational_90d"},
+    {"id":"slot_conversion_ratio","unit":"ratio","numerator":"appointment_confirmed","denominator":"slot_offer_presented","aggregation":["ratio"],"retention":"operational_90d"},
+    {"id":"booking_conflict_ratio","unit":"ratio","numerator":"booking_concurrency_conflict","denominator":"booking_attempted","aggregation":["ratio"],"retention":"operational_90d"},
+    {"id":"provider_unknown_outcome_ratio","unit":"ratio","numerator":"provider_outcome_unknown","denominator":"provider_effect_attempted","aggregation":["ratio"],"retention":"audit_7y"},
+    {"id":"connector_blocked_duration_seconds","unit":"seconds","start":"connector_block_opened","end":"connector_block_resolved","aggregation":["p50","p95","p99"],"retention":"operational_90d"},
+    {"id":"cognitive_blocked_duration_seconds","unit":"seconds","start":"cognitive_block_opened","end":"cognitive_block_resolved","aggregation":["p50","p95","p99"],"retention":"operational_90d"},
+    {"id":"opt_out_ratio","unit":"ratio","numerator":"opt_out_committed","denominator":"contactable_journey","aggregation":["ratio"],"retention":"audit_7y"},
+    {"id":"complaint_ratio","unit":"ratio","numerator":"complaint_recorded","denominator":"outbound_effect_confirmed","aggregation":["ratio"],"retention":"audit_7y"},
+    {"id":"fair_housing_counterfactual_difference","unit":"ratio","numerator":"counterfactual_decision_difference","denominator":"counterfactual_pair_evaluated","aggregation":["ratio"],"retention":"audit_7y"},
+    {"id":"agent_exception_load","unit":"count","start":"operator_exception_opened","end":"operator_exception_opened","aggregation":["sum"],"retention":"operational_90d"}
+  ],
+  "slos":[
+    {"id":"capture_p95","metricId":"capture_latency_seconds","window":"rolling_30m","statistic":"p95","comparator":"lte","objective":30,"minimumSamples":20,"noData":"insufficient_data","owner":"platform_operations"},
+    {"id":"acknowledgment_p95","metricId":"acknowledgment_latency_seconds","window":"rolling_30m","statistic":"p95","comparator":"lte","objective":120,"minimumSamples":20,"noData":"insufficient_data","owner":"product_operations"},
+    {"id":"provider_unknown_ratio","metricId":"provider_unknown_outcome_ratio","window":"rolling_24h","statistic":"ratio","comparator":"lte","objective":0.01,"minimumSamples":100,"noData":"insufficient_data","owner":"platform_operations"},
+    {"id":"counterfactual_equality","metricId":"fair_housing_counterfactual_difference","window":"release_evaluation","statistic":"ratio","comparator":"eq","objective":0,"minimumSamples":100,"noData":"insufficient_data","owner":"broker_operations"}
+  ],
+  "errorBudget":{"calculation":"max(0,(actual-objective)/(1-objective)) for lte ratios; threshold exceedance fraction for latency","warningAt":0.5,"criticalAt":1.0},
+  "dashboards":[{"id":"ot01_operations","owner":"product_operations","metrics":["capture_latency_seconds","acknowledgment_latency_seconds","identity_ambiguity_ratio","qualification_completion_ratio","consult_readiness_ratio","slot_conversion_ratio","agent_exception_load"]},{"id":"effect_reliability","owner":"platform_operations","metrics":["provider_unknown_outcome_ratio","connector_blocked_duration_seconds","booking_conflict_ratio"]},{"id":"safety_compliance","owner":"broker_operations","metrics":["opt_out_ratio","complaint_ratio","fair_housing_counterfactual_difference"]}],
+  "alerts":[{"id":"slo_warning","when":"errorBudgetConsumed>=0.5","severity":"warning","route":"ticket"},{"id":"slo_exhausted","when":"errorBudgetConsumed>=1.0","severity":"critical","route":"pager"},{"id":"counterfactual_nonzero","when":"actual>0","severity":"critical","route":"compliance_review"}]
+}
