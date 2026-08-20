@@ -283,7 +283,7 @@ def validate_slot_set(slot_set: dict[str, Any], policy: dict[str, Any]) -> None:
     ):
         raise ContractSemanticError("invalid_slot_set_expiry")
     ordering = [
-        (slot["startsAt"], slot["locationId"], slot["slotId"]) for slot in slot_set["slots"]
+        (_time(slot["startsAt"]), slot["locationId"], slot["slotId"]) for slot in slot_set["slots"]
     ]
     if ordering != sorted(ordering):
         raise ContractSemanticError("slot_ordering_mismatch")

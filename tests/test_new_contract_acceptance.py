@@ -309,6 +309,33 @@ def test_dst_resolution_slot_identity_and_expiry() -> None:
         validate_slot_set(stale, valid["policy"])
 
 
+def test_slot_set_ordering_uses_absolute_instants_across_offsets() -> None:
+    booking = _load("availability_booking/valid.json")
+    first = copy.deepcopy(booking["slotSet"]["slots"][0])
+    first.update(
+        startsAt="2026-03-08T10:00:00+02:00",
+        endsAt="2026-03-08T10:30:00+02:00",
+        timeZone="Africa/Johannesburg",
+    )
+    second = copy.deepcopy(first)
+    second.update(
+        startsAt="2026-03-08T09:00:00Z",
+        endsAt="2026-03-08T09:30:00Z",
+        timeZone="Etc/UTC",
+    )
+    for slot in (first, second):
+        payload = {key: slot[key] for key in sorted(slot) if key not in {"slotId", "slotDigest"}}
+        slot["slotDigest"] = canonical_digest(payload)
+        slot["slotId"] = slot["slotDigest"].split(":", 1)[1]
+    booking["slotSet"]["slots"] = [first, second]
+
+    validate_slot_set(booking["slotSet"], booking["policy"])
+
+    booking["slotSet"]["slots"] = [second, first]
+    with pytest.raises(ContractSemanticError, match="slot_ordering_mismatch"):
+        validate_slot_set(booking["slotSet"], booking["policy"])
+
+
 def test_slot_set_binds_current_readiness_policy_binding_and_snapshot() -> None:
     booking = _load("availability_booking/valid.json")
     readiness = copy.deepcopy(_load("qualification_readiness/valid.json")["readiness"])
