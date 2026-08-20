@@ -858,3 +858,8 @@ The product definition, design-truth ledger, and executable contracts are suffic
 - NousResearch, Hermes provider integrations: https://github.com/NousResearch/hermes-agent/blob/main/website/docs/integrations/providers.md
 - AtonoRobotics, alphavector-core cognitive adapter types: https://github.com/AtonoRobotics/alphavector-core/blob/a5e183c9de100766b7cb1f7928a91ba1cc78c016/src/habitat/types.ts
 
+
+
+## Product contract binding
+
+Buyer wizard, autonomous qualification, native intake and marketing, bulk lead ingestion, low-friction operator UX, and app-native model/provider connection are governed by BUYER-OPERATIONS-CORE-PRODUCT-CONTRACT.md Revision 1.0.0. These are core product capabilities and are part of the complete release target, not optional follow-on features.
