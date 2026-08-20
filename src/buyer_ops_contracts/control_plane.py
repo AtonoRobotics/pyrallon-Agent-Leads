@@ -32,7 +32,7 @@ from .connector_authorization import (
     parse_oauth_state,
 )
 from .connector_service import ConnectorDenied, ConnectorGateway
-from .errors import ContractViolation
+from .errors import ContractViolation, SetupRejected
 from .habitat import HabitatKernel, HabitatState
 from .habitat_repository import PostgresHabitatRepository, PostgresVersionLockedStateReader
 from .ingress import IngressRejected
@@ -41,7 +41,6 @@ from .operator_commands import OperatorCommandError, OperatorCommandService
 from .operator_projection import OperatorProjection
 from .release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from .telemetry import TelemetryRecorder
-from .tenant_setup import SetupRejected
 
 
 def connect(dsn: str) -> Any:

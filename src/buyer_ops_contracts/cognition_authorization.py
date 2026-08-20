@@ -25,8 +25,8 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from psycopg.types.json import Jsonb
 
 from .connector_authorization import HttpClient, urllib_http
+from .errors import SetupRejected
 from .structural import validate_record
-from .tenant_setup import SetupRejected
 
 
 class _DefaultHttp:

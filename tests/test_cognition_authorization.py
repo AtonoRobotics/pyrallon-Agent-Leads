@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 
 from buyer_ops_contracts.cognition_authorization import CognitionAuthorization
+from buyer_ops_contracts.errors import SetupRejected
 from buyer_ops_contracts.structural import validate_record
-from buyer_ops_contracts.tenant_setup import SetupRejected
 
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=UTC)
 SECRET = b"x" * 32

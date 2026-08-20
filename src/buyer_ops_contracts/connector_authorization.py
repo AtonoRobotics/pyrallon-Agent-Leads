@@ -29,8 +29,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .canonical_repository import CanonicalRepository
 from .digest import sha256_digest
-from .errors import ContractViolation
-from .tenant_setup import SetupRejected
+from .errors import ContractViolation, SetupRejected
 
 PROVIDERS = {
     "google.workspace.email": {

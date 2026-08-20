@@ -10,7 +10,7 @@ from buyer_ops_contracts.connector_authorization import (
     PlatformOAuthStore,
     parse_oauth_state,
 )
-from buyer_ops_contracts.tenant_setup import SetupRejected
+from buyer_ops_contracts.errors import SetupRejected
 
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=UTC)
 SECRET = b"x" * 32
