@@ -164,6 +164,18 @@ def test_save_requires_tenant_scope_and_advances_version() -> None:
     )
 
 
+def test_save_locks_record_identity_before_current_version_lookup() -> None:
+    connection = Connection()
+
+    CanonicalRepository(connection, tenant_id="tenant-1").save(_agreement())
+
+    statements = connection.cursor_instance.statements
+    assert "set_config" in statements[0][0]
+    assert "pg_advisory_xact_lock" in statements[1][0]
+    assert statements[1][1] == ("canonical-record:tenant-1:agreement-1",)
+    assert "SELECT version, record" in statements[2][0]
+
+
 def test_save_rejects_cross_tenant_record_before_database_write() -> None:
     connection = Connection()
     repository = CanonicalRepository(connection, tenant_id="tenant-1")

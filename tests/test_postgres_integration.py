@@ -1952,6 +1952,31 @@ def test_operator_1_1_applies_evidenced_correction_and_result_atomically(
         assert canonical.get("operator-correction-rollback") is None
 
 
+def test_concurrent_canonical_initial_versions_have_one_lineage_winner(
+    postgres_dsn: str,
+) -> None:
+    record = _agreement("tenant-a", record_id="agreement-initial-race", version=1)
+    barrier = threading.Barrier(2)
+
+    def admit(candidate: dict[str, Any]) -> str:
+        with _runtime_connection(postgres_dsn) as connection:
+            repository = CanonicalRepository(connection, tenant_id="tenant-a")
+            barrier.wait()
+            try:
+                repository.save(candidate)
+                return "admitted"
+            except VersionConflict:
+                return "version_conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(admit, [record, copy.deepcopy(record)]))
+    assert sorted(outcomes) == ["admitted", "version_conflict"]
+
+    with _runtime_connection(postgres_dsn) as connection:
+        history = CanonicalRepository(connection, tenant_id="tenant-a").history(record["id"])
+        assert [item["version"] for item in history] == [1]
+
+
 def test_concurrent_canonical_updates_allow_exactly_one_version_winner(postgres_dsn: str) -> None:
     with _runtime_connection(postgres_dsn) as connection:
         CanonicalRepository(connection, tenant_id="tenant-a").save(

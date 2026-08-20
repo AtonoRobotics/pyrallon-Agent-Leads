@@ -167,6 +167,7 @@ class CanonicalRepository:
             raise TenantIsolationViolation("record tenantId does not match repository tenant")
         record_id = str(record["id"])
         version = int(record["version"])
+        self._lock_record_identity(cursor, record_id)
         cursor.execute(
             """
             SELECT version, record
@@ -259,6 +260,8 @@ class CanonicalRepository:
             if successor[state_field] != "current":
                 raise ValueError("replacement epistemic item must start current")
 
+        for record_id in sorted((str(prior_update["id"]), str(successor["id"]))):
+            self._lock_record_identity(cursor, record_id)
         cursor.execute(
             """
             SELECT version, record FROM canonical_records_current
@@ -380,6 +383,8 @@ class CanonicalRepository:
         pending = {corrected_update["id"]: corrected_update, correction["id"]: correction}
         if replacement is not None:
             pending[replacement["id"]] = replacement
+        for record_id in sorted(str(record["id"]) for record in records):
+            self._lock_record_identity(cursor, record_id)
         cursor.execute(
             "SELECT version, record FROM canonical_records_current WHERE tenant_id = %s AND record_id = %s FOR UPDATE",
             (self._tenant_id, corrected_update["id"]),
@@ -460,6 +465,12 @@ class CanonicalRepository:
                 updated_at = clock_timestamp()
             """.strip(),
             parameters,
+        )
+
+    def _lock_record_identity(self, cursor: Cursor, record_id: str) -> None:
+        cursor.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"canonical-record:{self._tenant_id}:{record_id}",),
         )
 
     def _validate_cross_record(
