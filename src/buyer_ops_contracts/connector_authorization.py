@@ -910,7 +910,7 @@ def _require_provider_redirect(issuer: str, redirect_uri: str) -> None:
     raise SetupRejected(
         "validation_failed",
         f"{issuer} http OAuth redirects must use 127.0.0.1 or localhost. "
-        "Open the operator app at http://127.0.0.1:8180, or serve it over HTTPS. "
+        "Configure OPERATOR_PUBLIC_URL with an HTTPS origin for a non-loopback deployment. "
         "Google rejects private LAN addresses such as 192.168.x.x with invalid_request.",
     )
 

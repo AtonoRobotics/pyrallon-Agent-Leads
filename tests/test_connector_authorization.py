@@ -227,12 +227,14 @@ def test_google_oauth_rejects_private_http_redirect(monkeypatch: pytest.MonkeyPa
         "id": f"grant:{connector_id}",
         "grantState": "pending",
     }
-    with pytest.raises(SetupRejected, match="127.0.0.1"):
+    with pytest.raises(SetupRejected, match="127.0.0.1") as raised:
         auth.start_oauth(
             actor_id="actor-1",
             connector_id="google.workspace",
             redirect_uri="http://192.168.0.50:8180/api/connectors/callback",
         )
+    assert "8180" not in raised.value.detail
+    assert "OPERATOR_PUBLIC_URL" in raised.value.detail
 
 
 def test_google_workspace_connect_asks_for_mail_and_calendar() -> None:
