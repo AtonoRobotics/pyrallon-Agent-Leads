@@ -104,6 +104,7 @@ class ConnectorGateway:
             response.get("messageType") != "connector_response"
             or any(response.get(field) != request[field] for field in _BOUND_BASE_FIELDS)
             or response.get("requestId") != request["requestId"]
+            or response.get("payloadDigest") != request["payloadDigest"]
         ):
             raise ConnectorRejected("connector_response_mismatch")
         return response

@@ -157,8 +157,15 @@ class _Adapter:
             "receiptId": "receipt-1",
             "outcome": "confirmed",
             "providerVersion": "v4",
-            "payloadDigest": "sha256:" + "c" * 64,
+            "payloadDigest": request["payloadDigest"],
         }
+
+
+class _DigestMismatchAdapter(_Adapter):
+    def invoke(self, request: dict, payload: bytes) -> dict:
+        response = super().invoke(request, payload)
+        response["payloadDigest"] = "sha256:" + "c" * 64
+        return response
 
 
 class _InventoryAuthority:
@@ -213,6 +220,18 @@ def test_provider_changing_connector_call_requires_matching_redeemed_permit() ->
             _request(), b"normalized-payload", registration=mismatched, preview=_preview()
         )
     assert raised.value.code == "permit_mismatch"
+    assert adapter.calls == 1
+
+
+def test_connector_response_must_bind_the_exact_request_payload_digest() -> None:
+    adapter = _DigestMismatchAdapter()
+
+    with pytest.raises(ConnectorRejected) as raised:
+        _gateway(adapter).invoke(
+            _request(), b"normalized-payload", registration=_registration(), preview=_preview()
+        )
+
+    assert raised.value.code == "connector_response_mismatch"
     assert adapter.calls == 1
 
 
