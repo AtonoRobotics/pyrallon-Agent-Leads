@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from buyer_ops_contracts.ingress import InboundEnvelope, IngressRejected, RegisteredInboundEvent
@@ -30,6 +32,136 @@ class _Connection:
 
     def rollback(self) -> None:
         raise AssertionError("valid ingress must not roll back")
+
+
+class _ReplayCursor:
+    def __init__(self, stored: dict[str, object]) -> None:
+        self.stored = stored
+        self.statements: list[str] = []
+
+    def __enter__(self) -> _ReplayCursor:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(self, statement: str, parameters: tuple[object, ...]) -> _ReplayCursor:
+        del parameters
+        self.statements.append(statement)
+        return self
+
+    def fetchone(self) -> tuple[dict[str, object]]:
+        return (self.stored,)
+
+
+class _ReplayConnection:
+    def __init__(self, stored: dict[str, object]) -> None:
+        self.cursor_instance = _ReplayCursor(stored)
+        self.commits = 0
+        self.rollbacks = 0
+
+    def cursor(self) -> _ReplayCursor:
+        return self.cursor_instance
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+
+def _consent_presentation() -> dict[str, object]:
+    return {
+        "messageType": "consent_presentation_evidence",
+        "schemaVersion": "ot01-ingress/1.1.0",
+        "evidenceId": "consent-evidence-1",
+        "tenantId": "tenant-1",
+        "subjectPersonId": "person-1",
+        "surface": "web",
+        "disclosureArtifactId": "disclosure-1",
+        "disclosureVersion": "1.0.0",
+        "presentedAt": "2030-01-01T00:00:00Z",
+        "locale": "en-US",
+        "interaction": "presented",
+        "payloadDigest": "sha256:" + "a" * 64,
+        "retentionClass": "audit_7y",
+        "version": 1,
+    }
+
+
+def _attribution_input() -> dict[str, object]:
+    return {
+        "messageType": "attribution_input",
+        "schemaVersion": "ot01-ingress/1.1.0",
+        "attributionId": "attribution-1",
+        "tenantId": "tenant-1",
+        "sourceType": "web_form",
+        "sourceInstanceId": "source-1",
+        "receivedAt": "2030-01-01T00:00:00Z",
+        "payloadDigest": "sha256:" + "a" * 64,
+        "provenanceEvidenceId": "provenance-1",
+        "retentionClass": "operational_90d",
+        "version": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("payloadDigest", "sha256:" + "b" * 64),
+        ("sourceInstanceId", "source-2"),
+    ],
+)
+def test_attribution_rejects_conflicting_evidence_replay(field: str, value: str) -> None:
+    stored = _attribution_input()
+    proposed = copy.deepcopy(stored)
+    proposed[field] = value
+    connection = _ReplayConnection(stored)
+
+    with pytest.raises(ValueError, match="duplicate attribution"):
+        IngressService(connection, tenant_id="tenant-1").admit(proposed)  # type: ignore[arg-type]
+
+    assert connection.commits == 0
+    assert connection.rollbacks == 1
+    assert any("SELECT payload" in statement for statement in connection.cursor_instance.statements)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("payloadDigest", "sha256:" + "b" * 64),
+        ("disclosureVersion", "2.0.0"),
+    ],
+)
+def test_consent_presentation_rejects_conflicting_evidence_replay(
+    field: str,
+    value: str,
+) -> None:
+    stored = _consent_presentation()
+    proposed = copy.deepcopy(stored)
+    proposed[field] = value
+    connection = _ReplayConnection(stored)
+
+    with pytest.raises(ValueError, match="duplicate consent presentation"):
+        IngressService(connection, tenant_id="tenant-1").admit(proposed)  # type: ignore[arg-type]
+
+    assert connection.commits == 0
+    assert connection.rollbacks == 1
+    assert any("SELECT payload" in statement for statement in connection.cursor_instance.statements)
+
+
+def test_consent_presentation_exact_replay_returns_persisted_evidence() -> None:
+    stored = _consent_presentation()
+    connection = _ReplayConnection(stored)
+
+    result = IngressService(connection, tenant_id="tenant-1").admit(  # type: ignore[arg-type]
+        copy.deepcopy(stored)
+    )
+
+    assert result == stored
+    assert connection.commits == 1
+    assert connection.rollbacks == 0
+    assert any("SELECT payload" in statement for statement in connection.cursor_instance.statements)
 
 
 def test_envelope_admission_requires_injected_provider_configuration() -> None:

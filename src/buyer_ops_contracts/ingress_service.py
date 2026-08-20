@@ -65,8 +65,8 @@ class IngressService:
                     cursor.execute(
                         """
                         INSERT INTO ingress_attribution (
-                            tenant_id, attribution_id, payload, payload_digest, received_at
-                        ) VALUES (%s, %s, %s, %s, %s)
+                            tenant_id, attribution_id, payload, payload_digest
+                        ) VALUES (%s, %s, %s, %s)
                         ON CONFLICT (tenant_id, attribution_id) DO NOTHING
                         """.strip(),
                         (
@@ -74,7 +74,6 @@ class IngressService:
                             message["attributionId"],
                             Jsonb(message),
                             message["payloadDigest"],
-                            message["receivedAt"],
                         ),
                     )
                     cursor.execute(
@@ -85,18 +84,17 @@ class IngressService:
                         (self._tenant_id, message["attributionId"]),
                     )
                     row = cursor.fetchone()
-                    stored = row[0] if row else message
-                    if (
-                        isinstance(stored, dict)
-                        and stored.get("payloadDigest") != message["payloadDigest"]
-                    ):
-                        raise ValueError("duplicate attribution with a different payload digest")
+                    if row is None or not isinstance(row[0], dict):
+                        raise RuntimeError("attribution disappeared after admission")
+                    stored = row[0]
+                    if stored != message:
+                        raise ValueError("duplicate attribution with different evidence")
                 elif message_type == "consent_presentation_evidence":
                     cursor.execute(
                         """
                         INSERT INTO ingress_consent_presentation (
-                            tenant_id, evidence_id, payload, payload_digest, presented_at
-                        ) VALUES (%s, %s, %s, %s, %s)
+                            tenant_id, evidence_id, payload, payload_digest
+                        ) VALUES (%s, %s, %s, %s)
                         ON CONFLICT (tenant_id, evidence_id) DO NOTHING
                         """.strip(),
                         (
@@ -104,10 +102,21 @@ class IngressService:
                             message["evidenceId"],
                             Jsonb(message),
                             message["payloadDigest"],
-                            message["presentedAt"],
                         ),
                     )
-                    stored = message
+                    cursor.execute(
+                        """
+                        SELECT payload FROM ingress_consent_presentation
+                        WHERE tenant_id = %s AND evidence_id = %s
+                        """.strip(),
+                        (self._tenant_id, message["evidenceId"]),
+                    )
+                    row = cursor.fetchone()
+                    if row is None or not isinstance(row[0], dict):
+                        raise RuntimeError("consent presentation disappeared after admission")
+                    stored = row[0]
+                    if stored != message:
+                        raise ValueError("duplicate consent presentation with different evidence")
                 else:
                     raise ValueError("unsupported ingress message")
         except Exception:

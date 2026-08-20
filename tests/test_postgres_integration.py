@@ -51,6 +51,7 @@ from buyer_ops_contracts.ingress import (
     IngressRejected,
     PostgresInboundEventRegistry,
 )
+from buyer_ops_contracts.ingress_service import IngressService
 from buyer_ops_contracts.operator_commands import (
     OperatorCommandService as CanonicalOperatorCommandService,
 )
@@ -469,6 +470,70 @@ def test_real_postgres_registers_exact_inbound_replays_once(postgres_dsn: str) -
                 _inbound_envelope("provider-event-3", digest=conflicting_digest),
                 _external_message_identity("provider-event-3", digest=conflicting_digest),
             )
+
+
+def test_attribution_admission_matches_migrated_storage_and_replays_exactly(
+    postgres_dsn: str,
+) -> None:
+    attribution = _attribution_input_fixture(tenant_id="tenant-a", suffix="storage")
+    with _runtime_connection(postgres_dsn) as connection:
+        service = IngressService(connection, tenant_id="tenant-a")
+        assert service.admit(attribution) == attribution
+        assert service.admit(copy.deepcopy(attribution)) == attribution
+
+        conflicting_digest = copy.deepcopy(attribution)
+        conflicting_digest["payloadDigest"] = "sha256:" + "b" * 64
+        with pytest.raises(ValueError, match="duplicate attribution"):
+            service.admit(conflicting_digest)
+
+        conflicting_metadata = copy.deepcopy(attribution)
+        conflicting_metadata["sourceInstanceId"] = "source-conflict"
+        with pytest.raises(ValueError, match="duplicate attribution"):
+            service.admit(conflicting_metadata)
+
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT payload, recorded_at IS NOT NULL FROM ingress_attribution "
+            "WHERE attribution_id = %s",
+            (attribution["attributionId"],),
+        ).fetchone() == (attribution, True)
+
+
+def test_consent_presentation_replay_is_exact_append_only_and_tenant_scoped(
+    postgres_dsn: str,
+) -> None:
+    original = _consent_presentation_fixture(tenant_id="tenant-a", suffix="replay")
+    with _runtime_connection(postgres_dsn) as connection:
+        service = IngressService(connection, tenant_id="tenant-a")
+        assert service.admit(original) == original
+        assert service.admit(copy.deepcopy(original)) == original
+
+        conflicting_digest = copy.deepcopy(original)
+        conflicting_digest["payloadDigest"] = "sha256:" + "b" * 64
+        with pytest.raises(ValueError, match="duplicate consent presentation"):
+            service.admit(conflicting_digest)
+
+        conflicting_metadata = copy.deepcopy(original)
+        conflicting_metadata["disclosureVersion"] = "2.0.0"
+        with pytest.raises(ValueError, match="duplicate consent presentation"):
+            service.admit(conflicting_metadata)
+
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT payload FROM ingress_consent_presentation WHERE evidence_id = %s",
+            (original["evidenceId"],),
+        ).fetchone() == (original,)
+
+    tenant_b = copy.deepcopy(original)
+    tenant_b["tenantId"] = "tenant-b"
+    tenant_b["subjectPersonId"] = "person-tenant-b"
+    with _runtime_connection(postgres_dsn) as connection:
+        assert IngressService(connection, tenant_id="tenant-b").admit(tenant_b) == tenant_b
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-b', false)")
+        assert connection.execute(
+            "SELECT payload FROM ingress_consent_presentation WHERE evidence_id = %s",
+            (tenant_b["evidenceId"],),
+        ).fetchone() == (tenant_b,)
 
 
 def test_real_postgres_closure_history_and_current_projection(postgres_dsn: str) -> None:
@@ -1717,6 +1782,41 @@ def _insert_derived_contract_record(
             Jsonb(record),
         ),
     )
+
+
+def _consent_presentation_fixture(*, tenant_id: str, suffix: str) -> dict[str, Any]:
+    return {
+        "messageType": "consent_presentation_evidence",
+        "schemaVersion": "ot01-ingress/1.1.0",
+        "evidenceId": f"consent-presentation-{suffix}",
+        "tenantId": tenant_id,
+        "subjectPersonId": f"person-{suffix}",
+        "surface": "web",
+        "disclosureArtifactId": f"disclosure-{suffix}",
+        "disclosureVersion": "1.0.0",
+        "presentedAt": "2030-01-01T00:00:00Z",
+        "locale": "en-US",
+        "interaction": "presented",
+        "payloadDigest": "sha256:" + "a" * 64,
+        "retentionClass": "audit_7y",
+        "version": 1,
+    }
+
+
+def _attribution_input_fixture(*, tenant_id: str, suffix: str) -> dict[str, Any]:
+    return {
+        "messageType": "attribution_input",
+        "schemaVersion": "ot01-ingress/1.1.0",
+        "attributionId": f"attribution-{suffix}",
+        "tenantId": tenant_id,
+        "sourceType": "web_form",
+        "sourceInstanceId": f"source-{suffix}",
+        "receivedAt": "2030-01-01T00:00:00Z",
+        "payloadDigest": "sha256:" + "a" * 64,
+        "provenanceEvidenceId": f"provenance-{suffix}",
+        "retentionClass": "operational_90d",
+        "version": 1,
+    }
 
 
 def test_new_contract_families_have_durable_storage(postgres_dsn: str) -> None:
