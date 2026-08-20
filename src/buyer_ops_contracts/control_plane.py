@@ -245,7 +245,10 @@ class ControlPlane:
             status = 403 if exc.code in {"authority_denied", "policy_denied"} else 422
             return status, _error(exc.code, exc.detail)
         except IngressRejected as exc:
-            return 409 if exc.code == "reconciliation_required" else 403, _error(exc.code, str(exc))
+            status = 409 if exc.code == "reconciliation_required" else 403
+            if exc.code == "configuration_incomplete":
+                status = 422
+            return status, _error(exc.code, str(exc))
         except ConnectorDenied as exc:
             return 403, _error(exc.code, exc.detail)
         except ContractViolation as exc:

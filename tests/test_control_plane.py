@@ -383,6 +383,25 @@ def test_authority_routes_require_authenticated_actor(route: str) -> None:
     assert payload["code"] == "authentication_required"
 
 
+def test_ingress_envelope_fails_closed_without_provider_configuration() -> None:
+    plane = _plane(Connection())
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+
+    status, payload = plane.handle(
+        "POST",
+        "/v1/ingress/envelope",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"{}",
+    )
+
+    assert status == 422
+    assert payload["code"] == "configuration_incomplete"
+
+
 def test_invalid_operator_command_returns_typed_operator_error() -> None:
     connection = AuthorizationConnection()
     connection.cursor_instance.rows = [

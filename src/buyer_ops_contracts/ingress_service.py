@@ -2,27 +2,55 @@
 
 from __future__ import annotations
 
-from hashlib import sha256
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 from psycopg.types.json import Jsonb
 
 from .canonical_repository import Connection
-from .capture import FormCapture
 from .ingress import (
     InboundAdmission,
     InboundEnvelope,
+    IngressAuthenticator,
+    IngressRejected,
+    PayloadArtifactVerifier,
     PostgresInboundEventRegistry,
+    RegisteredInboundEvent,
 )
 from .structural import validate_record
 
 
+class InboundCaptureHandler(Protocol):
+    def after_ingress(
+        self,
+        envelope: InboundEnvelope,
+        identity: dict[str, Any],
+        registered: RegisteredInboundEvent,
+        *,
+        display_name: str,
+    ) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class IngressProviderRuntime:
+    authenticator: IngressAuthenticator
+    artifacts: PayloadArtifactVerifier
+    capture: InboundCaptureHandler
+
+
 class IngressService:
-    def __init__(self, connection: Connection, *, tenant_id: str) -> None:
+    def __init__(
+        self,
+        connection: Connection,
+        *,
+        tenant_id: str,
+        provider_runtime: IngressProviderRuntime | None = None,
+    ) -> None:
         if not tenant_id:
             raise ValueError("tenant_id is required")
         self._connection = connection
         self._tenant_id = tenant_id
+        self._provider_runtime = provider_runtime
 
     def admit(self, message: dict[str, Any]) -> dict[str, Any]:
         validate_record(message, "ot01_ingress")
@@ -89,31 +117,20 @@ class IngressService:
         return stored if isinstance(stored, dict) else message
 
     def admit_envelope(self, payload: dict[str, Any]) -> dict[str, Any]:
+        runtime = self._provider_runtime
+        if runtime is None:
+            raise IngressRejected("configuration_incomplete")
         envelope = InboundEnvelope.from_mapping(payload["envelope"])
         identity = payload["identity"]
-        raw = str(payload.get("payload", "")).encode()
         tenant_id = self._tenant_id
 
-        class _Auth:
-            def authenticate(self, admitted_tenant: str, admitted: InboundEnvelope) -> bool:
-                return (
-                    admitted_tenant == tenant_id
-                    and admitted.channel == "form"
-                    and admitted.signature_verification == "not_supported"
-                )
-
-        class _Artifacts:
-            def verify_payload(self, admitted_tenant: str, artifact_id: str, digest: str) -> bool:
-                del admitted_tenant, artifact_id
-                return digest == f"sha256:{sha256(raw).hexdigest()}"
-
         admission = InboundAdmission(
-            _Auth(),
-            _Artifacts(),
+            runtime.authenticator,
+            runtime.artifacts,
             PostgresInboundEventRegistry(self._connection),
         )
         registered = admission.admit(tenant_id, envelope, identity)
-        capture = FormCapture(self._connection, tenant_id=tenant_id).after_ingress(
+        capture = runtime.capture.after_ingress(
             envelope,
             identity,
             registered,
