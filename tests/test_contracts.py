@@ -21,6 +21,7 @@ def test_packaged_schemas_are_valid_and_hash_pinned() -> None:
     registry = ContractRegistry()
     assert registry.names == (
         "authority_activation_fair_housing",
+        "availability_booking",
         "closure",
         "connector_gateway",
         "context",
@@ -30,6 +31,7 @@ def test_packaged_schemas_are_valid_and_hash_pinned() -> None:
         "ontology",
         "operator_surface",
         "ot01_ingress",
+        "qualification_readiness",
         "release_activation",
         "telemetry_slo",
         "temporal",

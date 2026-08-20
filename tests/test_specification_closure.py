@@ -58,6 +58,15 @@ def test_closure_compatibility_covers_exact_packaged_manifest() -> None:
     compatibility = json.loads((ROOT / "SCP-01-COMPATIBILITY.json").read_text())
     manifest = json.loads((ROOT / "src/buyer_ops_contracts/contracts.manifest.json").read_text())
     declared = {item["name"]: item for item in compatibility["contracts"]}
+    for report_name in (
+        "QUALIFICATION-READINESS-COMPATIBILITY.json",
+        "AVAILABILITY-BOOKING-COMPATIBILITY.json",
+    ):
+        report = json.loads((ROOT / report_name).read_text())
+        declared[report["contractFamily"]] = {
+            "current": report["schemaVersion"],
+            "readerRange": report["readerRange"],
+        }
     packaged = {item["name"]: item for item in manifest["contracts"]}
     assert set(declared) == set(packaged)
     for name, entry in packaged.items():
