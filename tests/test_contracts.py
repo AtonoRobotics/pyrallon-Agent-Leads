@@ -35,6 +35,7 @@ def test_packaged_schemas_are_valid_and_hash_pinned() -> None:
         "release_activation",
         "telemetry_slo",
         "temporal",
+        "production_runtime",
     )
     for name in registry.names:
         Draft202012Validator.check_schema(registry.get(name).schema)
