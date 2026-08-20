@@ -23,6 +23,10 @@ from buyer_ops_contracts.artifacts import ArtifactPointer
 from buyer_ops_contracts.audit import verify_tenant_export
 from buyer_ops_contracts.canonical_repository import CanonicalRepository, VersionConflict
 from buyer_ops_contracts.closure_repository import PostgresClosureRepository
+from buyer_ops_contracts.contract_acceptance import (
+    ContractSemanticError,
+    require_unknown_outcome_resolution,
+)
 from buyer_ops_contracts.derived_contract_repository import (
     BookingOutcomeRepository,
     DerivedContractReader,
@@ -2034,6 +2038,128 @@ def test_booking_outcomes_append_independently_and_round_trip(postgres_dsn: str)
             record_version=1,
         )
         == reconciliation
+    )
+
+
+@pytest.mark.parametrize("terminal_result", ["confirmed", "cancelled", "failed"])
+def test_durable_booking_reconciliation_preserves_terminal_barrier_interpretation(
+    postgres_dsn: str,
+    terminal_result: str,
+) -> None:
+    binding, command, result, reconciliation = _booking_outcome_fixture(
+        f"barrier-{terminal_result}"
+    )
+    reconciliation["result"] = terminal_result
+    if terminal_result == "failed":
+        reconciliation["appointmentRef"] = None
+        reconciliation["appointmentVersion"] = None
+
+    repository = BookingOutcomeRepository(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    )
+    repository.append_booking_result(command=command, binding=binding, result=result)
+    repository.append_booking_reconciliation(
+        command=command,
+        binding=binding,
+        prior_result=result,
+        reconciliation=reconciliation,
+    )
+
+    reader = DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a")
+    stored_result = reader.get(
+        contract_family="availability_booking",
+        message_type="booking_result",
+        record_id=result["resultId"],
+        record_version=1,
+    )
+    stored_reconciliation = reader.get(
+        contract_family="availability_booking",
+        message_type="booking_reconciliation",
+        record_id=reconciliation["reconciliationId"],
+        record_version=1,
+    )
+
+    assert stored_result is not None
+    assert stored_reconciliation is not None
+    assert stored_result == result
+    assert stored_reconciliation == reconciliation
+    assert (
+        require_unknown_outcome_resolution(stored_result, stored_reconciliation) == terminal_result
+    )
+
+
+@pytest.mark.parametrize("nonterminal_result", ["still_unknown", "conflict_requires_resolution"])
+def test_durable_booking_reconciliation_preserves_nonterminal_barrier_interpretation(
+    postgres_dsn: str,
+    nonterminal_result: str,
+) -> None:
+    binding, command, result, reconciliation = _booking_outcome_fixture(
+        f"barrier-{nonterminal_result}"
+    )
+    reconciliation["result"] = nonterminal_result
+    reconciliation["appointmentRef"] = None
+    reconciliation["appointmentVersion"] = None
+
+    repository = BookingOutcomeRepository(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    )
+    repository.append_booking_result(command=command, binding=binding, result=result)
+    repository.append_booking_reconciliation(
+        command=command,
+        binding=binding,
+        prior_result=result,
+        reconciliation=reconciliation,
+    )
+
+    reader = DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a")
+    stored_result = reader.get(
+        contract_family="availability_booking",
+        message_type="booking_result",
+        record_id=result["resultId"],
+        record_version=1,
+    )
+    stored_reconciliation = reader.get(
+        contract_family="availability_booking",
+        message_type="booking_reconciliation",
+        record_id=reconciliation["reconciliationId"],
+        record_version=1,
+    )
+
+    assert stored_result is not None
+    assert stored_reconciliation is not None
+    assert stored_result == result
+    assert stored_reconciliation == reconciliation
+    with pytest.raises(ContractSemanticError, match="reconciliation_required"):
+        require_unknown_outcome_resolution(stored_result, stored_reconciliation)
+
+
+def test_durable_unknown_outcome_without_reconciliation_remains_blocked_and_tenant_scoped(
+    postgres_dsn: str,
+) -> None:
+    binding, command, result, _ = _booking_outcome_fixture("barrier-absent")
+    BookingOutcomeRepository(
+        lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a"
+    ).append_booking_result(command=command, binding=binding, result=result)
+
+    reader = DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a")
+    stored_result = reader.get(
+        contract_family="availability_booking",
+        message_type="booking_result",
+        record_id=result["resultId"],
+        record_version=1,
+    )
+    assert stored_result is not None
+    assert stored_result == result
+    with pytest.raises(ContractSemanticError, match="reconciliation_required"):
+        require_unknown_outcome_resolution(stored_result, None)
+    assert (
+        DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-b").get(
+            contract_family="availability_booking",
+            message_type="booking_result",
+            record_id=result["resultId"],
+            record_version=1,
+        )
+        is None
     )
 
 
