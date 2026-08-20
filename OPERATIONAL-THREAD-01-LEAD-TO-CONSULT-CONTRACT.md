@@ -433,3 +433,10 @@ Required metrics include capture latency, acknowledgment latency, identity ambig
 
 OT-01 is activatable only when the repository contains generated schemas and migrations, workflow/activity implementations, Habitat and connector contracts, deterministic and model evaluations, live connector test evidence, replay/fault results, observability dashboards/alerts, production configuration readback, gate decisions, and an independent completion ledger mapping every section above to code and evidence.
 
+
+
+## Production runtime closure (Revision 1.0.0)
+
+The normative production-runtime semantics for JourneyState derivation, JourneyView ETags, operator approval and workflow command transitions, connector activation binding, telemetry event binding, accessibility evidence binding, Temporal worker configuration, qualification readiness, and booking currentness are defined in PRODUCTION-RUNTIME-CLOSURE-CONTRACT.md.
+
+This closure is part of OT-01. It is not a deployment decision and cannot be replaced by an owner-supplied value. Deployment configuration supplies only the typed values named by the closure.
