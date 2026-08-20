@@ -8,6 +8,7 @@ import pytest
 from buyer_ops_contracts.connector_authorization import (
     ConnectorAuthorization,
     PlatformOAuthStore,
+    oauth_clients_from_env,
     parse_oauth_state,
 )
 from buyer_ops_contracts.errors import SetupRejected
@@ -162,8 +163,45 @@ def test_platform_oauth_store_accepts_google_and_twilio() -> None:
         store.save(issuer="imap", client_id="id", client_secret="secret")
     with pytest.raises(SetupRejected, match="Twilio Connect App SID"):
         store.save(issuer="twilio", client_id="", client_secret="")
+    with pytest.raises(SetupRejected, match="Microsoft OAuth directory"):
+        store.save(issuer="microsoft", client_id="id", client_secret="secret")
     saved = store.save(issuer="twilio", client_id="CNconnectapp", client_secret="")
     assert saved == {"issuer": "twilio", "clientId": "CNconnectapp", "configured": "true"}
+
+
+def test_microsoft_environment_has_no_implicit_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MICROSOFT_OAUTH_TENANT_ID", raising=False)
+    assert oauth_clients_from_env()["microsoft"]["directory_id"] == ""
+
+
+def test_platform_oauth_readiness_requires_microsoft_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MICROSOFT_OAUTH_CLIENT_ID", "env-ms-client")
+    monkeypatch.setenv("MICROSOFT_OAUTH_CLIENT_SECRET", "env-ms-secret")
+    monkeypatch.setenv("MICROSOFT_OAUTH_TENANT_ID", "env-tenant")
+    connection = _Connection()
+    connection.cursor_instance._many = [("microsoft", "legacy-ms-client", None)]
+    store = PlatformOAuthStore(connection, permit_secret=SECRET)
+
+    public = {item["issuer"]: item for item in store.list_public()}
+    assert public["microsoft"]["configured"] == "false"
+    monkeypatch.setattr(
+        store,
+        "client_for",
+        lambda issuer: (
+            {
+                "client_id": "legacy-ms-client",
+                "client_secret": "legacy-ms-secret",
+                "directory_id": "   ",
+            }
+            if issuer == "microsoft"
+            else {}
+        ),
+    )
+    assert store.material()["microsoft"] == {}
 
 
 def test_start_oauth_requires_configured_client() -> None:
@@ -284,19 +322,12 @@ def test_connect_twilio_redirects_to_twilio() -> None:
     assert started["authorizationUrl"].startswith("https://www.twilio.com/authorize/CNconnectapp")
 
 
-def test_complete_oauth_exchanges_code_and_binds_account() -> None:
+def _ready_google_completion(
+    token_payload: dict[str, Any],
+) -> tuple[ConnectorAuthorization, _Http, str]:
     http = _Http(
         {
-            "oauth2.googleapis.com/token": (
-                200,
-                {
-                    "access_token": "ya29.access",
-                    "refresh_token": "1//refresh",
-                    "expires_in": 3600,
-                    "scope": "https://www.googleapis.com/auth/gmail.send",
-                    "token_type": "Bearer",
-                },
-            ),
+            "oauth2.googleapis.com/token": (200, token_payload),
             "googleapis.com/oauth2/v2/userinfo": (200, {"email": "agent@atonobrokerage.com"}),
         }
     )
@@ -326,6 +357,23 @@ def test_complete_oauth_exchanges_code_and_binds_account() -> None:
         "grantState": "active",
         "grantId": grant_id,
     }
+    return auth, http, state
+
+
+def test_complete_oauth_exchanges_code_and_binds_account() -> None:
+    auth, http, state = _ready_google_completion(
+        {
+            "access_token": "ya29.access",
+            "refresh_token": "1//refresh",
+            "expires_in": 3600,
+            "scope": (
+                "https://www.googleapis.com/auth/gmail.send "
+                "https://www.googleapis.com/auth/gmail.readonly "
+                "https://www.googleapis.com/auth/userinfo.email"
+            ),
+            "token_type": "Bearer",
+        }
+    )
     result = auth.complete_oauth(code="4/real-code", state=state, actor_id="actor-1")
     assert result["authorization"] == "bound"
     assert result["providerAccountRef"] == "agent@atonobrokerage.com"
@@ -334,6 +382,110 @@ def test_complete_oauth_exchanges_code_and_binds_account() -> None:
     assert "oauth2.googleapis.com/token" in http.calls[0][1]
     assert "userinfo" in http.calls[1][1]
     assert "grant:google.workspace.email:brokerage-live-1" in auth._connection.store["credentials"]  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("expires_in", [None, 0, -1, True, "invalid", 10**100])
+def test_complete_oauth_requires_provider_observed_positive_expiry(expires_in: Any) -> None:
+    auth, _, state = _ready_google_completion(
+        {
+            "access_token": "ya29.access",
+            "expires_in": expires_in,
+            "scope": (
+                "https://www.googleapis.com/auth/gmail.send "
+                "https://www.googleapis.com/auth/gmail.readonly "
+                "https://www.googleapis.com/auth/userinfo.email"
+            ),
+        }
+    )
+
+    with pytest.raises(SetupRejected, match="token expiry"):
+        auth.complete_oauth(code="4/real-code", state=state, actor_id="actor-1")
+    assert auth._connection.store["credentials"] == {}  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("scope", [None, "", "https://www.googleapis.com/auth/gmail.send"])
+def test_complete_oauth_requires_explicit_complete_provider_scope(scope: str | None) -> None:
+    auth, _, state = _ready_google_completion(
+        {"access_token": "ya29.access", "expires_in": 3600, "scope": scope}
+    )
+
+    with pytest.raises(SetupRejected, match="granted scope"):
+        auth.complete_oauth(code="4/real-code", state=state, actor_id="actor-1")
+    assert auth._connection.store["credentials"] == {}  # type: ignore[attr-defined]
+
+
+def test_microsoft_oauth_requires_explicit_directory_authority() -> None:
+    auth = ConnectorAuthorization(
+        _Connection(),
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={"microsoft": {"client_id": "ms-client", "client_secret": "ms-secret"}},
+        clock=lambda: NOW,
+    )
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}",
+        "grantState": "pending",
+    }
+
+    with pytest.raises(SetupRejected, match="microsoft_oauth_directory_required"):
+        auth.start_oauth(
+            actor_id="actor-1",
+            connector_id="microsoft.365.email",
+            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+        )
+
+
+def test_stored_microsoft_oauth_client_requires_directory_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PlatformOAuthStore,
+        "client_for",
+        lambda self, issuer: {
+            "client_id": "stored-ms-client",
+            "client_secret": "stored-ms-secret",
+            "directory_id": "",
+        },
+    )
+    auth = _auth()
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}",
+        "grantState": "pending",
+    }
+
+    with pytest.raises(SetupRejected, match="microsoft_oauth_directory_required"):
+        auth.start_oauth(
+            actor_id="actor-1",
+            connector_id="microsoft.365.email",
+            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+        )
+
+
+def test_microsoft_directory_is_trimmed_and_url_path_encoded() -> None:
+    auth = ConnectorAuthorization(
+        _Connection(),
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={
+            "microsoft": {
+                "client_id": "ms-client",
+                "client_secret": "ms-secret",
+                "directory_id": " tenant/path?query#fragment ",
+            }
+        },
+        clock=lambda: NOW,
+    )
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}",
+        "grantState": "pending",
+    }
+
+    started = auth.start_oauth(
+        actor_id="actor-1",
+        connector_id="microsoft.365.email",
+        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+    )
+    assert "/tenant%2Fpath%3Fquery%23fragment/oauth2/" in started["authorizationUrl"]
 
 
 def test_complete_oauth_refuses_replayed_session() -> None:

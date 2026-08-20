@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
@@ -298,7 +298,9 @@ class ConnectorAuthorization:
                 "grantId": grant_id,
                 "expiresAt": _stamp(expires_at),
             }
-        authorize = str(spec["authorize"]).format(tenant=client.get("directory_id") or "common")
+        authorize = str(spec["authorize"]).format(
+            tenant=quote(client.get("directory_id", ""), safe="")
+        )
         params = {
             "client_id": client["client_id"],
             "response_type": "code",
@@ -343,7 +345,7 @@ class ConnectorAuthorization:
         if not code.strip():
             raise SetupRejected("validation_failed", "authorization code is required")
         client = self._client_for(issuer)
-        token_url = str(spec["token"]).format(tenant=client.get("directory_id") or "common")
+        token_url = str(spec["token"]).format(tenant=quote(client.get("directory_id", ""), safe=""))
         body = urlencode(
             {
                 "grant_type": "authorization_code",
@@ -370,9 +372,33 @@ class ConnectorAuthorization:
                 "connector_authorization_failed",
                 f"token endpoint rejected the authorization code: {detail}",
             )
+        expires_in = payload.get("expires_in")
+        if isinstance(expires_in, bool) or not isinstance(expires_in, int) or expires_in <= 0:
+            raise SetupRejected(
+                "connector_authorization_failed",
+                "provider token expiry must be an explicit positive integer",
+            )
+        granted_scope = payload.get("scope")
+        if not isinstance(granted_scope, str) or not granted_scope.strip():
+            raise SetupRejected(
+                "connector_authorization_failed",
+                "provider granted scope must be explicit",
+            )
+        bound_scopes = granted_scope.split()
+        required_scopes = set(str(spec["scopes"]).split())
+        if not required_scopes.issubset(bound_scopes):
+            raise SetupRejected(
+                "connector_authorization_failed",
+                "provider granted scope does not cover the requested scope",
+            )
+        try:
+            token_expires = self._clock() + timedelta(seconds=expires_in)
+        except OverflowError as error:
+            raise SetupRejected(
+                "connector_authorization_failed",
+                "provider token expiry is not representable",
+            ) from error
         account = self._provider_account(spec, str(payload["access_token"]))
-        token_expires = self._clock() + timedelta(seconds=int(payload.get("expires_in") or 3600))
-        bound_scopes = str(payload.get("scope") or spec["scopes"]).split()
         channels = list(spec.get("channels") or [session["connector_id"]])
         grants = []
         for channel in channels:
@@ -459,11 +485,12 @@ class ConnectorAuthorization:
             issuer
         )
         if stored.get("client_id") and (issuer == "twilio" or stored.get("client_secret")):
-            return stored
-        client = dict(self._oauth_clients.get(issuer) or {})
-        env = oauth_clients_from_env().get(issuer) or {}
-        if not client.get("client_id"):
-            client = env
+            client = stored
+        else:
+            client = dict(self._oauth_clients.get(issuer) or {})
+            env = oauth_clients_from_env().get(issuer) or {}
+            if not client.get("client_id"):
+                client = env
         if issuer == "twilio":
             if not client.get("client_id"):
                 raise SetupRejected("configuration_incomplete", "twilio_oauth_app_required")
@@ -473,6 +500,14 @@ class ConnectorAuthorization:
                 "configuration_incomplete",
                 f"{issuer}_oauth_app_required",
             )
+        if issuer == "microsoft":
+            directory_id = client.get("directory_id", "").strip()
+            if not directory_id:
+                raise SetupRejected(
+                    "configuration_incomplete",
+                    "microsoft_oauth_directory_required",
+                )
+            client["directory_id"] = directory_id
         return client
 
     def _provider_account(self, spec: dict[str, Any], access_token: str) -> str:
@@ -750,6 +785,8 @@ class PlatformOAuthStore:
             client_secret = client_secret or "none"
         elif not client_id or not client_secret:
             raise SetupRejected("validation_failed", "OAuth client id and secret are required")
+        if issuer == "microsoft" and not (directory_id or "").strip():
+            raise SetupRejected("validation_failed", "Microsoft OAuth directory is required")
         nonce = os.urandom(12)
         ciphertext = self._cipher.encrypt(nonce, client_secret.encode(), issuer.encode())
         try:
@@ -793,6 +830,8 @@ class PlatformOAuthStore:
                 continue
             if issuer != "twilio" and not client.get("client_secret"):
                 continue
+            if issuer == "microsoft" and not client.get("directory_id"):
+                continue
             rows[issuer] = {
                 "issuer": issuer,
                 "clientId": client["client_id"],
@@ -801,10 +840,18 @@ class PlatformOAuthStore:
         try:
             with self._connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT issuer, client_id FROM platform_oauth_clients ORDER BY issuer"
+                    "SELECT issuer, client_id, directory_id "
+                    "FROM platform_oauth_clients ORDER BY issuer"
                 )
-                for issuer, client_id in cursor.fetchall():
+                for issuer, client_id, directory_id in cursor.fetchall():
                     if str(issuer) not in rows:
+                        continue
+                    if str(issuer) == "microsoft" and not str(directory_id or "").strip():
+                        rows["microsoft"] = {
+                            "issuer": "microsoft",
+                            "clientId": "",
+                            "configured": "false",
+                        }
                         continue
                     rows[str(issuer)] = {
                         "issuer": str(issuer),
@@ -838,15 +885,23 @@ class PlatformOAuthStore:
         return {
             "client_id": str(row[0]),
             "client_secret": secret,
-            "directory_id": str(row[1] or "common"),
+            "directory_id": str(row[1] or ""),
         }
 
     def material(self) -> dict[str, dict[str, str]]:
         out = oauth_clients_from_env()
+        if not out["microsoft"].get("directory_id"):
+            out["microsoft"] = {}
         for issuer in ("google", "microsoft"):
             stored = self.client_for(issuer)
-            if stored.get("client_id") and stored.get("client_secret"):
+            if (
+                stored.get("client_id")
+                and stored.get("client_secret")
+                and (issuer != "microsoft" or str(stored.get("directory_id", "")).strip())
+            ):
                 out[issuer] = stored
+            elif issuer == "microsoft" and stored.get("client_id"):
+                out[issuer] = {}
         return out
 
 
@@ -924,8 +979,7 @@ def oauth_clients_from_env() -> dict[str, dict[str, str]]:
         "microsoft": {
             "client_id": os.environ.get("MICROSOFT_OAUTH_CLIENT_ID", "").strip(),
             "client_secret": os.environ.get("MICROSOFT_OAUTH_CLIENT_SECRET", "").strip(),
-            "directory_id": os.environ.get("MICROSOFT_OAUTH_TENANT_ID", "common").strip()
-            or "common",
+            "directory_id": os.environ.get("MICROSOFT_OAUTH_TENANT_ID", "").strip(),
         },
         "twilio": {
             "client_id": os.environ.get("TWILIO_CONNECT_APP_SID", "").strip(),
