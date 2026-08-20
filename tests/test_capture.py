@@ -49,12 +49,12 @@ def _holder() -> dict:
 def test_classify_sender_normalizes_email_and_e164() -> None:
     assert classify_sender("Buyer@Example.COM") == ("email", "buyer@example.com")
     assert classify_sender("+1 (512) 555-1212") == ("phone", "+15125551212")
-    assert classify_sender("5125551212") == ("phone", "+15125551212")
-    assert classify_sender("(512) 555-1212") == ("phone", "+15125551212")
-    assert classify_sender("1 512 555 1212") == ("phone", "+15125551212")
 
 
-@pytest.mark.parametrize("sender", ["", "buyer", "+0123"])
+@pytest.mark.parametrize(
+    "sender",
+    ["", "buyer", "+0123", "5125551212", "(512) 555-1212", "1 512 555 1212"],
+)
 def test_classify_sender_rejects_non_email_non_e164(sender: str) -> None:
     with pytest.raises(CaptureIncomplete) as raised:
         classify_sender(sender)

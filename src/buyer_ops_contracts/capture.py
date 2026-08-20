@@ -40,14 +40,9 @@ def classify_sender(sender: str) -> tuple[str, str]:
     compact = re.sub(r"[^\d+]", "", value)
     if _E164.fullmatch(compact):
         return "phone", compact
-    national = re.sub(r"\D", "", value)
-    if len(national) == 10:
-        return "phone", f"+1{national}"
-    if len(national) == 11 and national.startswith("1"):
-        return "phone", f"+{national}"
     raise CaptureIncomplete(
         "validation_failed",
-        "form senderEndpoint must be an email or phone number",
+        "form senderEndpoint must be an email or an explicit E.164 phone number",
     )
 
 
