@@ -85,7 +85,7 @@
     {
       "name": "telemetry_slo",
       "resource": "schemas/telemetry_slo.schema.json",
-      "sha256": "2c76186f857d38da79cfbde35d8d6c111212e4b25f2d43ba6debdb50b25a",
+      "sha256": "2c76186f857d38da79cfbde35d8d6c111212e162e4b25f2d43ba6debdb50b25a",
       "schemaId": "https://buyer-ops.example/schemas/telemetry-slo/1.0.0",
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",

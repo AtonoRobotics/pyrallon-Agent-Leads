@@ -36,7 +36,11 @@ def main() -> int:
             saved = CanonicalRepository(connection, tenant_id=tenant_id).save(record)
         finally:
             connection.close()
-        print(json.dumps({"id": saved["id"], "recordType": saved["recordType"], "version": saved["version"]}))
+        print(
+            json.dumps(
+                {"id": saved["id"], "recordType": saved["recordType"], "version": saved["version"]}
+            )
+        )
         return 0
     if args.command == "serve":
         from .control_plane import main as serve_main

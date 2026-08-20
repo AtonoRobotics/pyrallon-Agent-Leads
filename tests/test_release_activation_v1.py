@@ -47,9 +47,12 @@ def _activation(**overrides: object) -> dict:
     record.update(overrides)
     unsigned = dict(record)
     unsigned["signature"] = "sha256:" + "0" * 64
-    record["signature"] = "sha256:" + hashlib.sha256(
-        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    record["signature"] = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
     return record
 
 
@@ -57,9 +60,12 @@ class _SignatureVerifier:
     def verify(self, activation: dict) -> bool:
         unsigned = dict(activation)
         unsigned["signature"] = "sha256:" + "0" * 64
-        expected = "sha256:" + hashlib.sha256(
-            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
+        expected = (
+            "sha256:"
+            + hashlib.sha256(
+                json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
         return activation["signature"] == expected
 
 
@@ -107,9 +113,7 @@ class _Connection:
         return None
 
 
-def _repository(
-    connection: _Connection, *, authorized: bool = True
-) -> ReleaseActivationRepository:
+def _repository(connection: _Connection, *, authorized: bool = True) -> ReleaseActivationRepository:
     return ReleaseActivationRepository(
         connection,  # type: ignore[arg-type]
         tenant_id="tenant-1",
@@ -137,20 +141,30 @@ def test_digest_mutation_signer_denial_expiry_and_capability_omission_fail_close
     repository.admit(_activation(), evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC))
     connection.cursor_instance.payload = copy.deepcopy(connection.cursor_instance.payload)
     connection.cursor_instance.payload["buildDigest"] = "sha256:" + "f" * 64
-    assert repository.readback(
-        "activation-1", evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC)
-    )[1] is False
+    assert (
+        repository.readback("activation-1", evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC))[1]
+        is False
+    )
 
     connection.cursor_instance.payload = _activation()
-    assert _repository(connection, authorized=False).readback(
-        "activation-1", evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC)
-    )[1] is False
-    assert repository.capability_activated(
-        "activation-1", "connector-2:send", evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC)
-    ) is False
-    assert repository.capability_activated(
-        "activation-1", "connector-1:send", evaluated_at=datetime(2026, 8, 21, tzinfo=UTC)
-    ) is False
+    assert (
+        _repository(connection, authorized=False).readback(
+            "activation-1", evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC)
+        )[1]
+        is False
+    )
+    assert (
+        repository.capability_activated(
+            "activation-1", "connector-2:send", evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC)
+        )
+        is False
+    )
+    assert (
+        repository.capability_activated(
+            "activation-1", "connector-1:send", evaluated_at=datetime(2026, 8, 21, tzinfo=UTC)
+        )
+        is False
+    )
 
 
 def test_admission_rejects_unauthorized_signer_and_voice() -> None:
@@ -194,9 +208,7 @@ def test_signer_authority_and_connector_mapping_have_no_implementation_defaults(
         authority_command="owner_declared_activation_command",
         scope=lambda activation: str(activation["releaseId"]),
     )
-    assert authority.verify(
-        _activation(), evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC)
-    )
+    assert authority.verify(_activation(), evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC))
     denied = _activation(policyVersion="policy-2")
     assert not authority.verify(denied, evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC))
 

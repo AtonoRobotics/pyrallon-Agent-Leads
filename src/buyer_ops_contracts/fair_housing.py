@@ -233,17 +233,13 @@ class FairHousingCompiler:
     ) -> AdmittedFeature:
         rule = self._features.get(feature_id)
         if rule is None:
-            self._deny(
-                "FEATURE_NOT_ALLOWLISTED", "$.featureId", "undeclared feature fails closed"
-            )
+            self._deny("FEATURE_NOT_ALLOWLISTED", "$.featureId", "undeclared feature fails closed")
         if source_class != rule["sourceClass"]:
             self._deny("FEATURE_SOURCE_DENIED", "$.sourceClass", "source class is not declared")
         if purpose not in rule["allowedPurposes"]:
             self._deny("FEATURE_PURPOSE_DENIED", "$.purpose", "purpose is not declared")
         if action_class not in rule["allowedActionClasses"]:
-            self._deny(
-                "FEATURE_ACTION_DENIED", "$.actionClass", "action class is not declared"
-            )
+            self._deny("FEATURE_ACTION_DENIED", "$.actionClass", "action class is not declared")
         if isinstance(value, str) and self.protected_matches(value):
             self._deny(
                 "PROTECTED_TRAIT_MATCH",
@@ -252,9 +248,7 @@ class FairHousingCompiler:
             )
         return AdmittedFeature(feature_id, value, source_class, purpose, action_class)
 
-    def assert_optimizer_output(
-        self, *, inputs: dict[str, Any], output: dict[str, Any]
-    ) -> None:
+    def assert_optimizer_output(self, *, inputs: dict[str, Any], output: dict[str, Any]) -> None:
         immutable = list(self.profile["immutableServiceGuarantees"]) + list(
             self.profile["optimizerBounds"]
         )
@@ -274,7 +268,11 @@ def assert_counterfactual_invariance(
     invariant_fields: list[str],
 ) -> None:
     for field in invariant_fields:
-        if field not in baseline or field not in counterfactual or baseline[field] != counterfactual[field]:
+        if (
+            field not in baseline
+            or field not in counterfactual
+            or baseline[field] != counterfactual[field]
+        ):
             raise ContractViolation(
                 [
                     Violation(

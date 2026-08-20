@@ -285,12 +285,13 @@ def test_open025_026_append_only_persistence_and_readback(postgres_dsn: str) -> 
     }
     connection = _runtime_connection(postgres_dsn)
     try:
-        ActorTenantAuthorizationRepository(connection, tenant_id="tenant-a").save(
-            grant, now=now
+        ActorTenantAuthorizationRepository(connection, tenant_id="tenant-a").save(grant, now=now)
+        assert (
+            ActorTenantAuthorizationRepository(connection, tenant_id="tenant-a").current(
+                "operator-pg-1", now=now
+            )
+            == grant
         )
-        assert ActorTenantAuthorizationRepository(connection, tenant_id="tenant-a").current(
-            "operator-pg-1", now=now
-        ) == grant
         activation = {
             "schemaVersion": "open-025-027/1.0.0",
             "recordType": "ReleaseActivation",
@@ -1321,8 +1322,8 @@ def test_operator_1_1_applies_evidenced_correction_and_result_atomically(
                 "actor_type": "license_holder",
                 "authorization_refs": [
                     {
-                            "record_id": "operator-actor-grant-1",
-                            "record_type": "ActorTenantAuthorization",
+                        "record_id": "operator-actor-grant-1",
+                        "record_type": "ActorTenantAuthorization",
                         "version": 1,
                         "status": "active",
                     }

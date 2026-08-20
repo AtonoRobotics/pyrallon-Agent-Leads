@@ -113,8 +113,7 @@ def validate_operator_semantics(record: dict[str, Any]) -> None:
                 )
             )
         if any(
-            item["record_type"] != "ActorTenantAuthorization"
-            or item["status"] != "active"
+            item["record_type"] != "ActorTenantAuthorization" or item["status"] != "active"
             for item in authority["authorization_refs"]
         ):
             violations.append(

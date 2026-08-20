@@ -99,9 +99,7 @@ class OperatorCommandService:
                 "authority_denied", retryable=False, detail="no actor tenant authorization"
             )
         try:
-            authorize_operator_command(
-                grant, command, actor_id=actor_id, tenant_id=self._tenant_id
-            )
+            authorize_operator_command(grant, command, actor_id=actor_id, tenant_id=self._tenant_id)
         except PermissionError as exc:
             raise OperatorCommandError(
                 "authority_denied", retryable=False, detail=str(exc)
@@ -270,9 +268,7 @@ class OperatorCommandService:
             raise PermissionError("no unique current actor tenant authorization")
         grant = grant_rows[0][0]
         validate_authority_activation_fair_housing_semantics(grant, now=now)
-        authorize_operator_command(
-            grant, command, actor_id=actor_id, tenant_id=self._tenant_id
-        )
+        authorize_operator_command(grant, command, actor_id=actor_id, tenant_id=self._tenant_id)
         target = self._repository.load_current_on(
             cursor, str(command["target_record_id"]), for_update=True
         )

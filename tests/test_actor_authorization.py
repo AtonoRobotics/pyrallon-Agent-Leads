@@ -90,9 +90,9 @@ def test_expired_and_revoked_grants_are_not_current() -> None:
     expired = _grant(recordId="auth-expired", expiresAt="2030-01-01T00:00:00Z")
     revoked = _grant(recordId="auth-revoked", status="revoked", revokedAt="2030-01-01T12:00:00Z")
     connection.cursor_instance.rows = [(expired,), (revoked,)]
-    listed = ActorTenantAuthorizationRepository(connection, tenant_id="tenant-1").list_current_for_actor(
-        "actor-1", now=datetime(2030, 1, 2, tzinfo=UTC)
-    )
+    listed = ActorTenantAuthorizationRepository(
+        connection, tenant_id="tenant-1"
+    ).list_current_for_actor("actor-1", now=datetime(2030, 1, 2, tzinfo=UTC))
     assert listed == []
     assert (
         ActorTenantAuthorizationRepository(connection, tenant_id="tenant-1").current(
@@ -188,9 +188,7 @@ def _command() -> dict:
 
 
 def test_command_authority_is_exactly_tenant_scope_and_version_bound() -> None:
-    authorize_operator_command(
-        _grant(), _command(), actor_id="actor-1", tenant_id="tenant-1"
-    )
+    authorize_operator_command(_grant(), _command(), actor_id="actor-1", tenant_id="tenant-1")
     for changed in (
         _grant(tenantId="tenant-2"),
         _grant(recordScopes=["Approval"]),
@@ -207,6 +205,4 @@ def test_command_authority_rejects_missing_or_legacy_authorization_reference() -
     command = _command()
     command["authority"]["authorization_refs"][0]["record_type"] = "Authorization"
     with pytest.raises(PermissionError, match="stale or inexact"):
-        authorize_operator_command(
-            _grant(), command, actor_id="actor-1", tenant_id="tenant-1"
-        )
+        authorize_operator_command(_grant(), command, actor_id="actor-1", tenant_id="tenant-1")

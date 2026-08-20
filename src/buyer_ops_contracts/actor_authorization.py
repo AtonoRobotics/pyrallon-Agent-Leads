@@ -74,7 +74,9 @@ class ActorTenantAuthorizationRepository:
         self._connection.commit()
         return record
 
-    def list_current_for_actor(self, actor_id: str, *, now: datetime | None = None) -> list[dict[str, Any]]:
+    def list_current_for_actor(
+        self, actor_id: str, *, now: datetime | None = None
+    ) -> list[dict[str, Any]]:
         if not actor_id:
             return []
         current = (now or datetime.now(UTC)).astimezone(UTC)

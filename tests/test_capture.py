@@ -249,7 +249,11 @@ def test_new_capture_starts_temporal_and_does_not_write_workflow_reference() -> 
         patch.object(IdentityRepository, "get_by_fingerprint", return_value=None),
         patch.object(CanonicalRepository, "list_by_type", side_effect=list_by_type),
         patch.object(IdentityRepository, "admit_created_bundle", return_value=mapping),
-        patch.object(CanonicalRepository, "save", side_effect=lambda record, **_: saves.append(record) or record),
+        patch.object(
+            CanonicalRepository,
+            "save",
+            side_effect=lambda record, **_: saves.append(record) or record,
+        ),
     ):
         result = FormCapture(
             object(),

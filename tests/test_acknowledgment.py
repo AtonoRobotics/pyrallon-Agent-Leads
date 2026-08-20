@@ -80,7 +80,11 @@ def test_configuration_lifecycle_and_temporal_interval_are_closed() -> None:
 
 
 def test_lexicon_channel_or_locale_mismatch_fails_closed() -> None:
-    policy, lexicon, request = _valid("AcknowledgmentPolicy"), _valid("OptOutLexicon"), _valid("AcknowledgmentDecisionRequest")
+    policy, lexicon, request = (
+        _valid("AcknowledgmentPolicy"),
+        _valid("OptOutLexicon"),
+        _valid("AcknowledgmentDecisionRequest"),
+    )
     lexicon["channels"] = ["email"]
     decision = build_acknowledgment_decision(request, policy, lexicon, "stop", b"")
     assert decision["disposition"] == "configuration_incomplete"

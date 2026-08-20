@@ -70,7 +70,9 @@ async def start_captured_journey_async(
         handle = await start_buyer_journey_workflow(bound, payload, task_queue=queue)
     except WorkflowAlreadyStartedError:
         return None
-    run_id = getattr(handle, "result_run_id", None) or getattr(handle, "first_execution_run_id", None)
+    run_id = getattr(handle, "result_run_id", None) or getattr(
+        handle, "first_execution_run_id", None
+    )
     if not handle.id or not run_id:
         return None
     return {"workflow_id": str(handle.id), "run_id": str(run_id)}

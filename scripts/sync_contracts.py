@@ -107,21 +107,15 @@ def write() -> None:
     for source_name, target_name in MAPPINGS.values():
         shutil.copyfile(ROOT / source_name, PACKAGE / "schemas" / target_name)
     manifest = expected_manifest()
-    (PACKAGE / "contracts.manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n"
-    )
+    (PACKAGE / "contracts.manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print("contract package synchronized")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--check", action="store_true", help="verify without writing (default)"
-    )
-    mode.add_argument(
-        "--write", action="store_true", help="update packaged schemas and manifest"
-    )
+    mode.add_argument("--check", action="store_true", help="verify without writing (default)")
+    mode.add_argument("--write", action="store_true", help="update packaged schemas and manifest")
     args = parser.parse_args()
     if args.write:
         write()

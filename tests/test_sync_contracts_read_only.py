@@ -45,13 +45,11 @@ def test_check_is_byte_for_byte_read_only(tmp_path: Path) -> None:
     source, target = _tree(tmp_path, module)
     manifest = module.PACKAGE / "contracts.manifest.json"
     before = {
-        path: (path.read_bytes(), path.stat().st_mtime_ns)
-        for path in (source, target, manifest)
+        path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (source, target, manifest)
     }
     module.check()
     after = {
-        path: (path.read_bytes(), path.stat().st_mtime_ns)
-        for path in (source, target, manifest)
+        path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (source, target, manifest)
     }
     assert after == before
 

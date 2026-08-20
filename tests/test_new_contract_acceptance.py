@@ -51,15 +51,11 @@ def _replace(document: dict[str, Any], path: str, value: Any) -> None:
         ("AVAILABILITY-BOOKING.schema.json", "availability_booking/valid.json"),
     ],
 )
-def test_every_valid_record_has_schema_acceptance(
-    schema_name: str, fixture_name: str
-) -> None:
+def test_every_valid_record_has_schema_acceptance(schema_name: str, fixture_name: str) -> None:
     schema = json.loads((ROOT / schema_name).read_text())
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     for name, record in _load(fixture_name).items():
-        errors = sorted(
-            validator.iter_errors(record), key=lambda error: list(error.path)
-        )
+        errors = sorted(validator.iter_errors(record), key=lambda error: list(error.path))
         assert not errors, f"{name}: {errors}"
 
 
@@ -84,11 +80,7 @@ def test_question_tie_break_and_readiness_are_order_independent() -> None:
     inputs = copy.deepcopy(valid["input"])
     inputs["observations"] = []
     inputs["inputDigest"] = canonical_digest(
-        {
-            key: inputs[key]
-            for key in sorted(inputs)
-            if key not in {"inputDigest", "inputSetId"}
-        }
+        {key: inputs[key] for key in sorted(inputs) if key not in {"inputDigest", "inputSetId"}}
     )
     assert select_next_question(policy, inputs) == ("ask", "timeframe")
     assert readiness_result(policy, inputs) == ("not_ready", ["budget", "timeframe"])
@@ -103,11 +95,7 @@ def test_decline_freshness_contradiction_and_digest_are_deterministic() -> None:
     inputs = valid["input"]
     assert readiness_result(policy, inputs) == ("ready", [])
     assert inputs["inputDigest"] == canonical_digest(
-        {
-            key: inputs[key]
-            for key in sorted(inputs)
-            if key not in {"inputDigest", "inputSetId"}
-        }
+        {key: inputs[key] for key in sorted(inputs) if key not in {"inputDigest", "inputSetId"}}
     )
     contradicted = copy.deepcopy(inputs)
     contradicted["observations"][0]["contradictionRefs"] = [

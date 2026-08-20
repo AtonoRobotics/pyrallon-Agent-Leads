@@ -23,15 +23,11 @@ def _time(value: str) -> datetime:
 def canonical_digest(value: Any) -> str:
     """Return the contract's stable SHA-256 digest over sorted compact UTF-8 JSON."""
 
-    payload = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    )
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return f"sha256:{hashlib.sha256(payload.encode()).hexdigest()}"
 
 
-def validate_policy_version(
-    current: dict[str, Any], predecessor: dict[str, Any] | None
-) -> None:
+def validate_policy_version(current: dict[str, Any], predecessor: dict[str, Any] | None) -> None:
     version = current["version"]
     supersedes = current.get("supersedesRecordId")
     if version == 1:
@@ -50,9 +46,7 @@ def validate_policy_version(
         raise ContractSemanticError("supersedes_identity_mismatch")
 
 
-def validate_qualification(
-    policy: dict[str, Any], inputs: dict[str, Any]
-) -> dict[str, Any]:
+def validate_qualification(policy: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
     if policy["tenantId"] != inputs["tenantId"]:
         raise ContractSemanticError("cross_tenant_reference")
     if policy["lifecycle"] != "active":
@@ -80,20 +74,14 @@ def validate_qualification(
             raise ContractSemanticError("invalid_freshness_or_state_marker")
         observations[criterion_id] = observation
     expected_digest = canonical_digest(
-        {
-            key: inputs[key]
-            for key in sorted(inputs)
-            if key not in {"inputDigest", "inputSetId"}
-        }
+        {key: inputs[key] for key in sorted(inputs) if key not in {"inputDigest", "inputSetId"}}
     )
     if inputs["inputDigest"] != expected_digest:
         raise ContractSemanticError("input_digest_mismatch")
     return observations
 
 
-def select_next_question(
-    policy: dict[str, Any], inputs: dict[str, Any]
-) -> tuple[str, str | None]:
+def select_next_question(policy: dict[str, Any], inputs: dict[str, Any]) -> tuple[str, str | None]:
     observations = validate_qualification(policy, inputs)
     unresolved: list[tuple[int, str, str]] = []
     for criterion in policy["criteria"]:
@@ -105,9 +93,7 @@ def select_next_question(
             if observation is not None and observation["contradictionRefs"]
             else criterion["missingDisposition"]
         )
-        result = (
-            "ask" if disposition in {"ask", "ask_clarification"} else "agent_handle"
-        )
+        result = "ask" if disposition in {"ask", "ask_clarification"} else "agent_handle"
         if disposition in {"block_readiness", "ignore"}:
             continue
         unresolved.append((criterion["priority"], criterion["criterionId"], result))
@@ -117,9 +103,7 @@ def select_next_question(
     return (result, criterion_id)
 
 
-def readiness_result(
-    policy: dict[str, Any], inputs: dict[str, Any]
-) -> tuple[str, list[str]]:
+def readiness_result(policy: dict[str, Any], inputs: dict[str, Any]) -> tuple[str, list[str]]:
     observations = validate_qualification(policy, inputs)
     blocking: list[str] = []
     for criterion in policy["criteria"]:
@@ -177,9 +161,7 @@ def local_window_instants(
             tzinfo=None
         ):
             continue
-        if end.astimezone(UTC).astimezone(zone).replace(tzinfo=None) != end.replace(
-            tzinfo=None
-        ):
+        if end.astimezone(UTC).astimezone(zone).replace(tzinfo=None) != end.replace(tzinfo=None):
             continue
         result.append((start.astimezone(UTC), end.astimezone(UTC)))
     return result
@@ -199,24 +181,16 @@ def validate_slot_set(slot_set: dict[str, Any], policy: dict[str, Any]) -> None:
     ):
         raise ContractSemanticError("invalid_slot_set_expiry")
     ordering = [
-        (slot["startsAt"], slot["locationId"], slot["slotId"])
-        for slot in slot_set["slots"]
+        (slot["startsAt"], slot["locationId"], slot["slotId"]) for slot in slot_set["slots"]
     ]
     if ordering != sorted(ordering):
         raise ContractSemanticError("slot_ordering_mismatch")
     for slot in slot_set["slots"]:
         if _time(slot["startsAt"]) >= _time(slot["endsAt"]):
             raise ContractSemanticError("non_positive_slot")
-        payload = {
-            key: slot[key]
-            for key in sorted(slot)
-            if key not in {"slotId", "slotDigest"}
-        }
+        payload = {key: slot[key] for key in sorted(slot) if key not in {"slotId", "slotDigest"}}
         expected = canonical_digest(payload)
-        if (
-            slot["slotDigest"] != expected
-            or slot["slotId"] != expected.split(":", 1)[1]
-        ):
+        if slot["slotDigest"] != expected or slot["slotId"] != expected.split(":", 1)[1]:
             raise ContractSemanticError("slot_identity_mismatch")
 
 
@@ -230,15 +204,13 @@ def validate_booking_command(command: dict[str, Any]) -> None:
     if kind in {"book", "reschedule"} and any(value is None for value in slot_values):
         raise ContractSemanticError("slot_required")
     if kind == "book" and (
-        command["appointmentRef"] is not None
-        or command["expectedAppointmentVersion"] is not None
+        command["appointmentRef"] is not None or command["expectedAppointmentVersion"] is not None
     ):
         raise ContractSemanticError("book_requires_absent_appointment")
     if kind == "cancel" and any(value is not None for value in slot_values):
         raise ContractSemanticError("cancel_forbids_slot")
     if kind in {"reschedule", "cancel"} and (
-        command["appointmentRef"] is None
-        or command["expectedAppointmentVersion"] is None
+        command["appointmentRef"] is None or command["expectedAppointmentVersion"] is None
     ):
         raise ContractSemanticError("existing_appointment_required")
 
@@ -268,9 +240,7 @@ def validate_booking_context(
         raise ContractSemanticError("appointment_version_conflict")
 
 
-def admit_idempotency(
-    command: dict[str, Any], existing_payload_digest: str | None
-) -> str:
+def admit_idempotency(command: dict[str, Any], existing_payload_digest: str | None) -> str:
     """Return new/duplicate or reject reuse of a key for a different payload."""
 
     if existing_payload_digest is None:
@@ -280,9 +250,7 @@ def admit_idempotency(
     raise ContractSemanticError("idempotency_key_payload_conflict")
 
 
-def validate_reconciliation(
-    prior_result: dict[str, Any], reconciliation: dict[str, Any]
-) -> None:
+def validate_reconciliation(prior_result: dict[str, Any], reconciliation: dict[str, Any]) -> None:
     if prior_result["tenantId"] != reconciliation["tenantId"]:
         raise ContractSemanticError("cross_tenant_reference")
     if prior_result["state"] != "unknown_outcome":

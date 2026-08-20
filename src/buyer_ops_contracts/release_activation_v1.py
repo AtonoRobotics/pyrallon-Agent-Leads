@@ -39,9 +39,7 @@ class Open025ReleaseSignerAuthority:
     ) -> None:
         if not authority_command:
             raise ValueError("authority_command must be supplied by governing configuration")
-        self._repository = ActorTenantAuthorizationRepository(
-            connection, tenant_id=tenant_id
-        )
+        self._repository = ActorTenantAuthorizationRepository(connection, tenant_id=tenant_id)
         self._tenant_id = tenant_id
         self._authority_command = authority_command
         self._scope = scope
@@ -49,9 +47,7 @@ class Open025ReleaseSignerAuthority:
     def verify(self, activation: dict[str, Any], *, evaluated_at: datetime) -> bool:
         if activation.get("tenantId") != self._tenant_id:
             return False
-        grant = self._repository.current(
-            str(activation.get("signerActorId", "")), now=evaluated_at
-        )
+        grant = self._repository.current(str(activation.get("signerActorId", "")), now=evaluated_at)
         return bool(
             grant
             and self._authority_command in grant["allowedCommands"]
@@ -137,14 +133,10 @@ class ReleaseActivationRepository:
             return False
         return verified and capability_id in activation["enabledCapabilities"]
 
-    def _verify_current(
-        self, activation: dict[str, Any], *, evaluated_at: datetime
-    ) -> bool:
+    def _verify_current(self, activation: dict[str, Any], *, evaluated_at: datetime) -> bool:
         try:
             validate_record(activation, "authority_activation_fair_housing")
-            validate_authority_activation_fair_housing_semantics(
-                activation, now=evaluated_at
-            )
+            validate_authority_activation_fair_housing_semantics(activation, now=evaluated_at)
         except Exception:
             # ContractViolation and structural errors are verification failures. Do not
             # let malformed persisted state turn into an activation.
