@@ -8,6 +8,10 @@ import pytest
 from buyer_ops_contracts.connector_authorization import (
     ConnectorAuthorization,
     PlatformOAuthStore,
+    _pkce_challenge,
+    _pkce_verifier,
+    _return_origin_allowed,
+    canonical_connector_redirect,
     oauth_clients_from_env,
     parse_oauth_state,
 )
@@ -87,15 +91,17 @@ class _Connection:
     def __init__(self) -> None:
         self.store: dict[str, Any] = {"sessions": {}, "credentials": {}}
         self.cursor_instance = _Cursor(self.store)
+        self.commits = 0
+        self.rollbacks = 0
 
     def cursor(self) -> _Cursor:
         return self.cursor_instance
 
     def commit(self) -> None:
-        return None
+        self.commits += 1
 
     def rollback(self) -> None:
-        return None
+        self.rollbacks += 1
 
     def close(self) -> None:
         return None
@@ -157,6 +163,46 @@ def test_oauth_state_rejects_tampering() -> None:
         parse_oauth_state(SECRET, state + "00", now=NOW)
 
 
+def test_pkce_uses_s256_without_non_url_safe_characters() -> None:
+    verifier = _pkce_verifier()
+    assert len(verifier) == 64
+    assert verifier.replace("-", "").replace("_", "").isalnum()
+    assert (
+        _pkce_challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+        == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+    )
+
+
+def test_provider_redirect_uses_public_origin_and_rejects_private_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPERATOR_PUBLIC_URL", "https://operator.example.com/")
+    assert canonical_connector_redirect("google", "http://127.0.0.1/ignored") == (
+        "https://operator.example.com/api/connectors/callback"
+    )
+
+    monkeypatch.delenv("OPERATOR_PUBLIC_URL")
+    assert canonical_connector_redirect("microsoft", "http://127.0.0.1/callback") == (
+        "http://127.0.0.1/callback"
+    )
+    with pytest.raises(SetupRejected, match="OPERATOR_PUBLIC_URL"):
+        canonical_connector_redirect("google", "http://192.168.1.20/callback")
+
+
+@pytest.mark.parametrize(
+    ("origin", "allowed"),
+    [
+        ("http://localhost:8180", True),
+        ("http://192.168.1.20:8180", True),
+        ("https://operator.tailnet.ts.net", True),
+        ("https://unconfigured.example.com", False),
+        ("javascript:alert(1)", False),
+    ],
+)
+def test_return_origin_boundary(origin: str, allowed: bool) -> None:
+    assert _return_origin_allowed(origin) is allowed
+
+
 def test_platform_oauth_store_accepts_google_and_twilio() -> None:
     store = PlatformOAuthStore(_Connection(), permit_secret=SECRET)
     with pytest.raises(SetupRejected, match="issuer must be"):
@@ -204,303 +250,107 @@ def test_platform_oauth_readiness_requires_microsoft_directory(
     assert store.material()["microsoft"] == {}
 
 
-def test_start_oauth_requires_configured_client() -> None:
-    auth = ConnectorAuthorization(
-        _Connection(),
-        tenant_id="brokerage-live-1",
-        permit_secret=SECRET,
-        oauth_clients={},
-        clock=lambda: NOW,
-    )
-    with pytest.raises(SetupRejected, match="google_oauth_app_required"):
-        auth.start_oauth(
-            actor_id="actor-1",
-            connector_id="google.workspace.email",
-            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-        )
-
-
-def test_google_oauth_allows_https_hostname_redirect() -> None:
-    auth = _auth()
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}",
-        "grantState": "pending",
-    }
-    started = auth.start_oauth(
-        actor_id="actor-1",
-        connector_id="google.workspace",
-        redirect_uri="https://strix-alpha.tailfc1d45.ts.net/api/connectors/callback",
-        return_origin="http://192.168.0.50:8180",
-    )
-    assert "accounts.google.com" in started["authorizationUrl"]
-    assert "strix-alpha.tailfc1d45.ts.net" in started["authorizationUrl"]
-
-
-def test_google_oauth_public_url_overrides_loopback_and_lan(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    "connector_id",
+    ["google.workspace", "microsoft.365", "twilio.sms"],
+)
+def test_start_oauth_fails_closed_without_governing_admission(
+    connector_id: str,
 ) -> None:
-    monkeypatch.setenv("OPERATOR_PUBLIC_URL", "https://strix-alpha.tailfc1d45.ts.net")
-    auth = _auth()
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}",
-        "grantState": "pending",
-    }
-    started = auth.start_oauth(
-        actor_id="actor-1",
-        connector_id="google.workspace",
-        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-        return_origin="http://192.168.0.50:8180",
-    )
-    assert started["redirectUri"] == "https://strix-alpha.tailfc1d45.ts.net/api/connectors/callback"
-    assert "127.0.0.1" not in started["authorizationUrl"]
-    assert "192.168.0.50" not in started["authorizationUrl"]
-    assert "strix-alpha.tailfc1d45.ts.net" in started["authorizationUrl"]
-    assert "prompt=consent" not in started["authorizationUrl"]
-
-
-def test_google_oauth_rejects_private_http_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPERATOR_PUBLIC_URL", raising=False)
-    auth = _auth()
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}",
-        "grantState": "pending",
-    }
-    with pytest.raises(SetupRejected, match="127.0.0.1") as raised:
-        auth.start_oauth(
-            actor_id="actor-1",
-            connector_id="google.workspace",
-            redirect_uri="http://192.168.0.50:8180/api/connectors/callback",
-        )
-    assert "8180" not in raised.value.detail
-    assert "OPERATOR_PUBLIC_URL" in raised.value.detail
-
-
-def test_google_workspace_connect_asks_for_mail_and_calendar() -> None:
-    auth = _auth()
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}",
-        "grantState": "pending",
-    }
-    started = auth.start_oauth(
-        actor_id="actor-1",
-        connector_id="google.workspace",
-        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-    )
-    assert "calendar.events" in started["authorizationUrl"]
-    assert "gmail.send" in started["authorizationUrl"]
-    assert started["connectorId"] == "google.workspace"
-    assert "prompt=consent" not in started["authorizationUrl"]
-    assert "include_granted_scopes=true" in started["authorizationUrl"]
-
-
-def test_start_oauth_refuses_unknown_connector() -> None:
-    with pytest.raises(SetupRejected, match="does not use OAuth"):
-        _auth().start_oauth(
-            actor_id="actor-1",
-            connector_id="imap.password",
-            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-        )
-
-
-def test_connect_twilio_redirects_to_twilio() -> None:
+    http = _Http({})
+    connection = _Connection()
     auth = ConnectorAuthorization(
-        _Connection(),
+        connection,
         tenant_id="brokerage-live-1",
         permit_secret=SECRET,
-        oauth_clients={"twilio": {"client_id": "CNconnectapp", "client_secret": ""}},
+        oauth_clients={
+            "google": {"client_id": "google-client", "client_secret": "google-secret"},
+            "microsoft": {
+                "client_id": "ms-client",
+                "client_secret": "ms-secret",
+                "directory_id": "tenant-id",
+            },
+            "twilio": {"client_id": "CNconnectapp", "client_secret": ""},
+        },
+        http=http,
         clock=lambda: NOW,
     )
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": "grant:twilio.sms:brokerage-live-1",
-        "grantState": "pending",
-    }
-    started = auth.start_oauth(
-        actor_id="actor-1",
-        connector_id="twilio.sms",
-        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-    )
-    assert started["authorizationUrl"].startswith("https://www.twilio.com/authorize/CNconnectapp")
+
+    with pytest.raises(SetupRejected) as raised:
+        auth.start_oauth(
+            actor_id="actor-1",
+            connector_id=connector_id,
+            redirect_uri="http://127.0.0.1/api/connectors/callback",
+        )
+
+    assert raised.value.code == "configuration_incomplete"
+    assert connection.store == {"sessions": {}, "credentials": {}}
+    assert connection.cursor_instance.sql == ""
+    assert connection.commits == 0
+    assert connection.rollbacks == 0
+    assert http.calls == []
 
 
-def _ready_google_completion(
-    token_payload: dict[str, Any],
-) -> tuple[ConnectorAuthorization, _Http, str]:
-    http = _Http(
-        {
-            "oauth2.googleapis.com/token": (200, token_payload),
-            "googleapis.com/oauth2/v2/userinfo": (200, {"email": "agent@atonobrokerage.com"}),
-        }
+def test_complete_oauth_fails_closed_without_consuming_existing_session() -> None:
+    http = _Http({})
+    connection = _Connection()
+    auth = ConnectorAuthorization(
+        connection,
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={"google": {"client_id": "google-client", "client_secret": "google-secret"}},
+        http=http,
+        clock=lambda: NOW,
     )
-    auth = _auth(http)
     expires = NOW + timedelta(minutes=10)
-    session_id = "sess_live"
-    auth._connection.store["sessions"][session_id] = {  # type: ignore[attr-defined]
+    connection.store["sessions"]["session-existing"] = {
         "actor_id": "actor-1",
         "connector_id": "google.workspace.email",
-        "grant_id": "grant:google.workspace.email:brokerage-live-1",
-        "redirect_uri": "http://127.0.0.1:8180/api/connectors/callback",
+        "grant_id": "grant-existing",
+        "redirect_uri": "http://127.0.0.1/api/connectors/callback",
         "code_verifier": "verifier",
         "expires_at": expires,
         "consumed_at": None,
     }
-    state = auth._sign_state(session_id, expires)
-    auth._client_for = lambda issuer: {  # type: ignore[method-assign]
-        "client_id": "google-client",
-        "client_secret": "google-secret",
+    state = auth._sign_state("session-existing", expires)
+
+    with pytest.raises(SetupRejected) as raised:
+        auth.complete_oauth(code="provider-code", state=state, actor_id="actor-1")
+
+    assert raised.value.code == "configuration_incomplete"
+    assert connection.store["sessions"]["session-existing"]["consumed_at"] is None
+    assert connection.store["credentials"] == {}
+    assert connection.cursor_instance.sql == ""
+    assert connection.commits == 0
+    assert connection.rollbacks == 0
+    assert http.calls == []
+
+
+def test_existing_connector_binding_remains_readable_without_mutation() -> None:
+    connection = _Connection()
+    connection.store["credentials"]["grant-existing"] = {
+        "account": "agent@example.com",
+        "status": "bound",
     }
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}:brokerage-live-1",
-        "grantState": "pending",
-    }
-    auth._activate_grant = lambda grant_id, account: {  # type: ignore[method-assign]
-        "id": grant_id,
-        "grantState": "active",
-        "grantId": grant_id,
-    }
-    return auth, http, state
-
-
-def test_complete_oauth_exchanges_code_and_binds_account() -> None:
-    auth, http, state = _ready_google_completion(
-        {
-            "access_token": "ya29.access",
-            "refresh_token": "1//refresh",
-            "expires_in": 3600,
-            "scope": (
-                "https://www.googleapis.com/auth/gmail.send "
-                "https://www.googleapis.com/auth/gmail.readonly "
-                "https://www.googleapis.com/auth/userinfo.email"
-            ),
-            "token_type": "Bearer",
-        }
-    )
-    result = auth.complete_oauth(code="4/real-code", state=state, actor_id="actor-1")
-    assert result["authorization"] == "bound"
-    assert result["providerAccountRef"] == "agent@atonobrokerage.com"
-    assert result["grantState"] == "active"
-    assert http.calls[0][0] == "POST"
-    assert "oauth2.googleapis.com/token" in http.calls[0][1]
-    assert "userinfo" in http.calls[1][1]
-    assert "grant:google.workspace.email:brokerage-live-1" in auth._connection.store["credentials"]  # type: ignore[attr-defined]
-
-
-@pytest.mark.parametrize("expires_in", [None, 0, -1, True, "invalid", 10**100])
-def test_complete_oauth_requires_provider_observed_positive_expiry(expires_in: Any) -> None:
-    auth, _, state = _ready_google_completion(
-        {
-            "access_token": "ya29.access",
-            "expires_in": expires_in,
-            "scope": (
-                "https://www.googleapis.com/auth/gmail.send "
-                "https://www.googleapis.com/auth/gmail.readonly "
-                "https://www.googleapis.com/auth/userinfo.email"
-            ),
-        }
-    )
-
-    with pytest.raises(SetupRejected, match="token expiry"):
-        auth.complete_oauth(code="4/real-code", state=state, actor_id="actor-1")
-    assert auth._connection.store["credentials"] == {}  # type: ignore[attr-defined]
-
-
-@pytest.mark.parametrize("scope", [None, "", "https://www.googleapis.com/auth/gmail.send"])
-def test_complete_oauth_requires_explicit_complete_provider_scope(scope: str | None) -> None:
-    auth, _, state = _ready_google_completion(
-        {"access_token": "ya29.access", "expires_in": 3600, "scope": scope}
-    )
-
-    with pytest.raises(SetupRejected, match="granted scope"):
-        auth.complete_oauth(code="4/real-code", state=state, actor_id="actor-1")
-    assert auth._connection.store["credentials"] == {}  # type: ignore[attr-defined]
-
-
-def test_microsoft_oauth_requires_explicit_directory_authority() -> None:
+    http = _Http({})
     auth = ConnectorAuthorization(
-        _Connection(),
+        connection,
         tenant_id="brokerage-live-1",
         permit_secret=SECRET,
-        oauth_clients={"microsoft": {"client_id": "ms-client", "client_secret": "ms-secret"}},
+        oauth_clients={},
+        http=http,
         clock=lambda: NOW,
     )
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}",
-        "grantState": "pending",
+
+    assert auth.bindings() == {
+        "grant-existing": {
+            "grant_id": "grant-existing",
+            "connector_id": "google.workspace.email",
+            "provider_account_ref": "agent@example.com",
+            "authorization": "bound",
+        }
     }
-
-    with pytest.raises(SetupRejected, match="microsoft_oauth_directory_required"):
-        auth.start_oauth(
-            actor_id="actor-1",
-            connector_id="microsoft.365.email",
-            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-        )
-
-
-def test_stored_microsoft_oauth_client_requires_directory_authority(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        PlatformOAuthStore,
-        "client_for",
-        lambda self, issuer: {
-            "client_id": "stored-ms-client",
-            "client_secret": "stored-ms-secret",
-            "directory_id": "",
-        },
-    )
-    auth = _auth()
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}",
-        "grantState": "pending",
-    }
-
-    with pytest.raises(SetupRejected, match="microsoft_oauth_directory_required"):
-        auth.start_oauth(
-            actor_id="actor-1",
-            connector_id="microsoft.365.email",
-            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-        )
-
-
-def test_microsoft_directory_is_trimmed_and_url_path_encoded() -> None:
-    auth = ConnectorAuthorization(
-        _Connection(),
-        tenant_id="brokerage-live-1",
-        permit_secret=SECRET,
-        oauth_clients={
-            "microsoft": {
-                "client_id": "ms-client",
-                "client_secret": "ms-secret",
-                "directory_id": " tenant/path?query#fragment ",
-            }
-        },
-        clock=lambda: NOW,
-    )
-    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
-        "id": f"grant:{connector_id}",
-        "grantState": "pending",
-    }
-
-    started = auth.start_oauth(
-        actor_id="actor-1",
-        connector_id="microsoft.365.email",
-        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
-    )
-    assert "/tenant%2Fpath%3Fquery%23fragment/oauth2/" in started["authorizationUrl"]
-
-
-def test_complete_oauth_refuses_replayed_session() -> None:
-    auth = _auth()
-    expires = NOW + timedelta(minutes=10)
-    session_id = "sess_replay"
-    auth._connection.store["sessions"][session_id] = {  # type: ignore[attr-defined]
-        "actor_id": "actor-1",
-        "connector_id": "google.workspace.email",
-        "grant_id": "grant-1",
-        "redirect_uri": "http://127.0.0.1:8180/api/connectors/callback",
-        "code_verifier": "verifier",
-        "expires_at": expires,
-        "consumed_at": NOW,
-    }
-    state = auth._sign_state(session_id, expires)
-    with pytest.raises(SetupRejected, match="already consumed"):
-        auth.complete_oauth(code="4/code", state=state, actor_id="actor-1")
+    assert "SELECT grant_id" in connection.cursor_instance.sql
+    assert connection.commits == 1
+    assert connection.rollbacks == 0
+    assert http.calls == []

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -646,6 +649,43 @@ def test_connector_oauth_completion_requires_authenticated_actor() -> None:
     )
     assert status == 401
     assert payload["code"] == "authentication_required"
+
+
+def test_connector_oauth_http_routes_fail_closed_without_admission_contract() -> None:
+    plane = _plane(Connection())
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    headers = {
+        "x-buyer-ops-token": "token",
+        "x-buyer-ops-tenant": "tenant-1",
+        "x-buyer-ops-actor": "actor-1",
+    }
+
+    start_status, start_payload = plane.handle(
+        "POST",
+        "/v1/connectors/oauth/start",
+        headers,
+        json.dumps(
+            {
+                "connectorId": "google.workspace",
+                "redirectUri": "http://127.0.0.1/api/connectors/callback",
+            }
+        ).encode(),
+    )
+
+    expires = int(time.time()) + 600
+    unsigned_state = f"tenant-1.session-existing.{expires}"
+    signature = hmac.new(b"x" * 32, unsigned_state.encode(), hashlib.sha256).hexdigest()
+    complete_status, complete_payload = plane.handle(
+        "POST",
+        "/v1/connectors/oauth/complete",
+        headers,
+        json.dumps({"state": f"{unsigned_state}.{signature}", "code": "provider-code"}).encode(),
+    )
+
+    assert start_status == 422
+    assert start_payload["code"] == "configuration_incomplete"
+    assert complete_status == 422
+    assert complete_payload["code"] == "configuration_incomplete"
 
 
 def test_platform_oauth_client_metadata_requires_authenticated_actor() -> None:
