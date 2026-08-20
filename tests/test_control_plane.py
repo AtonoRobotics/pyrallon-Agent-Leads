@@ -230,6 +230,17 @@ def test_tenancies_are_empty_without_actor_authorization() -> None:
     assert payload == {"tenancies": []}
 
 
+def test_tenancies_require_authenticated_actor() -> None:
+    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+        "GET",
+        "/v1/actors/tenancies",
+        {"x-buyer-ops-token": "token"},
+        b"",
+    )
+    assert status == 401
+    assert payload["code"] == "authentication_required"
+
+
 def test_operator_policy_post_admits_published_policy() -> None:
     policy = {
         "message_type": "operator_policy",

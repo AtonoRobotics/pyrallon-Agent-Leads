@@ -102,6 +102,8 @@ class ControlPlane:
             if method == "GET" and route == "/health":
                 return 200, {"status": "ok"}
             if method == "GET" and route == "/v1/actors/tenancies":
+                if not actor_id:
+                    return 401, _error("authentication_required", "actor required")
                 return 200, {"tenancies": self._tenancies(actor_id)}
             if method == "POST" and route == "/v1/setup/tenant":
                 if not actor_id:
