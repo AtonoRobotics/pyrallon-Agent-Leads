@@ -76,7 +76,9 @@ class InboundEnvelope:
                 raise ValueError(f"{field} must be a non-empty string")
         for field in {"receivedAt", "providerOccurredAt"} & set(value):
             try:
-                datetime.fromisoformat(value[field].replace("Z", "+00:00"))
+                parsed = datetime.fromisoformat(value[field].replace("Z", "+00:00"))
+                if parsed.utcoffset() is None:
+                    raise ValueError("timestamp offset is required")
             except (AttributeError, ValueError) as exc:
                 raise ValueError(f"{field} must be an RFC 3339 timestamp") from exc
         if not _DIGEST.fullmatch(value["payloadDigest"]):

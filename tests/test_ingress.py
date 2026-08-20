@@ -107,6 +107,15 @@ def test_inbound_envelope_rejects_unpublished_fields_and_invalid_nested_contract
         InboundEnvelope.from_mapping(invalid)
 
 
+@pytest.mark.parametrize("field", ["receivedAt", "providerOccurredAt"])
+def test_inbound_envelope_requires_offsets_on_event_timestamps(field: str) -> None:
+    invalid = _envelope().to_mapping()
+    invalid[field] = "2026-08-19T12:00:00"
+
+    with pytest.raises(ValueError, match=f"{field} must be an RFC 3339 timestamp"):
+        InboundEnvelope.from_mapping(invalid)
+
+
 def test_inbound_envelope_requires_compensating_control_marker_when_unsigned() -> None:
     unsigned = replace(_envelope(), signature_verification="not_supported")
     assert unsigned.signature_verification == "not_supported"
