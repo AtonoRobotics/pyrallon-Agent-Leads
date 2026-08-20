@@ -161,6 +161,7 @@ class ControlPlane:
             if method == "POST" and route == "/v1/ingress/envelope":
                 return 200, self._ingress_envelope(tenant_id, payload)
             if method == "GET" and route == "/v1/connectors":
+                self._require_actor(tenant_id, actor_id)
                 return 200, {"connectors": self._connectors(tenant_id)}
             if method == "POST" and route == "/v1/connectors/oauth/start":
                 self._require_actor(tenant_id, actor_id)
@@ -183,6 +184,7 @@ class ControlPlane:
             if method == "POST" and route == "/v1/connectors/invoke":
                 return 200, self._invoke(tenant_id, payload, headers.get("x-buyer-ops-permit", ""))
             if method == "GET" and route == "/v1/activation":
+                self._require_actor(tenant_id, actor_id)
                 return 200, {"decisions": self._activation(tenant_id)}
             if method == "POST" and route == "/v1/activation/evidence":
                 return 200, self._gate_evidence(tenant_id, payload)
@@ -191,13 +193,17 @@ class ControlPlane:
             if method == "POST" and route == "/v1/telemetry/observations":
                 return 200, self._telemetry(tenant_id, payload)
             if method == "GET" and route.startswith("/v1/canonical/"):
+                self._require_actor(tenant_id, actor_id)
                 record_id = unquote(route.split("/", 3)[-1])
                 return 200, self._canonical_get(tenant_id, record_id)
             if method == "POST" and route == "/v1/canonical":
+                self._require_actor(tenant_id, actor_id)
                 return 200, self._canonical_save(tenant_id, payload)
             if method == "POST" and route == "/v1/actor-authorizations":
+                self._require_actor(tenant_id, actor_id)
                 return 200, self._admit_actor_authorization(tenant_id, payload)
             if method == "POST" and route == "/v1/operator-policies":
+                self._require_actor(tenant_id, actor_id)
                 return 200, self._admit_operator_policy(tenant_id, payload)
             return 404, _error("validation_failed", "unknown route")
         except KeyError as exc:

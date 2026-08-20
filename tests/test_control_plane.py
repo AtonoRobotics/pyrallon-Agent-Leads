@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from test_actor_authorization import _Connection as AuthorizationConnection
 from test_actor_authorization import _grant
@@ -35,7 +36,25 @@ def test_canonical_post_admits_license_holder() -> None:
         "recordType": "ContactEndpoint",
         "tenantId": "tenant-1",
     }
-    status, payload = _plane(connection).handle(
+    plane = _plane(connection)
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        "POST",
+        "/v1/canonical",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        json.dumps(_license_holder()).encode(),
+    )
+    assert status == 200
+    assert payload["id"] == "holder-1"
+    assert payload["recordType"] == "LicenseHolder"
+
+
+def test_canonical_post_requires_authenticated_actor() -> None:
+    status, payload = _plane(Connection()).handle(
         "POST",
         "/v1/canonical",
         {
@@ -44,9 +63,8 @@ def test_canonical_post_admits_license_holder() -> None:
         },
         json.dumps(_license_holder()).encode(),
     )
-    assert status == 200
-    assert payload["id"] == "holder-1"
-    assert payload["recordType"] == "LicenseHolder"
+    assert status == 401
+    assert payload["code"] == "authentication_required"
 
 
 def test_tenancies_come_from_current_actor_tenant_authorization() -> None:
@@ -223,6 +241,23 @@ def test_operator_policy_post_admits_published_policy() -> None:
             }
         ],
     }
+    plane = _plane(AuthorizationConnection())  # type: ignore[arg-type]
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        "POST",
+        "/v1/operator-policies",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        json.dumps(policy).encode(),
+    )
+    assert status == 200
+    assert payload["policy_id"] == "policy-1"
+
+
+def test_operator_policy_post_requires_authenticated_actor() -> None:
     status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
         "POST",
         "/v1/operator-policies",
@@ -230,10 +265,68 @@ def test_operator_policy_post_admits_published_policy() -> None:
             "x-buyer-ops-token": "token",
             "x-buyer-ops-tenant": "tenant-1",
         },
-        json.dumps(policy).encode(),
+        b"{}",
     )
-    assert status == 200
-    assert payload["policy_id"] == "policy-1"
+    assert status == 401
+    assert payload["code"] == "authentication_required"
+
+
+def test_actor_authorization_post_requires_authenticated_actor() -> None:
+    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+        "POST",
+        "/v1/actor-authorizations",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+        },
+        b"{}",
+    )
+    assert status == 401
+    assert payload["code"] == "authentication_required"
+
+
+@pytest.mark.parametrize(
+    "route",
+    ["/v1/connectors", "/v1/activation", "/v1/canonical/record-1"],
+)
+def test_operator_read_routes_require_authenticated_actor(route: str) -> None:
+    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+        "GET",
+        route,
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+        },
+        b"",
+    )
+    assert status == 401
+    assert payload["code"] == "authentication_required"
+
+
+@pytest.mark.parametrize(
+    ("method", "route"),
+    [
+        ("GET", "/v1/connectors"),
+        ("GET", "/v1/activation"),
+        ("GET", "/v1/canonical/record-1"),
+        ("POST", "/v1/canonical"),
+        ("POST", "/v1/actor-authorizations"),
+        ("POST", "/v1/operator-policies"),
+    ],
+)
+def test_operator_routes_reject_actor_without_current_tenancy(method: str, route: str) -> None:
+    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+        method,
+        route,
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"{}" if method == "POST" else b"",
+    )
+    assert status == 403
+    assert payload["code"] == "authority_denied"
 
 
 def test_invalid_operator_command_returns_typed_operator_error() -> None:
@@ -334,7 +427,9 @@ def test_platform_oauth_secret_material_has_no_http_readback_surface() -> None:
 
 
 def test_activation_readback_is_empty_until_signed_evidence_exists() -> None:
-    status, payload = _plane(AuthorizationConnection()).handle(  # type: ignore[arg-type]
+    plane = _plane(AuthorizationConnection())  # type: ignore[arg-type]
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    status, payload = plane.handle(
         "GET",
         "/v1/activation",
         {
@@ -349,12 +444,15 @@ def test_activation_readback_is_empty_until_signed_evidence_exists() -> None:
 
 
 def test_canonical_post_rejects_invalid_ontology_record() -> None:
-    status, payload = _plane(Connection()).handle(
+    plane = _plane(Connection())
+    plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
+    status, payload = plane.handle(
         "POST",
         "/v1/canonical",
         {
             "x-buyer-ops-token": "token",
             "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
         },
         json.dumps({"recordType": "LicenseHolder"}).encode(),
     )
