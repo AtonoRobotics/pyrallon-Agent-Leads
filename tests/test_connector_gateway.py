@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -118,7 +118,7 @@ def _registration() -> HabitatRegistration:
             idempotency_key="idempotency-1",
             canonical_version_vector={"conversation-1": 4},
             issued_at=now,
-            expires_at=now,
+            expires_at=now + timedelta(seconds=30),
             redeemed_at=now,
         ),
         attempt={"id": "attempt-1"},
@@ -214,6 +214,22 @@ def test_provider_changing_connector_call_requires_matching_redeemed_permit() ->
         )
     assert raised.value.code == "permit_mismatch"
     assert adapter.calls == 1
+
+
+def test_provider_changing_connector_call_rejects_permit_at_expiry_boundary() -> None:
+    adapter = _Adapter()
+    gateway = _gateway(adapter)
+    now = datetime(2026, 8, 19, 12, tzinfo=UTC)
+    expired = replace(
+        _registration(),
+        permit=replace(_registration().permit, expires_at=now),
+    )
+
+    with pytest.raises(ConnectorRejected) as raised:
+        gateway.invoke(_request(), b"normalized-payload", registration=expired, preview=_preview())
+
+    assert raised.value.code == "permit_mismatch"
+    assert adapter.calls == 0
 
 
 def test_provider_changing_call_requires_effect_draft_preview() -> None:

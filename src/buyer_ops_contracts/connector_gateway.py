@@ -212,7 +212,7 @@ class ConnectorGateway:
                 preview is not None and permit.action_class != preview.get("actionClass"),
                 permit.idempotency_key != request["idempotencyKey"],
                 now is not None and permit.issued_at > now,
-                now is not None and permit.expires_at < now,
+                now is not None and permit.expires_at <= now,
                 now is not None and permit.redeemed_at > now,
             )
         ):
