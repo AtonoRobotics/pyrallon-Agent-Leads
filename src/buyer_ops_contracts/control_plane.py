@@ -41,14 +41,7 @@ from .operator_commands import OperatorCommandError, OperatorCommandService
 from .operator_projection import OperatorProjection
 from .release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from .telemetry import TelemetryRecorder
-from .tenant_setup import SetupRejected, bootstrap_tenant, ensure_runtime_principal
-from .workspace import (
-    assemble_journey,
-    assemble_workspace,
-    propose_appointment,
-    record_assertion,
-    record_suppression,
-)
+from .tenant_setup import SetupRejected
 
 
 def connect(dsn: str) -> Any:
@@ -264,82 +257,6 @@ class ControlPlane:
 
     def _connection(self) -> Any:
         return connect(self._dsn)
-
-    def _setup_tenant(self, actor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        connection = self._connection()
-        try:
-            return bootstrap_tenant(connection, payload, actor_id=actor_id)
-        finally:
-            connection.close()
-
-    def _workspace(self, tenant_id: str, actor_id: str) -> dict[str, Any]:
-        self._require_actor(tenant_id, actor_id)
-        connection = self._connection()
-        try:
-            repo = CanonicalRepository(connection, tenant_id=tenant_id)
-            ensure_runtime_principal(repo, tenant_id=tenant_id)
-            payload = assemble_workspace(repo)
-            payload["connectors"] = self._connectors(tenant_id)
-            payload["activation"] = {"decisions": self._activation(tenant_id)}
-            return payload
-        finally:
-            connection.close()
-
-    def _workspace_journey(self, tenant_id: str, actor_id: str, journey_id: str) -> dict[str, Any]:
-        self._require_actor(tenant_id, actor_id)
-        connection = self._connection()
-        try:
-            repo = CanonicalRepository(connection, tenant_id=tenant_id)
-            ensure_runtime_principal(repo, tenant_id=tenant_id)
-            return assemble_journey(repo, journey_id)
-        finally:
-            connection.close()
-
-    def _propose_appointment(
-        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        self._require_actor(tenant_id, actor_id)
-        connection = self._connection()
-        try:
-            return propose_appointment(
-                CanonicalRepository(connection, tenant_id=tenant_id),
-                journey_id=str(payload.get("journeyId") or ""),
-                starts_at=str(payload.get("startsAt") or ""),
-                actor_id=actor_id,
-                time_zone=str(payload.get("timeZone") or "America/Chicago"),
-            )
-        finally:
-            connection.close()
-
-    def _record_assertion(
-        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        self._require_actor(tenant_id, actor_id)
-        connection = self._connection()
-        try:
-            return record_assertion(
-                CanonicalRepository(connection, tenant_id=tenant_id),
-                journey_id=str(payload.get("journeyId") or ""),
-                criterion_code=str(payload.get("criterion") or ""),
-                value=str(payload.get("value") or ""),
-                actor_id=actor_id,
-            )
-        finally:
-            connection.close()
-
-    def _record_suppression(
-        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        self._require_actor(tenant_id, actor_id)
-        connection = self._connection()
-        try:
-            return record_suppression(
-                CanonicalRepository(connection, tenant_id=tenant_id),
-                journey_id=str(payload.get("journeyId") or ""),
-                actor_id=actor_id,
-            )
-        finally:
-            connection.close()
 
     def _tenancies(self, actor_id: str) -> list[dict[str, Any]]:
         if not actor_id:
