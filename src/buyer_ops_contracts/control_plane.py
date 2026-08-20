@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import psycopg
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -137,12 +137,12 @@ class ControlPlane:
             if method == "GET" and route == "/v1/journeys":
                 return 200, {"journeys": self._list_journeys(tenant_id, actor_id)}
             if method == "GET" and route.startswith("/v1/journeys/"):
-                journey_id = route.split("/", 3)[-1]
+                journey_id = unquote(route.split("/", 3)[-1])
                 return 200, self._journey(tenant_id, actor_id, journey_id)
             if method == "GET" and route == "/v1/workspace":
                 return 200, self._workspace(tenant_id, actor_id)
             if method == "GET" and route.startswith("/v1/workspace/journeys/"):
-                journey_id = route.rsplit("/", 1)[-1]
+                journey_id = unquote(route.removeprefix("/v1/workspace/journeys/"))
                 return 200, self._workspace_journey(tenant_id, actor_id, journey_id)
             if method == "POST" and route == "/v1/workspace/appointments":
                 return 200, self._propose_appointment(tenant_id, actor_id, payload)
@@ -191,7 +191,7 @@ class ControlPlane:
             if method == "POST" and route == "/v1/telemetry/observations":
                 return 200, self._telemetry(tenant_id, payload)
             if method == "GET" and route.startswith("/v1/canonical/"):
-                record_id = route.split("/", 3)[-1]
+                record_id = unquote(route.split("/", 3)[-1])
                 return 200, self._canonical_get(tenant_id, record_id)
             if method == "POST" and route == "/v1/canonical":
                 return 200, self._canonical_save(tenant_id, payload)

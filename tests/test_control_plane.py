@@ -85,6 +85,56 @@ def test_tenancies_come_from_current_actor_tenant_authorization() -> None:
     }
 
 
+def test_workspace_journey_unquotes_colon_ids() -> None:
+    plane = _plane(Connection())
+    seen: dict[str, str] = {}
+
+    def _journey(tenant_id: str, actor_id: str, journey_id: str) -> dict[str, str]:
+        del tenant_id, actor_id
+        seen["id"] = journey_id
+        return {"id": journey_id}
+
+    plane._workspace_journey = _journey  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        "GET",
+        "/v1/workspace/journeys/journey%3A1111-2222",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"",
+    )
+    assert status == 200
+    assert seen["id"] == "journey:1111-2222"
+    assert payload == {"id": "journey:1111-2222"}
+
+
+def test_workspace_journey_decodes_id_without_rewriting_route() -> None:
+    plane = _plane(Connection())
+    seen: dict[str, str] = {}
+
+    def _journey(tenant_id: str, actor_id: str, journey_id: str) -> dict[str, str]:
+        del tenant_id, actor_id
+        seen["id"] = journey_id
+        return {"id": journey_id}
+
+    plane._workspace_journey = _journey  # type: ignore[method-assign]
+    status, payload = plane.handle(
+        "GET",
+        "/v1/workspace/journeys/provider%2Fjourney%3A1",
+        {
+            "x-buyer-ops-token": "token",
+            "x-buyer-ops-tenant": "tenant-1",
+            "x-buyer-ops-actor": "actor-1",
+        },
+        b"",
+    )
+    assert status == 200
+    assert seen["id"] == "provider/journey:1"
+    assert payload == {"id": "provider/journey:1"}
+
+
 def test_setup_tenant_does_not_require_tenant_header() -> None:
     class _Boom:
         def close(self) -> None:
