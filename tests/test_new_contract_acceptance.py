@@ -17,6 +17,7 @@ from buyer_ops_contracts.contract_acceptance import (
     validate_availability_policy,
     validate_booking_command,
     validate_booking_context,
+    validate_booking_result_context,
     validate_calendar_snapshot,
     validate_policy_version,
     validate_qualification,
@@ -391,6 +392,41 @@ def test_authority_watermark_version_idempotency_and_reconciliation() -> None:
     missing_observation_evidence["evidenceIds"] = ["request-a"]
     with pytest.raises(ContractSemanticError, match="provider_observation_evidence_missing"):
         validate_reconciliation(valid["result"], missing_observation_evidence)
+
+
+@pytest.mark.parametrize(
+    ("target", "path", "value", "error"),
+    [
+        ("result", "tenantId", "tenant-other", "cross_tenant_reference"),
+        ("result", "commandRef.recordId", "command-other", "result_command_reference_mismatch"),
+        ("result", "commandRef.recordType", "OtherCommand", "result_command_reference_mismatch"),
+        ("result", "commandRef.version", 2, "result_command_reference_mismatch"),
+        (
+            "result",
+            "providerBindingRef.version",
+            2,
+            "result_binding_reference_mismatch",
+        ),
+        (
+            "command",
+            "providerBindingRef.recordId",
+            "binding-other",
+            "command_binding_reference_mismatch",
+        ),
+    ],
+)
+def test_booking_result_binds_exact_command_and_provider_context(
+    target: str, path: str, value: Any, error: str
+) -> None:
+    valid = _load("availability_booking/valid.json")
+    command = copy.deepcopy(valid["command"])
+    result = copy.deepcopy(valid["result"])
+    binding = valid["binding"]
+    validate_booking_result_context(command=command, result=result, binding=binding)
+    _replace(command if target == "command" else result, path, value)
+
+    with pytest.raises(ContractSemanticError, match=error):
+        validate_booking_result_context(command=command, result=result, binding=binding)
 
 
 def test_revocation_race_and_concurrent_version_fail_closed() -> None:

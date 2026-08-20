@@ -469,6 +469,31 @@ def admit_idempotency(command: dict[str, Any], existing_payload_digest: str | No
     raise ContractSemanticError("idempotency_key_payload_conflict")
 
 
+def validate_booking_result_context(
+    *, command: dict[str, Any], result: dict[str, Any], binding: dict[str, Any]
+) -> None:
+    """Bind a provider result to the exact command and calendar binding it reports."""
+
+    if any(record["tenantId"] != command["tenantId"] for record in (result, binding)):
+        raise ContractSemanticError("cross_tenant_reference")
+    expected_binding_ref = {
+        "recordId": binding["bindingId"],
+        "recordType": "CalendarProviderBinding",
+        "version": binding["version"],
+    }
+    if command["providerBindingRef"] != expected_binding_ref:
+        raise ContractSemanticError("command_binding_reference_mismatch")
+    expected_command_ref = {
+        "recordId": command["commandId"],
+        "recordType": "BookingCommand",
+        "version": 1,
+    }
+    if result["commandRef"] != expected_command_ref:
+        raise ContractSemanticError("result_command_reference_mismatch")
+    if result["providerBindingRef"] != expected_binding_ref:
+        raise ContractSemanticError("result_binding_reference_mismatch")
+
+
 def validate_reconciliation(prior_result: dict[str, Any], reconciliation: dict[str, Any]) -> None:
     if reconciliation["derivedBy"]["implementationId"] != "booking_reconciliation_v1":
         raise ContractSemanticError("reconciliation_deriver_mismatch")
