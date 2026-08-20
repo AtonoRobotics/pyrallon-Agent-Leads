@@ -1,6 +1,6 @@
 import copy
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -236,9 +236,11 @@ def test_availability_semantic_fixture_matrix() -> None:
                 validate_booking_context(
                     records["command"],
                     binding=records["binding"],
+                    slot_set=records["slotSet"],
                     current_provider_watermark=case["value"],
                     current_appointment_version=None,
                     authority_active=True,
+                    evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
                 )
             else:
                 validate_reconciliation(records["result"], records["reconciliation"])
@@ -297,9 +299,11 @@ def test_authority_watermark_version_idempotency_and_reconciliation() -> None:
     validate_booking_context(
         command,
         binding=valid["binding"],
+        slot_set=valid["slotSet"],
         current_provider_watermark="watermark-42",
         current_appointment_version=None,
         authority_active=True,
+        evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
     )
     assert admit_idempotency(command, None) == "new"
     assert admit_idempotency(command, command["payloadDigest"]) == "duplicate"
@@ -316,9 +320,11 @@ def test_revocation_race_and_concurrent_version_fail_closed() -> None:
         validate_booking_context(
             valid["command"],
             binding=suspended,
+            slot_set=valid["slotSet"],
             current_provider_watermark="watermark-42",
             current_appointment_version=None,
             authority_active=True,
+            evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
         )
     reschedule = copy.deepcopy(valid["command"])
     reschedule["commandKind"] = "reschedule"
@@ -332,7 +338,36 @@ def test_revocation_race_and_concurrent_version_fail_closed() -> None:
         validate_booking_context(
             reschedule,
             binding=valid["binding"],
+            slot_set=valid["slotSet"],
             current_provider_watermark="watermark-42",
             current_appointment_version=3,
             authority_active=True,
+            evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
+        )
+
+
+def test_booking_command_rejects_unbound_or_expired_selected_slot() -> None:
+    valid = _load("availability_booking/valid.json")
+    wrong_slot = copy.deepcopy(valid["command"])
+    wrong_slot["selectedSlotDigest"] = "sha256:ffffffffffffffffffffffffffffffff"
+    with pytest.raises(ContractSemanticError, match="selected_slot_mismatch"):
+        validate_booking_context(
+            wrong_slot,
+            binding=valid["binding"],
+            slot_set=valid["slotSet"],
+            current_provider_watermark="watermark-42",
+            current_appointment_version=None,
+            authority_active=True,
+            evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
+        )
+
+    with pytest.raises(ContractSemanticError, match="slot_set_expired"):
+        validate_booking_context(
+            valid["command"],
+            binding=valid["binding"],
+            slot_set=valid["slotSet"],
+            current_provider_watermark="watermark-42",
+            current_appointment_version=None,
+            authority_active=True,
+            evaluated_at=datetime(2026, 3, 8, 8, 10, tzinfo=UTC),
         )

@@ -365,9 +365,11 @@ def validate_booking_context(
     command: dict[str, Any],
     *,
     binding: dict[str, Any],
+    slot_set: dict[str, Any] | None,
     current_provider_watermark: str,
     current_appointment_version: int | None,
     authority_active: bool,
+    evaluated_at: datetime,
 ) -> None:
     """Fail closed across authority, binding, watermark, expiry, and optimistic concurrency."""
 
@@ -376,12 +378,58 @@ def validate_booking_context(
         raise ContractSemanticError("cross_tenant_reference")
     if binding["lifecycle"] != "active":
         raise ContractSemanticError("provider_binding_not_active")
+    binding_ref = {
+        "recordId": binding["bindingId"],
+        "recordType": "CalendarProviderBinding",
+        "version": binding["version"],
+    }
+    if command["providerBindingRef"] != binding_ref:
+        raise ContractSemanticError("command_binding_reference_mismatch")
+    effective_to = binding.get("effectiveTo")
+    if evaluated_at < _time(binding["effectiveFrom"]) or (
+        effective_to is not None and evaluated_at >= _time(effective_to)
+    ):
+        raise ContractSemanticError("provider_binding_not_effective")
     if not authority_active:
         raise ContractSemanticError("authority_not_active")
     if command["providerWatermark"] != current_provider_watermark:
         raise ContractSemanticError("stale_provider_watermark")
-    if _time(command["expiresAt"]) <= datetime.now(UTC):
+    if _time(command["expiresAt"]) <= evaluated_at:
         raise ContractSemanticError("command_expired")
+    if command["commandKind"] in {"book", "reschedule"}:
+        if slot_set is None:
+            raise ContractSemanticError("slot_set_required")
+        if slot_set["tenantId"] != command["tenantId"]:
+            raise ContractSemanticError("cross_tenant_reference")
+        expected_slot_set_ref = {
+            "recordId": slot_set["slotSetId"],
+            "recordType": "SlotSet",
+            "version": 1,
+        }
+        if command["slotSetRef"] != expected_slot_set_ref:
+            raise ContractSemanticError("command_slot_set_reference_mismatch")
+        if (
+            slot_set["journeyRef"] != command["journeyRef"]
+            or slot_set["providerBindingRef"] != binding_ref
+        ):
+            raise ContractSemanticError("slot_set_command_context_mismatch")
+        if _time(slot_set["expiresAt"]) <= evaluated_at:
+            raise ContractSemanticError("slot_set_expired")
+        selected = next(
+            (
+                slot
+                for slot in slot_set["slots"]
+                if slot["slotId"] == command["selectedSlotId"]
+                and slot["slotDigest"] == command["selectedSlotDigest"]
+            ),
+            None,
+        )
+        if selected is None:
+            raise ContractSemanticError("selected_slot_mismatch")
+    if command["appointmentRef"] is not None and (
+        command["appointmentRef"]["version"] != command["expectedAppointmentVersion"]
+    ):
+        raise ContractSemanticError("expected_appointment_reference_mismatch")
     if command["expectedAppointmentVersion"] != current_appointment_version:
         raise ContractSemanticError("appointment_version_conflict")
 
