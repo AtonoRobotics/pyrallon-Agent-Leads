@@ -324,6 +324,17 @@ def test_slot_set_binds_current_readiness_policy_binding_and_snapshot() -> None:
             snapshot=booking["snapshot"],
         )
 
+    future_readiness = copy.deepcopy(readiness)
+    future_readiness["derivedAt"] = "2026-03-08T08:00:01Z"
+    with pytest.raises(ContractSemanticError, match="readiness_not_current"):
+        validate_slot_set_context(
+            booking["slotSet"],
+            policy=booking["policy"],
+            readiness=future_readiness,
+            binding=booking["binding"],
+            snapshot=booking["snapshot"],
+        )
+
 
 def test_derived_records_bind_their_assigned_implementations() -> None:
     booking = _load("availability_booking/valid.json")
@@ -612,4 +623,18 @@ def test_booking_command_rejects_unbound_or_expired_selected_slot() -> None:
             current_appointment_version=None,
             authority_active=True,
             evaluated_at=datetime(2026, 3, 8, 8, 10, tzinfo=UTC),
+        )
+
+    future_slot_set = copy.deepcopy(valid["slotSet"])
+    future_slot_set["derivedAt"] = "2026-03-08T08:01:01Z"
+    with pytest.raises(ContractSemanticError, match="slot_set_not_current"):
+        validate_booking_context(
+            valid["command"],
+            binding=valid["binding"],
+            slot_set=future_slot_set,
+            current_snapshot=valid["snapshot"],
+            current_provider_watermark="watermark-42",
+            current_appointment_version=None,
+            authority_active=True,
+            evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
         )

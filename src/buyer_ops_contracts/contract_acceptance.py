@@ -343,7 +343,11 @@ def validate_slot_set_context(
         raise ContractSemanticError("slot_set_journey_reference_mismatch")
 
     derived_at = _time(slot_set["derivedAt"])
-    if readiness["result"] != "ready" or _time(readiness["expiresAt"]) <= derived_at:
+    if (
+        readiness["result"] != "ready"
+        or _time(readiness["derivedAt"]) > derived_at
+        or _time(readiness["expiresAt"]) <= derived_at
+    ):
         raise ContractSemanticError("readiness_not_current")
     if binding["lifecycle"] != "active":
         raise ContractSemanticError("provider_binding_not_active")
@@ -453,6 +457,8 @@ def validate_booking_context(
             or slot_set["providerBindingRef"] != binding_ref
         ):
             raise ContractSemanticError("slot_set_command_context_mismatch")
+        if _time(slot_set["derivedAt"]) > evaluated_at:
+            raise ContractSemanticError("slot_set_not_current")
         if _time(slot_set["expiresAt"]) <= evaluated_at:
             raise ContractSemanticError("slot_set_expired")
         selected = next(
