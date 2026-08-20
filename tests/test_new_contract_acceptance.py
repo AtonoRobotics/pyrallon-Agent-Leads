@@ -23,6 +23,7 @@ from buyer_ops_contracts.contract_acceptance import (
     validate_qualification_decisions,
     validate_reconciliation,
     validate_slot_set,
+    validate_slot_set_context,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -253,6 +254,41 @@ def test_dst_resolution_slot_identity_and_expiry() -> None:
     stale["expiresAt"] = "2026-03-08T08:10:01Z"
     with pytest.raises(ContractSemanticError, match="invalid_slot_set_expiry"):
         validate_slot_set(stale, valid["policy"])
+
+
+def test_slot_set_binds_current_readiness_policy_binding_and_snapshot() -> None:
+    booking = _load("availability_booking/valid.json")
+    readiness = copy.deepcopy(_load("qualification_readiness/valid.json")["readiness"])
+    readiness["expiresAt"] = "2026-03-08T08:05:00Z"
+    validate_slot_set_context(
+        booking["slotSet"],
+        policy=booking["policy"],
+        readiness=readiness,
+        binding=booking["binding"],
+        snapshot=booking["snapshot"],
+    )
+
+    wrong_binding = copy.deepcopy(booking["slotSet"])
+    wrong_binding["providerBindingRef"]["version"] = 2
+    with pytest.raises(ContractSemanticError, match="slot_set_binding_reference_mismatch"):
+        validate_slot_set_context(
+            wrong_binding,
+            policy=booking["policy"],
+            readiness=readiness,
+            binding=booking["binding"],
+            snapshot=booking["snapshot"],
+        )
+
+    expired_readiness = copy.deepcopy(readiness)
+    expired_readiness["expiresAt"] = booking["slotSet"]["derivedAt"]
+    with pytest.raises(ContractSemanticError, match="readiness_not_current"):
+        validate_slot_set_context(
+            booking["slotSet"],
+            policy=booking["policy"],
+            readiness=expired_readiness,
+            binding=booking["binding"],
+            snapshot=booking["snapshot"],
+        )
 
 
 def test_authority_watermark_version_idempotency_and_reconciliation() -> None:

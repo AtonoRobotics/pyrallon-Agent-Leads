@@ -273,6 +273,73 @@ def validate_slot_set(slot_set: dict[str, Any], policy: dict[str, Any]) -> None:
             raise ContractSemanticError("slot_identity_mismatch")
 
 
+def validate_slot_set_context(
+    slot_set: dict[str, Any],
+    *,
+    policy: dict[str, Any],
+    readiness: dict[str, Any],
+    binding: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> None:
+    """Validate the exact current records from which a SlotSet claims derivation."""
+
+    validate_slot_set(slot_set, policy)
+    validate_calendar_snapshot(snapshot)
+    records = (policy, readiness, binding, snapshot)
+    if any(record["tenantId"] != slot_set["tenantId"] for record in records):
+        raise ContractSemanticError("cross_tenant_reference")
+
+    policy_ref = {
+        "recordId": policy["policyId"],
+        "recordType": "AvailabilityPolicy",
+        "version": policy["version"],
+    }
+    binding_ref = {
+        "recordId": binding["bindingId"],
+        "recordType": "CalendarProviderBinding",
+        "version": binding["version"],
+    }
+    snapshot_ref = {
+        "recordId": snapshot["snapshotId"],
+        "recordType": "CalendarSnapshot",
+        "version": 1,
+    }
+    readiness_ref = {
+        "recordId": readiness["decisionId"],
+        "recordType": "ReadinessDecision",
+        "version": 1,
+    }
+    if slot_set["policyRef"] != policy_ref:
+        raise ContractSemanticError("slot_set_policy_reference_mismatch")
+    if slot_set["providerBindingRef"] != binding_ref:
+        raise ContractSemanticError("slot_set_binding_reference_mismatch")
+    if snapshot["providerBindingRef"] != binding_ref:
+        raise ContractSemanticError("snapshot_binding_reference_mismatch")
+    if slot_set["snapshotRef"] != snapshot_ref:
+        raise ContractSemanticError("slot_set_snapshot_reference_mismatch")
+    if slot_set["readinessDecisionRef"] != readiness_ref:
+        raise ContractSemanticError("slot_set_readiness_reference_mismatch")
+    if slot_set["journeyRef"] != readiness["journeyRef"]:
+        raise ContractSemanticError("slot_set_journey_reference_mismatch")
+
+    derived_at = _time(slot_set["derivedAt"])
+    if readiness["result"] != "ready" or _time(readiness["expiresAt"]) <= derived_at:
+        raise ContractSemanticError("readiness_not_current")
+    if binding["lifecycle"] != "active":
+        raise ContractSemanticError("provider_binding_not_active")
+    for record in (policy, binding):
+        effective_to = record.get("effectiveTo")
+        if derived_at < _time(record["effectiveFrom"]) or (
+            effective_to is not None and derived_at >= _time(effective_to)
+        ):
+            raise ContractSemanticError("record_not_effective")
+    if not (
+        _time(snapshot["observedAt"]) <= derived_at
+        and _time(snapshot["rangeStart"]) <= derived_at < _time(snapshot["rangeEnd"])
+    ):
+        raise ContractSemanticError("snapshot_not_current")
+
+
 def validate_booking_command(command: dict[str, Any]) -> None:
     kind = command["commandKind"]
     slot_values = [
