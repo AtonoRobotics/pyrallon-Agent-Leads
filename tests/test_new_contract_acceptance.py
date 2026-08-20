@@ -268,6 +268,7 @@ def test_availability_semantic_fixture_matrix() -> None:
                     records["command"],
                     binding=records["binding"],
                     slot_set=records["slotSet"],
+                    current_snapshot=records["snapshot"],
                     current_provider_watermark=case["value"],
                     current_appointment_version=None,
                     authority_active=True,
@@ -373,6 +374,7 @@ def test_authority_watermark_version_idempotency_and_reconciliation() -> None:
         command,
         binding=valid["binding"],
         slot_set=valid["slotSet"],
+        current_snapshot=valid["snapshot"],
         current_provider_watermark="watermark-42",
         current_appointment_version=None,
         authority_active=True,
@@ -393,6 +395,91 @@ def test_authority_watermark_version_idempotency_and_reconciliation() -> None:
     missing_observation_evidence["evidenceIds"] = ["request-a"]
     with pytest.raises(ContractSemanticError, match="provider_observation_evidence_missing"):
         validate_reconciliation(valid["result"], missing_observation_evidence)
+
+
+def test_booking_rejects_slot_set_from_superseded_provider_snapshot() -> None:
+    valid = _load("availability_booking/valid.json")
+    command = copy.deepcopy(valid["command"])
+    command["providerWatermark"] = "watermark-43"
+    current_snapshot = copy.deepcopy(valid["snapshot"])
+    current_snapshot["snapshotId"] = "snapshot-b"
+    current_snapshot["providerWatermark"] = "watermark-43"
+
+    with pytest.raises(ContractSemanticError, match="slot_set_snapshot_reference_mismatch"):
+        validate_booking_context(
+            command,
+            binding=valid["binding"],
+            slot_set=valid["slotSet"],
+            current_snapshot=current_snapshot,
+            current_provider_watermark="watermark-43",
+            current_appointment_version=None,
+            authority_active=True,
+            evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "error"),
+    [
+        (None, None, "slot_set_required"),
+        ("tenantId", "tenant-other", "cross_tenant_reference"),
+        (
+            "providerBindingRef.recordId",
+            "binding-other",
+            "snapshot_binding_reference_mismatch",
+        ),
+        ("providerWatermark", "watermark-41", "stale_provider_watermark"),
+    ],
+)
+def test_booking_requires_exact_current_provider_snapshot(
+    path: str | None, value: Any, error: str
+) -> None:
+    valid = _load("availability_booking/valid.json")
+    snapshot = None if path is None else copy.deepcopy(valid["snapshot"])
+    if snapshot is not None:
+        _replace(snapshot, path, value)
+
+    with pytest.raises(ContractSemanticError, match=error):
+        validate_booking_context(
+            valid["command"],
+            binding=valid["binding"],
+            slot_set=valid["slotSet"],
+            current_snapshot=snapshot,
+            current_provider_watermark="watermark-42",
+            current_appointment_version=None,
+            authority_active=True,
+            evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
+        )
+
+
+def test_cancel_does_not_require_slot_set_or_provider_snapshot() -> None:
+    valid = _load("availability_booking/valid.json")
+    command = copy.deepcopy(valid["command"])
+    command.update(
+        {
+            "commandKind": "cancel",
+            "appointmentRef": {
+                "recordId": "appointment-a",
+                "recordType": "Appointment",
+                "version": 2,
+            },
+            "expectedAppointmentVersion": 2,
+            "slotSetRef": None,
+            "selectedSlotId": None,
+            "selectedSlotDigest": None,
+        }
+    )
+
+    validate_booking_context(
+        command,
+        binding=valid["binding"],
+        slot_set=None,
+        current_snapshot=None,
+        current_provider_watermark="watermark-42",
+        current_appointment_version=2,
+        authority_active=True,
+        evaluated_at=datetime(2026, 3, 8, 8, 1, tzinfo=UTC),
+    )
 
 
 def test_unknown_outcome_barrier_requires_source_linked_terminal_truth() -> None:
@@ -472,6 +559,7 @@ def test_revocation_race_and_concurrent_version_fail_closed() -> None:
             valid["command"],
             binding=suspended,
             slot_set=valid["slotSet"],
+            current_snapshot=valid["snapshot"],
             current_provider_watermark="watermark-42",
             current_appointment_version=None,
             authority_active=True,
@@ -490,6 +578,7 @@ def test_revocation_race_and_concurrent_version_fail_closed() -> None:
             reschedule,
             binding=valid["binding"],
             slot_set=valid["slotSet"],
+            current_snapshot=valid["snapshot"],
             current_provider_watermark="watermark-42",
             current_appointment_version=3,
             authority_active=True,
@@ -506,6 +595,7 @@ def test_booking_command_rejects_unbound_or_expired_selected_slot() -> None:
             wrong_slot,
             binding=valid["binding"],
             slot_set=valid["slotSet"],
+            current_snapshot=valid["snapshot"],
             current_provider_watermark="watermark-42",
             current_appointment_version=None,
             authority_active=True,
@@ -517,6 +607,7 @@ def test_booking_command_rejects_unbound_or_expired_selected_slot() -> None:
             valid["command"],
             binding=valid["binding"],
             slot_set=valid["slotSet"],
+            current_snapshot=valid["snapshot"],
             current_provider_watermark="watermark-42",
             current_appointment_version=None,
             authority_active=True,

@@ -391,6 +391,7 @@ def validate_booking_context(
     *,
     binding: dict[str, Any],
     slot_set: dict[str, Any] | None,
+    current_snapshot: dict[str, Any] | None,
     current_provider_watermark: str,
     current_appointment_version: int | None,
     authority_active: bool,
@@ -422,9 +423,12 @@ def validate_booking_context(
     if _time(command["expiresAt"]) <= evaluated_at:
         raise ContractSemanticError("command_expired")
     if command["commandKind"] in {"book", "reschedule"}:
-        if slot_set is None:
+        if slot_set is None or current_snapshot is None:
             raise ContractSemanticError("slot_set_required")
-        if slot_set["tenantId"] != command["tenantId"]:
+        validate_calendar_snapshot(current_snapshot)
+        if any(
+            record["tenantId"] != command["tenantId"] for record in (slot_set, current_snapshot)
+        ):
             raise ContractSemanticError("cross_tenant_reference")
         expected_slot_set_ref = {
             "recordId": slot_set["slotSetId"],
@@ -433,6 +437,17 @@ def validate_booking_context(
         }
         if command["slotSetRef"] != expected_slot_set_ref:
             raise ContractSemanticError("command_slot_set_reference_mismatch")
+        expected_snapshot_ref = {
+            "recordId": current_snapshot["snapshotId"],
+            "recordType": "CalendarSnapshot",
+            "version": 1,
+        }
+        if slot_set["snapshotRef"] != expected_snapshot_ref:
+            raise ContractSemanticError("slot_set_snapshot_reference_mismatch")
+        if current_snapshot["providerBindingRef"] != binding_ref:
+            raise ContractSemanticError("snapshot_binding_reference_mismatch")
+        if current_snapshot["providerWatermark"] != current_provider_watermark:
+            raise ContractSemanticError("stale_provider_watermark")
         if (
             slot_set["journeyRef"] != command["journeyRef"]
             or slot_set["providerBindingRef"] != binding_ref
