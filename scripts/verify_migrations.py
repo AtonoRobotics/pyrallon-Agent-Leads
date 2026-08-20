@@ -263,9 +263,57 @@ def main() -> None:
             raise SystemExit(f"OPEN-026 migration missing: {fragment}")
     if "rollback refused" not in open026_rollback.read_text():
         raise SystemExit("OPEN-026 rollback must refuse activation evidence loss")
+    activation_concurrency = ROOT / "migrations" / "0015_release_activation_concurrency.sql"
+    activation_concurrency_rollback = (
+        ROOT / "migrations" / "0015_release_activation_concurrency.rollback.sql"
+    )
+    if not activation_concurrency.is_file() or not activation_concurrency_rollback.is_file():
+        raise SystemExit("missing Release Activation 1.1 concurrency migration or rollback refusal")
+    activation_concurrency_sql = activation_concurrency.read_text()
+    for fragment in (
+        "activation_version integer",
+        "release_activation_decisions_version_uidx",
+        "release_activation_expected_version_matches",
+        "expectedActivationVersion",
+    ):
+        if fragment not in activation_concurrency_sql:
+            raise SystemExit(f"Release Activation concurrency migration missing: {fragment}")
+    if "rollback refused" not in activation_concurrency_rollback.read_text():
+        raise SystemExit("Release Activation concurrency rollback must refuse decision loss")
+    credentials = ROOT / "migrations" / "0016_connector_credentials.sql"
+    credentials_rollback = ROOT / "migrations" / "0016_connector_credentials.rollback.sql"
+    if not credentials.is_file() or not credentials_rollback.is_file():
+        raise SystemExit("missing connector credential forward migration or rollback refusal")
+    credentials_sql = credentials.read_text()
+    for fragment in (
+        "CREATE TABLE IF NOT EXISTS connector_oauth_sessions",
+        "CREATE TABLE IF NOT EXISTS connector_credentials",
+        "FORCE ROW LEVEL SECURITY",
+        "ciphertext bytea NOT NULL",
+        "code_verifier text NOT NULL",
+    ):
+        if fragment not in credentials_sql:
+            raise SystemExit(f"connector credential migration missing: {fragment}")
+    if "rollback refused" not in credentials_rollback.read_text():
+        raise SystemExit("connector credential rollback must refuse credential evidence loss")
+    platform_oauth = ROOT / "migrations" / "0017_platform_oauth_clients.sql"
+    platform_oauth_rollback = ROOT / "migrations" / "0017_platform_oauth_clients.rollback.sql"
+    if not platform_oauth.is_file() or not platform_oauth_rollback.is_file():
+        raise SystemExit("missing platform OAuth client migration or rollback refusal")
+    platform_sql = platform_oauth.read_text()
+    for fragment in (
+        "CREATE TABLE IF NOT EXISTS platform_oauth_clients",
+        "issuer text PRIMARY KEY",
+        "ciphertext bytea NOT NULL",
+    ):
+        if fragment not in platform_sql:
+            raise SystemExit(f"platform OAuth client migration missing: {fragment}")
+    if "rollback refused" not in platform_oauth_rollback.read_text():
+        raise SystemExit("platform OAuth client rollback must refuse client evidence loss")
     print(
         "canonical, evidence, identity, ontology 0.2/0.3, Habitat, inbound, operator 1.0/1.1, "
-        "OT01 acknowledgment, OPEN-025 authorization, OPEN-026 activation, and control-plane "
+        "OT01 acknowledgment, OPEN-025 authorization, OPEN-026 activation, Release Activation "
+        "1.1 concurrency, connector credentials, platform OAuth clients, and control-plane "
         "migration integrity verified"
     )
 

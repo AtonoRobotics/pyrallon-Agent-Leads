@@ -24,6 +24,13 @@ from .actor_authorization import ActorTenantAuthorizationRepository
 from .canonical_habitat import CanonicalLockedHabitatStateReader, PlatformPolicyEvaluator
 from .canonical_repository import CanonicalRepository
 from .capture import CaptureIncomplete
+from .cognition_authorization import CognitionAuthorization
+from .connector_authorization import (
+    ConnectorAuthorization,
+    PlatformOAuthStore,
+    oauth_clients_from_env,
+    parse_oauth_state,
+)
 from .connector_service import ConnectorDenied, ConnectorGateway
 from .errors import ContractViolation
 from .habitat import HabitatKernel, HabitatState
@@ -34,6 +41,14 @@ from .operator_commands import OperatorCommandError, OperatorCommandService
 from .operator_projection import OperatorProjection
 from .release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from .telemetry import TelemetryRecorder
+from .tenant_setup import SetupRejected, bootstrap_tenant
+from .workspace import (
+    assemble_journey,
+    assemble_workspace,
+    propose_appointment,
+    record_assertion,
+    record_suppression,
+)
 
 
 def connect(dsn: str) -> Any:
@@ -68,6 +83,7 @@ class ControlPlane:
         self._control_token = control_token
         self._release_public_keys = release_public_keys
         self._gate_registry, self._gate_registry_digest = load_gate_registry(gate_registry_path)
+        self._oauth_clients = oauth_clients_from_env()
 
     def handle(
         self, method: str, path: str, headers: dict[str, str], body: bytes
@@ -76,14 +92,45 @@ class ControlPlane:
             return 401, _error("authentication_required", "control token required")
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
-        payload = json.loads(body.decode()) if body else {}
         tenant_id = headers.get("x-buyer-ops-tenant", "")
         actor_id = headers.get("x-buyer-ops-actor", "")
+        try:
+            payload = json.loads(body.decode()) if body else {}
+            if not isinstance(payload, dict):
+                raise ValueError("request body must be a JSON object")
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            if route == "/v1/commands":
+                error = OperatorCommandError(
+                    "validation_failed", retryable=False, detail="invalid JSON request body"
+                )
+                return 422, _operator_error(error, tenant_id)
+            return 422, _error("validation_failed", str(exc))
         try:
             if method == "GET" and route == "/health":
                 return 200, {"status": "ok"}
             if method == "GET" and route == "/v1/actors/tenancies":
                 return 200, {"tenancies": self._tenancies(actor_id)}
+            if method == "POST" and route == "/v1/setup/tenant":
+                if not actor_id:
+                    return 401, _error("authentication_required", "actor required")
+                return 200, self._setup_tenant(actor_id, payload)
+            if method == "POST" and route == "/v1/connectors/oauth/complete":
+                if not actor_id:
+                    return 401, _error("authentication_required", "actor required")
+                return 200, self._oauth_complete(actor_id, payload)
+            if method == "GET" and route == "/v1/platform/oauth-clients":
+                return 200, {"clients": self._platform_oauth_clients()}
+            if method == "GET" and route == "/v1/platform/oauth-clients/material":
+                return 200, {"clients": self._platform_oauth_material()}
+            if method == "POST" and route == "/v1/platform/oauth-clients":
+                if not actor_id:
+                    return 401, _error("authentication_required", "actor required")
+                if not self._tenancies(actor_id):
+                    return 403, _error(
+                        "authority_denied",
+                        "admit brokerage identity before registering this application's OAuth clients",
+                    )
+                return 200, self._save_platform_oauth_client(payload)
             if not tenant_id:
                 return 403, _error("authority_denied", "tenant header required")
             if method == "GET" and route == "/v1/journeys":
@@ -91,6 +138,17 @@ class ControlPlane:
             if method == "GET" and route.startswith("/v1/journeys/"):
                 journey_id = route.split("/", 3)[-1]
                 return 200, self._journey(tenant_id, actor_id, journey_id)
+            if method == "GET" and route == "/v1/workspace":
+                return 200, self._workspace(tenant_id, actor_id)
+            if method == "GET" and route.startswith("/v1/workspace/journeys/"):
+                journey_id = route.rsplit("/", 1)[-1]
+                return 200, self._workspace_journey(tenant_id, actor_id, journey_id)
+            if method == "POST" and route == "/v1/workspace/appointments":
+                return 200, self._propose_appointment(tenant_id, actor_id, payload)
+            if method == "POST" and route == "/v1/workspace/assertions":
+                return 200, self._record_assertion(tenant_id, actor_id, payload)
+            if method == "POST" and route == "/v1/workspace/suppressions":
+                return 200, self._record_suppression(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/commands":
                 return 200, self._command(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/habitat/evaluate-authority":
@@ -103,6 +161,24 @@ class ControlPlane:
                 return 200, self._ingress_envelope(tenant_id, payload)
             if method == "GET" and route == "/v1/connectors":
                 return 200, {"connectors": self._connectors(tenant_id)}
+            if method == "POST" and route == "/v1/connectors/oauth/start":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._oauth_start(tenant_id, actor_id, payload)
+            if method == "GET" and route == "/v1/cognition/identities":
+                self._require_actor(tenant_id, actor_id)
+                return 200, {"identities": self._cognition_identities(tenant_id, actor_id)}
+            if method == "POST" and route == "/v1/cognition/oauth/start":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._cognition_oauth_start(tenant_id, actor_id, payload)
+            if method == "POST" and route == "/v1/cognition/oauth/poll":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._cognition_oauth_poll(tenant_id, actor_id, payload)
+            if method == "POST" and route == "/v1/cognition/metered":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._cognition_metered(tenant_id, actor_id, payload)
+            if method == "POST" and route == "/v1/cognition/local":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._cognition_local(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/connectors/invoke":
                 return 200, self._invoke(tenant_id, payload, headers.get("x-buyer-ops-permit", ""))
             if method == "GET" and route == "/v1/activation":
@@ -120,6 +196,8 @@ class ControlPlane:
                 return 200, self._canonical_save(tenant_id, payload)
             if method == "POST" and route == "/v1/actor-authorizations":
                 return 200, self._admit_actor_authorization(tenant_id, payload)
+            if method == "POST" and route == "/v1/operator-policies":
+                return 200, self._admit_operator_policy(tenant_id, payload)
             return 404, _error("validation_failed", "unknown route")
         except KeyError as exc:
             return 404, _error("evidence_unavailable", str(exc))
@@ -127,9 +205,14 @@ class ControlPlane:
             status = 409 if exc.code in {"version_conflict", "payload_mismatch"} else 403
             if exc.code == "authentication_required":
                 status = 401
+            elif exc.code in {"validation_failed", "configuration_incomplete"}:
+                status = 422
             return status, _operator_error(exc, tenant_id)
         except CaptureIncomplete as exc:
             return 422, _error(exc.code, exc.detail)
+        except SetupRejected as exc:
+            status = 403 if exc.code in {"authority_denied", "policy_denied"} else 422
+            return status, _error(exc.code, exc.detail)
         except IngressRejected as exc:
             return 409 if exc.code == "reconciliation_required" else 403, _error(exc.code, str(exc))
         except ConnectorDenied as exc:
@@ -147,23 +230,102 @@ class ControlPlane:
     def _connection(self) -> Any:
         return connect(self._dsn)
 
-    def _tenancies(self, actor_id: str) -> list[dict[str, str]]:
+    def _setup_tenant(self, actor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            return bootstrap_tenant(connection, payload, actor_id=actor_id)
+        finally:
+            connection.close()
+
+    def _workspace(self, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        self._require_actor(tenant_id, actor_id)
+        connection = self._connection()
+        try:
+            repo = CanonicalRepository(connection, tenant_id=tenant_id)
+            payload = assemble_workspace(repo)
+            payload["connectors"] = self._connectors(tenant_id)
+            payload["activation"] = {"decisions": self._activation(tenant_id)}
+            return payload
+        finally:
+            connection.close()
+
+    def _workspace_journey(self, tenant_id: str, actor_id: str, journey_id: str) -> dict[str, Any]:
+        self._require_actor(tenant_id, actor_id)
+        connection = self._connection()
+        try:
+            return assemble_journey(CanonicalRepository(connection, tenant_id=tenant_id), journey_id)
+        finally:
+            connection.close()
+
+    def _propose_appointment(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        self._require_actor(tenant_id, actor_id)
+        connection = self._connection()
+        try:
+            return propose_appointment(
+                CanonicalRepository(connection, tenant_id=tenant_id),
+                journey_id=str(payload.get("journeyId") or ""),
+                starts_at=str(payload.get("startsAt") or ""),
+                actor_id=actor_id,
+                time_zone=str(payload.get("timeZone") or "America/Chicago"),
+            )
+        finally:
+            connection.close()
+
+    def _record_assertion(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        self._require_actor(tenant_id, actor_id)
+        connection = self._connection()
+        try:
+            return record_assertion(
+                CanonicalRepository(connection, tenant_id=tenant_id),
+                journey_id=str(payload.get("journeyId") or ""),
+                criterion_code=str(payload.get("criterion") or ""),
+                value=str(payload.get("value") or ""),
+                actor_id=actor_id,
+            )
+        finally:
+            connection.close()
+
+    def _record_suppression(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        self._require_actor(tenant_id, actor_id)
+        connection = self._connection()
+        try:
+            return record_suppression(
+                CanonicalRepository(connection, tenant_id=tenant_id),
+                journey_id=str(payload.get("journeyId") or ""),
+                actor_id=actor_id,
+            )
+        finally:
+            connection.close()
+
+    def _tenancies(self, actor_id: str) -> list[dict[str, Any]]:
         if not actor_id:
             return []
         connection = self._connection()
         try:
             grants = ActorTenantAuthorizationRepository(connection).list_current_for_actor(actor_id)
+            return [_tenancy_projection(item, connection) for item in grants]
         finally:
             connection.close()
-        return [
-            {"tenant_id": str(item["tenantId"]), "authorization_id": str(item["recordId"])}
-            for item in grants
-        ]
 
     def _admit_actor_authorization(self, tenant_id: str, record: dict[str, Any]) -> dict[str, Any]:
         connection = self._connection()
         try:
             return ActorTenantAuthorizationRepository(connection, tenant_id=tenant_id).save(record)
+        finally:
+            connection.close()
+
+    def _admit_operator_policy(self, tenant_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        from .operator_policy import OperatorPolicyRepository
+
+        connection = self._connection()
+        try:
+            return OperatorPolicyRepository(connection, tenant_id=tenant_id).admit(record)
         finally:
             connection.close()
 
@@ -269,12 +431,151 @@ class ControlPlane:
         finally:
             connection.close()
 
+    def _platform_oauth(self, connection: Any) -> PlatformOAuthStore:
+        return PlatformOAuthStore(connection, permit_secret=self._permit_secret)
+
+    def _platform_oauth_clients(self) -> list[dict[str, str]]:
+        connection = self._connection()
+        try:
+            return self._platform_oauth(connection).list_public()
+        finally:
+            connection.close()
+
+    def _platform_oauth_material(self) -> dict[str, dict[str, str]]:
+        connection = self._connection()
+        try:
+            return self._platform_oauth(connection).material()
+        finally:
+            connection.close()
+
+    def _save_platform_oauth_client(self, payload: dict[str, Any]) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            return self._platform_oauth(connection).save(
+                issuer=str(payload.get("issuer") or ""),
+                client_id=str(payload.get("clientId") or ""),
+                client_secret=str(payload.get("clientSecret") or ""),
+                directory_id=str(payload.get("directoryId") or "") or None,
+            )
+        finally:
+            connection.close()
+
+    def _cognition_auth(self, connection: Any, tenant_id: str, actor_id: str) -> CognitionAuthorization:
+        return CognitionAuthorization(
+            connection,
+            tenant_id=tenant_id,
+            permit_secret=self._permit_secret,
+            actor_id=actor_id,
+        )
+
+    def _cognition_identities(self, tenant_id: str, actor_id: str) -> list[dict[str, str]]:
+        connection = self._connection()
+        try:
+            return self._cognition_auth(connection, tenant_id, actor_id).identities()
+        finally:
+            connection.close()
+
+    def _cognition_oauth_start(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            auth = self._cognition_auth(connection, tenant_id, actor_id)
+            connector_id = str(payload.get("connectorId") or "")
+            auth.refuse_unsupported(connector_id)
+            if connector_id != "openai.chatgpt":
+                raise SetupRejected("validation_failed", "only ChatGPT subscription uses device OAuth")
+            return auth.start_chatgpt_device()
+        finally:
+            connection.close()
+
+    def _cognition_oauth_poll(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            return self._cognition_auth(connection, tenant_id, actor_id).poll_chatgpt_device(
+                str(payload.get("sessionId") or "")
+            )
+        finally:
+            connection.close()
+
+    def _cognition_metered(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            auth = self._cognition_auth(connection, tenant_id, actor_id)
+            connector_id = str(payload.get("connectorId") or "")
+            auth.refuse_unsupported(connector_id)
+            return auth.bind_metered(
+                connector_id=connector_id,
+                api_key=str(payload.get("apiKey") or ""),
+            )
+        finally:
+            connection.close()
+
+    def _cognition_local(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            return self._cognition_auth(connection, tenant_id, actor_id).bind_local(
+                base_url=str(payload.get("baseUrl") or ""),
+                model_id=str(payload.get("modelId") or ""),
+                token=str(payload.get("token") or ""),
+            )
+        finally:
+            connection.close()
+
+    def _connector_auth(self, connection: Any, tenant_id: str) -> ConnectorAuthorization:
+        return ConnectorAuthorization(
+            connection,
+            tenant_id=tenant_id,
+            permit_secret=self._permit_secret,
+            oauth_clients=self._oauth_clients,
+        )
+
     def _connectors(self, tenant_id: str) -> list[dict[str, Any]]:
         connection = self._connection()
         try:
             repo = CanonicalRepository(connection, tenant_id=tenant_id)
             activation = self._activation_controller(connection, tenant_id)
-            return ConnectorGateway(repo, activation, tenant_id=tenant_id).inventory()
+            rows = ConnectorGateway(repo, activation, tenant_id=tenant_id).inventory()
+            bindings = self._connector_auth(connection, tenant_id).bindings()
+            for row in rows:
+                bound = bindings.get(str(row.get("grant_id")), {})
+                row["authorization"] = bound.get("authorization", "unbound")
+                row["provider_account_ref"] = bound.get("provider_account_ref")
+            return rows
+        finally:
+            connection.close()
+
+    def _oauth_start(self, tenant_id: str, actor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            return self._connector_auth(connection, tenant_id).start_oauth(
+                actor_id=actor_id,
+                connector_id=str(payload.get("connectorId") or ""),
+                redirect_uri=str(payload.get("redirectUri") or ""),
+            )
+        finally:
+            connection.close()
+
+    def _oauth_complete(self, actor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        state = str(payload.get("state") or "")
+        tenant_id, _session_id = parse_oauth_state(
+            self._permit_secret, state, now=datetime.now(UTC)
+        )
+        del _session_id
+        connection = self._connection()
+        try:
+            return self._connector_auth(connection, tenant_id).complete_oauth(
+                code=str(payload.get("code") or ""),
+                state=state,
+                actor_id=actor_id,
+                account_sid=str(payload.get("accountSid") or ""),
+            )
         finally:
             connection.close()
 
@@ -360,6 +661,46 @@ class ControlPlane:
             raise OperatorCommandError(
                 "authority_denied", retryable=False, detail="no tenant authorization"
             )
+
+
+def _tenancy_projection(grant: dict[str, Any], connection: Any | None = None) -> dict[str, Any]:
+    authorization_ref = {
+        "record_id": str(grant["recordId"]),
+        "record_type": "ActorTenantAuthorization",
+        "version": int(grant["authorizationVersion"]),
+        "status": str(grant["status"]),
+    }
+    policy_id = str(grant["policyVersion"])
+    policy_ref: dict[str, Any] | None = None
+    if connection is not None:
+        from .operator_policy import OperatorPolicyRepository
+
+        try:
+            policy = OperatorPolicyRepository(
+                connection, tenant_id=str(grant["tenantId"])
+            ).get_current(policy_id)
+        except Exception:
+            policy = None
+        if policy is not None:
+            policy_ref = {
+                "record_id": policy_id,
+                "record_type": "OperatorPolicy",
+                "version": int(policy["record_version"]),
+                "status": str(policy.get("status") or "active"),
+            }
+    return {
+        "tenant_id": str(grant["tenantId"]),
+        "principal_id": str(grant["principalId"]),
+        "role": str(grant["role"]),
+        "authorization_id": str(grant["recordId"]),
+        "authorization_version": int(grant["authorizationVersion"]),
+        "authorization_ref": authorization_ref,
+        "policy_version": policy_id,
+        "policy_ref": policy_ref,
+        "allowed_commands": list(grant["allowedCommands"]),
+        "record_scopes": list(grant["recordScopes"]),
+        "status": str(grant["status"]),
+    }
 
 
 def _error(code: str, detail: str) -> dict[str, Any]:

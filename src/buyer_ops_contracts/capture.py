@@ -37,12 +37,17 @@ def classify_sender(sender: str) -> tuple[str, str]:
     value = sender.strip()
     if _EMAIL.fullmatch(value.lower()):
         return "email", value.lower()
-    digits = re.sub(r"[^\d+]", "", value)
-    if _E164.fullmatch(digits):
-        return "phone", digits
+    compact = re.sub(r"[^\d+]", "", value)
+    if _E164.fullmatch(compact):
+        return "phone", compact
+    national = re.sub(r"\D", "", value)
+    if len(national) == 10:
+        return "phone", f"+1{national}"
+    if len(national) == 11 and national.startswith("1"):
+        return "phone", f"+{national}"
     raise CaptureIncomplete(
         "validation_failed",
-        "form senderEndpoint must be an email or E.164 phone",
+        "form senderEndpoint must be an email or phone number",
     )
 
 

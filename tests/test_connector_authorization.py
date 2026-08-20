@@ -1,0 +1,309 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import pytest
+
+from buyer_ops_contracts.connector_authorization import (
+    ConnectorAuthorization,
+    PlatformOAuthStore,
+    parse_oauth_state,
+)
+from buyer_ops_contracts.tenant_setup import SetupRejected
+
+NOW = datetime(2026, 8, 19, 18, 0, tzinfo=UTC)
+SECRET = b"x" * 32
+
+
+class _Cursor:
+    def __init__(self, store: dict[str, Any]) -> None:
+        self.store = store
+        self.params: tuple[object, ...] = ()
+        self.sql = ""
+        self._one: tuple[object, ...] | None = None
+        self._many: list[tuple[object, ...]] = []
+
+    def __enter__(self) -> _Cursor:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(self, statement: str, parameters: tuple[object, ...] = ()) -> None:
+        self.sql = statement
+        self.params = parameters
+        if "INSERT INTO connector_oauth_sessions" in statement:
+            self.store["sessions"][str(parameters[1])] = {
+                "actor_id": parameters[2],
+                "connector_id": parameters[3],
+                "grant_id": parameters[4],
+                "redirect_uri": parameters[5],
+                "code_verifier": parameters[6],
+                "expires_at": parameters[7],
+                "consumed_at": None,
+            }
+        elif "FROM connector_oauth_sessions" in statement and "FOR UPDATE" in statement:
+            session = self.store["sessions"].get(str(parameters[1]))
+            if session is None:
+                self._one = None
+            else:
+                self._one = (
+                    parameters[1],
+                    session["actor_id"],
+                    session["connector_id"],
+                    session["grant_id"],
+                    session["redirect_uri"],
+                    session["code_verifier"],
+                    session["expires_at"],
+                    session["consumed_at"],
+                )
+        elif "UPDATE connector_oauth_sessions" in statement:
+            session = self.store["sessions"].get(str(parameters[1]))
+            if session is not None:
+                session["consumed_at"] = NOW
+        elif "INSERT INTO connector_credentials" in statement:
+            self.store["credentials"][str(parameters[1])] = {
+                "account": parameters[4],
+                "status": "bound",
+            }
+        elif "FROM connector_credentials" in statement:
+            self._many = [
+                (grant_id, "google.workspace.email", row["account"], row["status"])
+                for grant_id, row in self.store["credentials"].items()
+            ]
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self._one
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self._many
+
+
+class _Connection:
+    def __init__(self) -> None:
+        self.store: dict[str, Any] = {"sessions": {}, "credentials": {}}
+        self.cursor_instance = _Cursor(self.store)
+
+    def cursor(self) -> _Cursor:
+        return self.cursor_instance
+
+    def commit(self) -> None:
+        return None
+
+    def rollback(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+class _Http:
+    def __init__(self, responses: dict[str, tuple[int, Any]]) -> None:
+        self.responses = responses
+        self.calls: list[tuple[str, str]] = []
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        data: bytes | None,
+        timeout: float,
+    ) -> tuple[int, Any]:
+        del headers, data, timeout
+        self.calls.append((method, url))
+        for prefix, payload in self.responses.items():
+            if prefix in url:
+                return payload
+        return 500, {"error": "unexpected"}
+
+
+def _auth(http: _Http | None = None) -> ConnectorAuthorization:
+    return ConnectorAuthorization(
+        _Connection(),
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={
+            "google": {"client_id": "google-client", "client_secret": "google-secret"},
+            "microsoft": {
+                "client_id": "ms-client",
+                "client_secret": "ms-secret",
+                "directory_id": "common",
+            },
+        },
+        http=http or _Http({}),
+        clock=lambda: NOW,
+    )
+
+
+def test_oauth_state_round_trip() -> None:
+    auth = _auth()
+    expires = NOW + timedelta(minutes=10)
+    state = auth._sign_state("session-1", expires)
+    tenant_id, session_id = parse_oauth_state(SECRET, state, now=NOW)
+    assert tenant_id == "brokerage-live-1"
+    assert session_id == "session-1"
+
+
+def test_oauth_state_rejects_tampering() -> None:
+    auth = _auth()
+    state = auth._sign_state("session-1", NOW + timedelta(minutes=10))
+    with pytest.raises(SetupRejected, match="not authentic"):
+        parse_oauth_state(SECRET, state + "00", now=NOW)
+
+
+def test_platform_oauth_store_accepts_google_and_twilio() -> None:
+    store = PlatformOAuthStore(_Connection(), permit_secret=SECRET)
+    with pytest.raises(SetupRejected, match="issuer must be"):
+        store.save(issuer="imap", client_id="id", client_secret="secret")
+    with pytest.raises(SetupRejected, match="Twilio Connect App SID"):
+        store.save(issuer="twilio", client_id="", client_secret="")
+    saved = store.save(issuer="twilio", client_id="CNconnectapp", client_secret="")
+    assert saved == {"issuer": "twilio", "clientId": "CNconnectapp", "configured": "true"}
+
+
+def test_start_oauth_requires_configured_client() -> None:
+    auth = ConnectorAuthorization(
+        _Connection(),
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={},
+        clock=lambda: NOW,
+    )
+    with pytest.raises(SetupRejected, match="google_oauth_app_required"):
+        auth.start_oauth(
+            actor_id="actor-1",
+            connector_id="google.workspace.email",
+            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+        )
+
+
+def test_google_oauth_rejects_private_http_redirect() -> None:
+    auth = _auth()
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}",
+        "grantState": "pending",
+    }
+    with pytest.raises(SetupRejected, match="127.0.0.1"):
+        auth.start_oauth(
+            actor_id="actor-1",
+            connector_id="google.workspace",
+            redirect_uri="http://192.168.0.50:8180/api/connectors/callback",
+        )
+
+
+def test_google_workspace_connect_asks_for_mail_and_calendar() -> None:
+    auth = _auth()
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}",
+        "grantState": "pending",
+    }
+    started = auth.start_oauth(
+        actor_id="actor-1",
+        connector_id="google.workspace",
+        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+    )
+    assert "calendar.events" in started["authorizationUrl"]
+    assert "gmail.send" in started["authorizationUrl"]
+    assert started["connectorId"] == "google.workspace"
+
+
+def test_start_oauth_refuses_unknown_connector() -> None:
+    with pytest.raises(SetupRejected, match="does not use OAuth"):
+        _auth().start_oauth(
+            actor_id="actor-1",
+            connector_id="imap.password",
+            redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+        )
+
+
+def test_connect_twilio_redirects_to_twilio() -> None:
+    auth = ConnectorAuthorization(
+        _Connection(),
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={"twilio": {"client_id": "CNconnectapp", "client_secret": ""}},
+        clock=lambda: NOW,
+    )
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": "grant:twilio.sms:brokerage-live-1",
+        "grantState": "pending",
+    }
+    started = auth.start_oauth(
+        actor_id="actor-1",
+        connector_id="twilio.sms",
+        redirect_uri="http://127.0.0.1:8180/api/connectors/callback",
+    )
+    assert started["authorizationUrl"].startswith("https://www.twilio.com/authorize/CNconnectapp")
+
+
+def test_complete_oauth_exchanges_code_and_binds_account() -> None:
+    http = _Http(
+        {
+            "oauth2.googleapis.com/token": (
+                200,
+                {
+                    "access_token": "ya29.access",
+                    "refresh_token": "1//refresh",
+                    "expires_in": 3600,
+                    "scope": "https://www.googleapis.com/auth/gmail.send",
+                    "token_type": "Bearer",
+                },
+            ),
+            "googleapis.com/oauth2/v2/userinfo": (200, {"email": "agent@atonobrokerage.com"}),
+        }
+    )
+    auth = _auth(http)
+    expires = NOW + timedelta(minutes=10)
+    session_id = "sess_live"
+    auth._connection.store["sessions"][session_id] = {  # type: ignore[attr-defined]
+        "actor_id": "actor-1",
+        "connector_id": "google.workspace.email",
+        "grant_id": "grant:google.workspace.email:brokerage-live-1",
+        "redirect_uri": "http://127.0.0.1:8180/api/connectors/callback",
+        "code_verifier": "verifier",
+        "expires_at": expires,
+        "consumed_at": None,
+    }
+    state = auth._sign_state(session_id, expires)
+    auth._client_for = lambda issuer: {  # type: ignore[method-assign]
+        "client_id": "google-client",
+        "client_secret": "google-secret",
+    }
+    auth._require_or_create_grant = lambda connector_id, spec: {  # type: ignore[method-assign]
+        "id": f"grant:{connector_id}:brokerage-live-1",
+        "grantState": "pending",
+    }
+    auth._activate_grant = lambda grant_id, account: {  # type: ignore[method-assign]
+        "id": grant_id,
+        "grantState": "active",
+        "grantId": grant_id,
+    }
+    result = auth.complete_oauth(code="4/real-code", state=state, actor_id="actor-1")
+    assert result["authorization"] == "bound"
+    assert result["providerAccountRef"] == "agent@atonobrokerage.com"
+    assert result["grantState"] == "active"
+    assert http.calls[0][0] == "POST"
+    assert "oauth2.googleapis.com/token" in http.calls[0][1]
+    assert "userinfo" in http.calls[1][1]
+    assert "grant:google.workspace.email:brokerage-live-1" in auth._connection.store["credentials"]  # type: ignore[attr-defined]
+
+
+def test_complete_oauth_refuses_replayed_session() -> None:
+    auth = _auth()
+    expires = NOW + timedelta(minutes=10)
+    session_id = "sess_replay"
+    auth._connection.store["sessions"][session_id] = {  # type: ignore[attr-defined]
+        "actor_id": "actor-1",
+        "connector_id": "google.workspace.email",
+        "grant_id": "grant-1",
+        "redirect_uri": "http://127.0.0.1:8180/api/connectors/callback",
+        "code_verifier": "verifier",
+        "expires_at": expires,
+        "consumed_at": NOW,
+    }
+    state = auth._sign_state(session_id, expires)
+    with pytest.raises(SetupRejected, match="already consumed"):
+        auth.complete_oauth(code="4/code", state=state, actor_id="actor-1")

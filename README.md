@@ -7,6 +7,8 @@ must fail closed where a deployment decision or executable schema is absent.
 The implementation is not yet a production-complete Buyer Operations system. In particular, do not
 activate provider effects or live cognition from this repository state. Capability activation remains
 subject to `PRODUCTION-GATE-REGISTRY.yaml` and the open decisions in `DESIGN-TRUTH-LEDGER.md`.
+Canonical reference mappings and the bindings that remain unavailable are enumerated in
+`CANONICAL-REFERENCE-BINDING-AUDIT.md`; affected writes intentionally fail closed.
 
 ## Requirements
 
@@ -28,12 +30,19 @@ and the cryptographic implementation used for encrypted artifacts and Ed25519 ev
 Control plane and Temporal worker require PostgreSQL 17. The control plane also requires
 `BUYER_OPS_CONTROL_TOKEN`, `BUYER_OPS_PERMIT_SECRET` ≥32 bytes,
 `BUYER_OPS_GATE_REGISTRY_PATH`, and `BUYER_OPS_RELEASE_PUBLIC_KEYS_JSON` (a JSON object
-mapping release key IDs to base64url-encoded raw Ed25519 public keys). The worker requires
-`TEMPORAL_ADDRESS`:
+mapping release key IDs to base64url-encoded raw Ed25519 public keys). A Temporal worker embedding
+requires `BUYER_OPS_DATABASE_DSN`, `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, a complete
+`TEMPORAL_WORKER_CONFIGURATION_JSON` matching `WorkerConfiguration`, and a governed OT-01
+`JourneyState` derivation. The published contracts do not currently provide that derivation, so the
+standalone worker remains operationally unavailable rather than installing an implementation-defined
+compiler interface.
+The capture-side workflow starter likewise requires `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
+`TEMPORAL_TASK_QUEUE`, and a complete `TEMPORAL_RUNTIME_POLICY_JSON` once any Temporal address is
+configured. It does not supply a namespace or retry-policy default, and duplicate workflow starts
+propagate Temporal's rejection.
 
 ```bash
 uv run python -m buyer_ops_contracts.control_plane
-uv run python -m buyer_ops_contracts.worker_main
 ```
 
 ## Verification
@@ -84,6 +93,15 @@ Apply migrations in filename order:
 4. `0004_ontology_0_2.sql`
 5. `0005_habitat_permits.sql`
 6. `0006_ontology_0_3.sql`
+7. `0007_inbound_events.sql`
+8. `0008_operator_commands.sql`
+9. `0009_control_plane.sql`
+10. `0010_external_message_identity.sql`
+11. `0011_operator_surface_1_1.sql`
+12. `0012_ot01_acknowledgment.sql`
+13. `0013_actor_tenant_authorization.sql`
+14. `0014_release_activation.sql`
+15. `0015_release_activation_concurrency.sql`
 
 Each migration has a rollback script for an empty, unactivated installation. Rollback deliberately
 refuses to discard populated canonical, evidence, identity, authority-decision, or permit stores;

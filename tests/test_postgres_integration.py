@@ -54,6 +54,7 @@ from buyer_ops_contracts.operator_surface import (
 from buyer_ops_contracts.release_activation_v1 import ReleaseActivationRepository
 from buyer_ops_contracts.release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from buyer_ops_contracts.retention import RetentionConfiguration, RetentionPolicy
+from buyer_ops_contracts.telemetry import TelemetryRecorder, load_metric_catalog
 
 pytestmark = pytest.mark.postgres
 
@@ -80,6 +81,12 @@ OPERATOR_11_MIGRATION = ROOT / "migrations" / "0011_operator_surface_1_1.sql"
 ACKNOWLEDGMENT_MIGRATION = ROOT / "migrations" / "0012_ot01_acknowledgment.sql"
 ACTOR_AUTHORIZATION_MIGRATION = ROOT / "migrations" / "0013_actor_tenant_authorization.sql"
 RELEASE_ACTIVATION_MIGRATION = ROOT / "migrations" / "0014_release_activation.sql"
+RELEASE_ACTIVATION_CONCURRENCY_MIGRATION = (
+    ROOT / "migrations" / "0015_release_activation_concurrency.sql"
+)
+RELEASE_ACTIVATION_CONCURRENCY_ROLLBACK = (
+    ROOT / "migrations" / "0015_release_activation_concurrency.rollback.sql"
+)
 DSN = os.environ.get("BUYER_OPS_TEST_POSTGRES_DSN")
 
 
@@ -215,6 +222,7 @@ def postgres_dsn() -> str:
         admin.execute(ACKNOWLEDGMENT_MIGRATION.read_text())
         admin.execute(ACTOR_AUTHORIZATION_MIGRATION.read_text())
         admin.execute(RELEASE_ACTIVATION_MIGRATION.read_text())
+        admin.execute(RELEASE_ACTIVATION_CONCURRENCY_MIGRATION.read_text())
         admin.execute(
             "DO $$ BEGIN "
             "CREATE ROLE buyer_ops_test_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS; "
@@ -563,6 +571,55 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
         controller.record_gate_evidence(accessibility)
         assert controller.record_decision(decision) == decision
         assert controller.capability_activated("all_external_effects") is True
+
+    stale = {**decision, "decisionId": "activation-stale"}
+    with _runtime_connection(postgres_dsn) as connection:
+        stale_controller = ActivationController(
+            connection,
+            tenant_id="tenant-a",
+            evaluator=ReleaseEvidenceEvaluator(registry, registry_digest, Disablement()),
+            signature_verifier=Signatures(),
+        )
+        with pytest.raises(ValueError, match="activation version conflict"):
+            stale_controller.record_decision(stale)
+
+    contenders = [
+        {
+            **decision,
+            "decisionId": f"activation-concurrent-{suffix}",
+            "expectedActivationVersion": 1,
+            "decidedAt": f"2026-08-19T12:00:0{offset}Z",
+        }
+        for suffix, offset in (("a", 1), ("b", 2))
+    ]
+
+    def admit_contender(candidate: dict[str, Any]) -> str:
+        with _runtime_connection(postgres_dsn) as connection:
+            candidate_controller = ActivationController(
+                connection,
+                tenant_id="tenant-a",
+                evaluator=ReleaseEvidenceEvaluator(registry, registry_digest, Disablement()),
+                signature_verifier=Signatures(),
+            )
+            try:
+                candidate_controller.record_decision(candidate)
+            except ValueError as exc:
+                assert "activation version conflict" in str(exc)
+                return "conflict"
+            return str(candidate["decisionId"])
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(admit_contender, contenders))
+    assert outcomes.count("conflict") == 1
+    assert len([outcome for outcome in outcomes if outcome != "conflict"]) == 1
+
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        versions = connection.execute(
+            "SELECT activation_version FROM release_activation_decisions "
+            "WHERE capability_id = 'all_external_effects' ORDER BY activation_version"
+        ).fetchall()
+        assert versions == [(1,), (2,)]
 
 
 def test_real_postgres_operator_idempotency_binds_payload_and_result(postgres_dsn: str) -> None:
@@ -1254,7 +1311,7 @@ def test_operator_1_1_applies_evidenced_correction_and_result_atomically(
                     "action_class": "correct_epistemic_item",
                     "target_record_types": ["Assertion"],
                     "actor_types": ["license_holder"],
-                }
+                },
             ],
             "evidence_refs": [
                 {
@@ -1869,6 +1926,40 @@ def test_deletion_writes_fence_tombstone_and_all_invalidation_requests(
         ).fetchone() == (2,)
 
 
+def test_telemetry_series_limit_is_atomic_in_postgres(postgres_dsn: str) -> None:
+    catalog = copy.deepcopy(load_metric_catalog())
+    catalog["dimensionPolicy"]["maximumSeriesPerMetric"] = 1
+
+    def observation(observation_id: str, channel: str) -> dict[str, Any]:
+        return {
+            "messageType": "metric_observation",
+            "schemaVersion": "telemetry-slo/1.0.0",
+            "observationId": observation_id,
+            "metricId": "capture_latency_seconds",
+            "value": 12,
+            "unit": "seconds",
+            "eventStartedAt": "2030-01-01T00:00:00Z",
+            "eventEndedAt": "2030-01-01T00:00:12Z",
+            "observedAt": "2030-01-01T00:00:13Z",
+            "dimensions": {"environment": "production", "channel": channel},
+            "sourceEventIds": [f"ingress-{observation_id}", f"capture-{observation_id}"],
+            "producerId": "ingress-service",
+            "retentionClass": "operational_90d",
+        }
+
+    with _runtime_connection(postgres_dsn) as connection:
+        recorder = TelemetryRecorder(connection, tenant_id="tenant-a", catalog=catalog)
+        recorder.record_observation(observation("series-web-1", "web"))
+        recorder.record_observation(observation("series-web-2", "web"))
+        with pytest.raises(ContractViolation, match="SERIES_LIMIT"):
+            recorder.record_observation(observation("series-sms-1", "sms"))
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM telemetry_observations "
+            "WHERE metric_id = 'capture_latency_seconds'"
+        ).fetchone() == (2,)
+
+
 def test_evidence_rollback_refuses_to_discard_ledger(postgres_dsn: str) -> None:
     with psycopg.connect(postgres_dsn, autocommit=True) as admin:
         with pytest.raises(psycopg.DatabaseError, match="rollback is prohibited"):
@@ -1876,3 +1967,14 @@ def test_evidence_rollback_refuses_to_discard_ledger(postgres_dsn: str) -> None:
         assert admin.execute("SELECT to_regclass('evidence_ledger')").fetchone() == (
             "evidence_ledger",
         )
+
+
+def test_activation_concurrency_rollback_refuses_decision_loss(postgres_dsn: str) -> None:
+    with psycopg.connect(postgres_dsn, autocommit=True) as admin:
+        with pytest.raises(psycopg.DatabaseError, match="rollback refused"):
+            admin.execute(RELEASE_ACTIVATION_CONCURRENCY_ROLLBACK.read_text())
+        assert admin.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'release_activation_decisions' "
+            "AND column_name = 'activation_version'"
+        ).fetchone() == ("activation_version",)

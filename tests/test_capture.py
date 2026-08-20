@@ -49,9 +49,12 @@ def _holder() -> dict:
 def test_classify_sender_normalizes_email_and_e164() -> None:
     assert classify_sender("Buyer@Example.COM") == ("email", "buyer@example.com")
     assert classify_sender("+1 (512) 555-1212") == ("phone", "+15125551212")
+    assert classify_sender("5125551212") == ("phone", "+15125551212")
+    assert classify_sender("(512) 555-1212") == ("phone", "+15125551212")
+    assert classify_sender("1 512 555 1212") == ("phone", "+15125551212")
 
 
-@pytest.mark.parametrize("sender", ["", "buyer", "5125551212", "+0123"])
+@pytest.mark.parametrize("sender", ["", "buyer", "+0123"])
 def test_classify_sender_rejects_non_email_non_e164(sender: str) -> None:
     with pytest.raises(CaptureIncomplete) as raised:
         classify_sender(sender)
@@ -277,4 +280,44 @@ def test_unconfigured_temporal_does_not_start_or_synthesize_a_reference(
     monkeypatch.delenv("TEMPORAL_ADDRESS", raising=False)
     monkeypatch.delenv("TEMPORAL_RUNTIME_POLICY_JSON", raising=False)
     monkeypatch.delenv("TEMPORAL_TASK_QUEUE", raising=False)
+    monkeypatch.delenv("TEMPORAL_NAMESPACE", raising=False)
     assert start_captured_journey(tenant_id="tenant-1", journey_id="journey-1") is None
+
+
+def test_partial_temporal_configuration_requires_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEMPORAL_ADDRESS", "temporal.example:7233")
+    monkeypatch.delenv("TEMPORAL_NAMESPACE", raising=False)
+    with pytest.raises(ValueError, match="TEMPORAL_NAMESPACE"):
+        start_captured_journey(tenant_id="tenant-1", journey_id="journey-1")
+
+
+def test_partial_temporal_configuration_requires_runtime_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEMPORAL_ADDRESS", "temporal.example:7233")
+    monkeypatch.setenv("TEMPORAL_NAMESPACE", "buyer-ops")
+    monkeypatch.delenv("TEMPORAL_RUNTIME_POLICY_JSON", raising=False)
+    with pytest.raises(ValueError, match="TEMPORAL_RUNTIME_POLICY_JSON"):
+        start_captured_journey(tenant_id="tenant-1", journey_id="journey-1")
+
+
+def test_partial_temporal_configuration_requires_task_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEMPORAL_ADDRESS", "temporal.example:7233")
+    monkeypatch.setenv("TEMPORAL_NAMESPACE", "buyer-ops")
+    monkeypatch.delenv("TEMPORAL_TASK_QUEUE", raising=False)
+    with pytest.raises(ValueError, match="TEMPORAL_TASK_QUEUE"):
+        start_captured_journey(
+            tenant_id="tenant-1",
+            journey_id="journey-1",
+            runtime_policy={
+                "start_to_close_seconds": 10,
+                "initial_retry_seconds": 1,
+                "backoff_coefficient": 2,
+                "maximum_retry_seconds": 10,
+                "maximum_attempts": 3,
+            },
+        )

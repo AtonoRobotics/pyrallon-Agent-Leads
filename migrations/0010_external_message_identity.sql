@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS inbound_message_conflicts (
 
 ALTER TABLE inbound_message_conflicts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inbound_message_conflicts FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS inbound_message_conflicts_tenant_policy ON inbound_message_conflicts;
 CREATE POLICY inbound_message_conflicts_tenant_policy ON inbound_message_conflicts
     USING (tenant_id = current_setting('app.tenant_id', true))
     WITH CHECK (tenant_id = current_setting('app.tenant_id', true));

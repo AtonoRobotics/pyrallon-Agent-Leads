@@ -46,6 +46,7 @@ async def start_captured_journey_async(
     tenant_id: str,
     journey_id: str,
     address: str | None = None,
+    namespace: str | None = None,
     task_queue: str | None = None,
     runtime_policy: dict[str, Any] | None = None,
     client: Client | None = None,
@@ -56,16 +57,17 @@ async def start_captured_journey_async(
     ).strip()
     if client is None and not resolved_address:
         return None
+    resolved_namespace = (namespace or os.environ.get("TEMPORAL_NAMESPACE") or "").strip()
+    if client is None and not resolved_namespace:
+        raise ValueError("TEMPORAL_NAMESPACE is required when Temporal is configured")
     policy = runtime_policy if runtime_policy is not None else load_temporal_runtime_policy()
     if policy is None:
-        return None
+        raise ValueError("TEMPORAL_RUNTIME_POLICY_JSON is required when Temporal is configured")
     queue = (task_queue or os.environ.get("TEMPORAL_TASK_QUEUE") or "").strip()
     if not queue:
-        return None
+        raise ValueError("TEMPORAL_TASK_QUEUE is required when Temporal is configured")
     payload = captured_journey_workflow_input(tenant_id, journey_id, policy)
-    bound = client or await Client.connect(
-        resolved_address, namespace=os.environ.get("TEMPORAL_NAMESPACE", "default")
-    )
+    bound = client or await Client.connect(resolved_address, namespace=resolved_namespace)
     try:
         handle = await start_buyer_journey_workflow(bound, payload, task_queue=queue)
     except WorkflowAlreadyStartedError:

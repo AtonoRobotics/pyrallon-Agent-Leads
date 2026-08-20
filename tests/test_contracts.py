@@ -183,6 +183,50 @@ def test_confirmed_transaction_milestone_requires_confirmation_evidence(load_fix
         validate_semantics(milestone)
 
 
+@pytest.mark.parametrize(
+    "record",
+    [
+        {
+            "recordType": "Authorization",
+            "authorizationState": "active",
+            "grantedAt": "2030-01-01T00:00:00Z",
+            "expiresAt": "2030-01-02T00:00:00Z",
+            "sourceEvidenceIds": ["evidence-1"],
+        },
+        {
+            "recordType": "Approval",
+            "decision": "approved",
+            "decidedAt": "2030-01-01T00:00:00Z",
+            "expiresAt": "2030-01-02T00:00:00Z",
+            "sourceEvidenceIds": ["evidence-1"],
+        },
+        {
+            "recordType": "ConnectorGrant",
+            "grantState": "active",
+            "grantedAt": "2030-01-01T00:00:00Z",
+            "expiresAt": "2030-01-02T00:00:00Z",
+            "sourceEvidenceIds": ["evidence-1"],
+        },
+    ],
+)
+def test_active_authority_and_approval_must_be_unexpired(record: dict[str, object]) -> None:
+    with pytest.raises(ContractViolation, match="ACTIVE_AUTHORITY_EXPIRED"):
+        validate_semantics(record, SemanticPolicy(now=datetime(2030, 1, 2, tzinfo=UTC)))
+
+
+def test_agreement_semantics_do_not_invent_required_signer_set(load_fixture) -> None:
+    agreement = load_fixture("valid/written_buyer_agreement.json")
+    agreement["buyerPartyIds"] = ["party-1", "party-2"]
+    agreement["signatureEvidence"] = [
+        {
+            "signerPartyId": "party-1",
+            "signedAt": "2030-01-01T23:00:00Z",
+            "evidenceId": "evidence-1",
+        }
+    ]
+    validate_semantics(agreement, SemanticPolicy(now=datetime(2029, 12, 31, tzinfo=UTC)))
+
+
 def test_proposal_rejects_runtime_evidence_completed_after_generation(load_fixture) -> None:
     proposal = load_fixture("valid/cognitive_proposal.json")
     proposal["runtimeEvidence"]["completedAt"] = "2030-01-01T10:00:31Z"
