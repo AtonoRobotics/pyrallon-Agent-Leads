@@ -13,6 +13,7 @@ from .contract_acceptance import (
     validate_booking_result_context,
     validate_qualification_decisions,
     validate_reconciliation,
+    validate_slot_set_context,
 )
 from .registry import ContractRegistry
 from .structural import validate_record
@@ -37,6 +38,93 @@ _VERSIONED_MESSAGE_TYPES = {
     "calendar_provider_binding",
     "availability_policy",
 }
+
+
+class SlotSetRepository:
+    """Append a caller-supplied validated SlotSet without deriving or activating it."""
+
+    def __init__(
+        self,
+        connection_factory: ConnectionFactory,
+        *,
+        tenant_id: str,
+        registry: ContractRegistry | None = None,
+    ) -> None:
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        self._connection_factory = connection_factory
+        self._tenant_id = tenant_id
+        self._registry = registry or ContractRegistry()
+
+    def append_slot_set(
+        self,
+        *,
+        policy: dict[str, Any],
+        readiness: dict[str, Any],
+        binding: dict[str, Any],
+        snapshot: dict[str, Any],
+        slot_set: dict[str, Any],
+    ) -> None:
+        availability_records = (policy, binding, snapshot, slot_set)
+        for record in availability_records:
+            validate_record(record, "availability_booking", self._registry)
+        validate_record(readiness, "qualification_readiness", self._registry)
+        if (
+            tuple(record["messageType"] for record in availability_records)
+            != (
+                "availability_policy",
+                "calendar_provider_binding",
+                "calendar_snapshot",
+                "slot_set",
+            )
+            or readiness["messageType"] != "readiness_decision"
+        ):
+            raise ValueError("SlotSet records do not have the required message types")
+        if any(
+            record["tenantId"] != self._tenant_id for record in (*availability_records, readiness)
+        ):
+            raise TenantIsolationViolation("record tenant does not match repository tenant")
+        validate_slot_set_context(
+            slot_set,
+            policy=policy,
+            readiness=readiness,
+            binding=binding,
+            snapshot=snapshot,
+        )
+
+        with self._connection_factory() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('app.tenant_id', %s, true)",
+                        (self._tenant_id,),
+                    )
+                    cursor.execute(
+                        """
+                        INSERT INTO derived_contract_records (
+                            tenant_id, contract_family, message_type, record_id,
+                            record_version, schema_version, payload
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                        """.strip(),
+                        (
+                            self._tenant_id,
+                            "availability_booking",
+                            "slot_set",
+                            slot_set["slotSetId"],
+                            1,
+                            slot_set["schemaVersion"],
+                            json.dumps(
+                                slot_set,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                ensure_ascii=False,
+                            ),
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
 
 
 class BookingOutcomeRepository:

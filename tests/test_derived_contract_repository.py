@@ -14,6 +14,7 @@ from buyer_ops_contracts.derived_contract_repository import (
     BookingOutcomeRepository,
     DerivedContractReader,
     QualificationDecisionPairRepository,
+    SlotSetRepository,
 )
 from buyer_ops_contracts.errors import ContractViolation
 
@@ -113,6 +114,25 @@ def _booking_records() -> tuple[dict[str, Any], ...]:
     return tuple(
         cast(dict[str, Any], fixture[key])
         for key in ("binding", "command", "result", "reconciliation")
+    )
+
+
+def _slot_set_records() -> tuple[dict[str, Any], ...]:
+    availability = json.loads((ROOT / "tests/fixtures/availability_booking/valid.json").read_text())
+    qualification = json.loads(
+        (ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text()
+    )
+    readiness = cast(dict[str, Any], qualification["readiness"])
+    readiness["expiresAt"] = "2026-03-08T08:05:00Z"
+    return tuple(
+        cast(dict[str, Any], record)
+        for record in (
+            availability["policy"],
+            readiness,
+            availability["binding"],
+            availability["snapshot"],
+            availability["slotSet"],
+        )
     )
 
 
@@ -399,6 +419,92 @@ def test_booking_outcome_repository_rolls_back_insert_failure() -> None:
     with pytest.raises(RuntimeError, match="second decision failure"):
         BookingOutcomeRepository(connection_factory, tenant_id="tenant-a").append_booking_result(
             command=command, binding=binding, result=result
+        )
+    assert connection.commits == 0
+    assert connection.rollbacks == 1
+
+
+def test_slot_set_repository_appends_validated_caller_supplied_record() -> None:
+    connection = _WriteConnection()
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    policy, readiness, binding, snapshot, slot_set = _slot_set_records()
+    SlotSetRepository(connection_factory, tenant_id="tenant-a").append_slot_set(
+        policy=policy,
+        readiness=readiness,
+        binding=binding,
+        snapshot=snapshot,
+        slot_set=slot_set,
+    )
+
+    assert connection.commits == 1
+    assert connection.rollbacks == 0
+    assert len(connection.cursor_instance.executions) == 2
+    insert = connection.cursor_instance.executions[1][1]
+    assert insert[1:6] == (
+        "availability_booking",
+        "slot_set",
+        slot_set["slotSetId"],
+        1,
+        slot_set["schemaVersion"],
+    )
+    assert json.loads(cast(str, insert[6])) == slot_set
+
+
+@pytest.mark.parametrize("failure", ["structural", "roles", "tenant", "context"])
+def test_slot_set_repository_rejects_unadmitted_record_before_opening(failure: str) -> None:
+    opened = False
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        nonlocal opened
+        opened = True
+        yield _WriteConnection()
+
+    policy, readiness, binding, snapshot, slot_set = _slot_set_records()
+    expected: type[Exception]
+    if failure == "structural":
+        slot_set.pop("inputDigest")
+        expected = ContractViolation
+    elif failure == "roles":
+        snapshot = slot_set
+        expected = ValueError
+    elif failure == "tenant":
+        snapshot["tenantId"] = "tenant-other"
+        expected = TenantIsolationViolation
+    else:
+        slot_set["snapshotRef"]["recordId"] = "snapshot-other"
+        expected = ContractSemanticError
+
+    with pytest.raises(expected):
+        SlotSetRepository(connection_factory, tenant_id="tenant-a").append_slot_set(
+            policy=policy,
+            readiness=readiness,
+            binding=binding,
+            snapshot=snapshot,
+            slot_set=slot_set,
+        )
+    assert not opened
+
+
+def test_slot_set_repository_rolls_back_insert_failure() -> None:
+    connection = _WriteConnection(fail_on_execute=2)
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    policy, readiness, binding, snapshot, slot_set = _slot_set_records()
+    with pytest.raises(RuntimeError, match="second decision failure"):
+        SlotSetRepository(connection_factory, tenant_id="tenant-a").append_slot_set(
+            policy=policy,
+            readiness=readiness,
+            binding=binding,
+            snapshot=snapshot,
+            slot_set=slot_set,
         )
     assert connection.commits == 0
     assert connection.rollbacks == 1

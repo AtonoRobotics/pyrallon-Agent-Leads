@@ -27,6 +27,7 @@ from buyer_ops_contracts.derived_contract_repository import (
     BookingOutcomeRepository,
     DerivedContractReader,
     QualificationDecisionPairRepository,
+    SlotSetRepository,
 )
 from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.evidence import EvidenceIntegrityError, verify_checkpoint
@@ -1671,6 +1672,25 @@ def _booking_outcome_fixture(
     return binding, command, result, reconciliation
 
 
+def _slot_set_fixture(
+    suffix: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    availability = json.loads((ROOT / "tests/fixtures/availability_booking/valid.json").read_text())
+    qualification = json.loads(
+        (ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text()
+    )
+    readiness = qualification["readiness"]
+    readiness["expiresAt"] = "2026-03-08T08:05:00Z"
+    availability["slotSet"]["slotSetId"] = f"slot-set-{suffix}"
+    return (
+        availability["policy"],
+        readiness,
+        availability["binding"],
+        availability["snapshot"],
+        availability["slotSet"],
+    )
+
+
 def _insert_derived_contract_record(
     connection: psycopg.Connection[Any],
     *,
@@ -2049,6 +2069,49 @@ def test_booking_outcome_duplicate_is_raw_append_conflict_without_mutation(
             "SELECT count(*) FROM derived_contract_records WHERE record_id = %s",
             (record_id,),
         ).fetchone() == (1,)
+
+
+def test_slot_set_repository_round_trips_and_duplicate_remains_append_conflict(
+    postgres_dsn: str,
+) -> None:
+    policy, readiness, binding, snapshot, slot_set = _slot_set_fixture("round-trip")
+    repository = SlotSetRepository(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a")
+
+    repository.append_slot_set(
+        policy=policy,
+        readiness=readiness,
+        binding=binding,
+        snapshot=snapshot,
+        slot_set=slot_set,
+    )
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        repository.append_slot_set(
+            policy=policy,
+            readiness=readiness,
+            binding=binding,
+            snapshot=snapshot,
+            slot_set=slot_set,
+        )
+
+    reader = DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-a")
+    assert (
+        reader.get(
+            contract_family="availability_booking",
+            message_type="slot_set",
+            record_id=slot_set["slotSetId"],
+            record_version=1,
+        )
+        == slot_set
+    )
+    assert (
+        DerivedContractReader(lambda: _runtime_connection(postgres_dsn), tenant_id="tenant-b").get(
+            contract_family="availability_booking",
+            message_type="slot_set",
+            record_id=slot_set["slotSetId"],
+            record_version=1,
+        )
+        is None
+    )
 
 
 def test_database_rejects_record_envelope_mismatch(postgres_dsn: str) -> None:
