@@ -32,7 +32,6 @@ from .evidence_lifecycle import (
     PropagationStatus,
 )
 from .evidence_repository import DeletionDenied, DeletionReceipt, EvidenceRepository
-from .fair_housing import compile_features, evaluate_counterfactuals
 from .identity import (
     IdentityCreationRequiresAtomicBundle,
     IdentityMapping,
@@ -76,8 +75,6 @@ __all__ = [
     "validate_authority_activation_fair_housing_semantics",
     "validate_closure_semantics",
     "validate_record",
-    "compile_features",
-    "evaluate_counterfactuals",
     "validate_semantics",
     "build_entry",
     "sign_checkpoint",

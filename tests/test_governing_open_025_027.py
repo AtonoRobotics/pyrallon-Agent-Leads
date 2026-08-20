@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+import buyer_ops_contracts
+from buyer_ops_contracts import fair_housing
 from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.fair_housing import (
     FairHousingCompiler,
@@ -39,6 +41,22 @@ def _profile() -> dict:
             }
         ],
     }
+
+
+def test_fair_housing_policy_has_no_implementation_defined_defaults() -> None:
+    for name in (
+        "ALLOWED_CRITERIA",
+        "CompiledFeatures",
+        "CounterfactualResult",
+        "PROHIBITED_TOKENS",
+        "assert_allowed_criterion",
+        "assert_no_protected_influence",
+        "compile_features",
+        "evaluate_counterfactuals",
+        "tokenize",
+    ):
+        assert not hasattr(fair_housing, name)
+        assert not hasattr(buyer_ops_contracts, name)
 
 
 def test_unicode_normalization_phrase_boundaries_and_sussex_negative() -> None:

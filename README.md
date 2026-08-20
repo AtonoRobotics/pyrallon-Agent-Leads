@@ -10,6 +10,11 @@ subject to `PRODUCTION-GATE-REGISTRY.yaml` and the open decisions in `DESIGN-TRU
 Canonical reference mappings and the bindings that remain unavailable are enumerated in
 `CANONICAL-REFERENCE-BINDING-AUDIT.md`; affected writes intentionally fail closed.
 
+Fair-housing compilation requires a current owner-supplied `FairHousingControlProfile`. The earlier
+profile-free `compile_features` and `evaluate_counterfactuals` APIs were removed because their
+hard-coded policy values were not governing authority. Callers must use `FairHousingCompiler` and the
+published counterfactual and promotion-evidence boundaries instead.
+
 ## Requirements
 
 - Python 3.12
