@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,7 +17,7 @@ from buyer_ops_contracts.release_evidence import (
 NOW = datetime(2030, 1, 1, 1, tzinfo=UTC)
 
 
-def _release(gate_id: str, applicability: str, scope: str, registry_digest: str) -> dict:
+def _release(gate_id: str, applicability: str, scope: str, registry_digest: str) -> dict[str, Any]:
     record = {
         "schemaVersion": "open-019-024/1.1.0",
         "tenantId": "tenant-1",
@@ -50,7 +51,7 @@ class _Disablement:
 
 def test_release_evidence_requires_registry_bound_passes_for_gate_and_dependencies() -> None:
     registry, digest = load_gate_registry(Path("PRODUCTION-GATE-REGISTRY.yaml"))
-    evaluator = ReleaseEvidenceEvaluator(registry, digest, _Disablement())
+    evaluator = ReleaseEvidenceEvaluator(registry, digest, _Disablement(), tenant_id="tenant-1")
     required = evaluator.required_gate_ids(["GATE-001"])
     evidence = [
         _release(gate_id, registry_gate["class"], registry_gate["scope"], digest)
@@ -75,9 +76,39 @@ def test_release_evidence_requires_registry_bound_passes_for_gate_and_dependenci
         )
 
 
+def test_release_evidence_rejects_cross_tenant_and_contaminated_sets() -> None:
+    registry, digest = load_gate_registry(Path("PRODUCTION-GATE-REGISTRY.yaml"))
+    evaluator = ReleaseEvidenceEvaluator(
+        registry,
+        digest,
+        _Disablement(),
+        tenant_id="tenant-1",
+    )
+    gate = next(gate for gate in registry["gates"] if gate["id"] == "GATE-002")
+    tenant_a = _release("GATE-002", gate["class"], gate["scope"], digest)
+    tenant_b = copy.deepcopy(tenant_a)
+    tenant_b["tenantId"] = "tenant-2"
+    tenant_b["recordId"] = "release-GATE-002-tenant-2"
+
+    with pytest.raises(ReleaseEvidenceRejected, match="release evidence tenant mismatch"):
+        evaluator.evaluate(
+            release_digest="sha256:" + "a" * 64,
+            directly_applicable_gate_ids=["GATE-002"],
+            evidence=[tenant_b],
+            now=NOW,
+        )
+    with pytest.raises(ReleaseEvidenceRejected, match="release evidence tenant mismatch"):
+        evaluator.evaluate(
+            release_digest="sha256:" + "a" * 64,
+            directly_applicable_gate_ids=["GATE-002"],
+            evidence=[tenant_a, tenant_b],
+            now=NOW,
+        )
+
+
 def test_not_applicable_requires_capability_gate_and_verified_disablement() -> None:
     registry, digest = load_gate_registry(Path("PRODUCTION-GATE-REGISTRY.yaml"))
-    evaluator = ReleaseEvidenceEvaluator(registry, digest, _Disablement())
+    evaluator = ReleaseEvidenceEvaluator(registry, digest, _Disablement(), tenant_id="tenant-1")
     evidence = _release("GATE-009", "capability", "transaction_coordination", digest)
     evidence.update(
         outcome="not_applicable",
@@ -101,7 +132,7 @@ def test_not_applicable_requires_capability_gate_and_verified_disablement() -> N
     assert evidence["recordId"] in accepted
 
 
-def _accessibility(surface: str, build_digest: str) -> dict:
+def _accessibility(surface: str, build_digest: str) -> dict[str, Any]:
     return {
         "schemaVersion": "open-019-024/1.1.0",
         "tenantId": "tenant-1",
@@ -130,16 +161,29 @@ def test_accessibility_acceptance_is_exactly_build_and_release_bound() -> None:
     ios = _accessibility("ios", "sha256:" + "c" * 64)
     assert evaluate_accessibility_evidence(
         [web, ios],
+        tenant_id="tenant-1",
         release_digest="sha256:" + "a" * 64,
         deployed_builds={"web": web["buildDigest"], "ios": ios["buildDigest"]},
         now=NOW,
     ) == ("a11y-ios", "a11y-web")
+
+    foreign = copy.deepcopy(ios)
+    foreign["tenantId"] = "tenant-2"
+    with pytest.raises(ReleaseEvidenceRejected, match="accessibility evidence tenant mismatch"):
+        evaluate_accessibility_evidence(
+            [web, foreign],
+            tenant_id="tenant-1",
+            release_digest="sha256:" + "a" * 64,
+            deployed_builds={"web": web["buildDigest"], "ios": ios["buildDigest"]},
+            now=NOW,
+        )
 
     wrong = copy.deepcopy(web)
     wrong["buildDigest"] = "sha256:" + "d" * 64
     with pytest.raises(ReleaseEvidenceRejected, match="current build-bound"):
         evaluate_accessibility_evidence(
             [wrong, ios],
+            tenant_id="tenant-1",
             release_digest="sha256:" + "a" * 64,
             deployed_builds={"web": web["buildDigest"], "ios": ios["buildDigest"]},
             now=NOW,

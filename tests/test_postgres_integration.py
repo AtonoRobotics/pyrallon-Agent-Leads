@@ -646,7 +646,9 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
         controller = ActivationController(
             connection,
             tenant_id="tenant-a",
-            evaluator=ReleaseEvidenceEvaluator(registry, registry_digest, Disablement()),
+            evaluator=ReleaseEvidenceEvaluator(
+                registry, registry_digest, Disablement(), tenant_id="tenant-a"
+            ),
             signature_verifier=Signatures(),
         )
         controller.record_gate_evidence(release)
@@ -659,7 +661,9 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
         stale_controller = ActivationController(
             connection,
             tenant_id="tenant-a",
-            evaluator=ReleaseEvidenceEvaluator(registry, registry_digest, Disablement()),
+            evaluator=ReleaseEvidenceEvaluator(
+                registry, registry_digest, Disablement(), tenant_id="tenant-a"
+            ),
             signature_verifier=Signatures(),
         )
         with pytest.raises(ValueError, match="activation version conflict"):
@@ -680,7 +684,9 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
             candidate_controller = ActivationController(
                 connection,
                 tenant_id="tenant-a",
-                evaluator=ReleaseEvidenceEvaluator(registry, registry_digest, Disablement()),
+                evaluator=ReleaseEvidenceEvaluator(
+                    registry, registry_digest, Disablement(), tenant_id="tenant-a"
+                ),
                 signature_verifier=Signatures(),
             )
             try:

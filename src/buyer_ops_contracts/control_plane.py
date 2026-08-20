@@ -620,7 +620,10 @@ class ControlPlane:
     def _activation_controller(self, connection: Any, tenant_id: str) -> ActivationController:
         disablement = PostgresCapabilityDisablementVerifier(connection, tenant_id=tenant_id)
         evaluator = ReleaseEvidenceEvaluator(
-            self._gate_registry, self._gate_registry_digest, disablement
+            self._gate_registry,
+            self._gate_registry_digest,
+            disablement,
+            tenant_id=tenant_id,
         )
         return ActivationController(
             connection,

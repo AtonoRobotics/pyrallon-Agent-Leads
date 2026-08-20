@@ -36,10 +36,15 @@ class ReleaseEvidenceEvaluator:
         registry: dict[str, Any],
         registry_digest: str,
         disablement: CapabilityDisablementVerifier,
+        *,
+        tenant_id: str,
     ) -> None:
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
         self._registry = registry
         self._registry_digest = registry_digest
         self._disablement = disablement
+        self._tenant_id = tenant_id
         self._gates = {gate["id"]: gate for gate in registry["gates"]}
 
     @property
@@ -49,6 +54,10 @@ class ReleaseEvidenceEvaluator:
     @property
     def registry_digest(self) -> str:
         return self._registry_digest
+
+    @property
+    def tenant_id(self) -> str:
+        return self._tenant_id
 
     def required_gate_ids(self, directly_applicable_gate_ids: Iterable[str]) -> tuple[str, ...]:
         required: set[str] = set()
@@ -83,6 +92,8 @@ class ReleaseEvidenceEvaluator:
             validate_closure_semantics(record, now=evaluated_at)
             if record.get("recordType") != "ReleaseEvidence":
                 raise ReleaseEvidenceRejected("non-release evidence supplied to gate evaluator")
+            if record["tenantId"] != self._tenant_id:
+                raise ReleaseEvidenceRejected("release evidence tenant mismatch")
             by_gate.setdefault(record["gateId"], []).append(record)
 
         accepted: list[str] = []
@@ -128,10 +139,13 @@ class ReleaseEvidenceEvaluator:
 def evaluate_accessibility_evidence(
     records: Iterable[dict[str, Any]],
     *,
+    tenant_id: str,
     release_digest: str,
     deployed_builds: dict[str, str],
     now: datetime,
 ) -> tuple[str, ...]:
+    if not tenant_id:
+        raise ValueError("tenant_id is required")
     evaluated_at = now.astimezone(UTC)
     by_surface: dict[str, list[dict[str, Any]]] = {}
     for record in records:
@@ -139,6 +153,8 @@ def evaluate_accessibility_evidence(
         validate_closure_semantics(record, now=evaluated_at)
         if record.get("recordType") != "AccessibilityEvidence":
             raise ReleaseEvidenceRejected("non-accessibility record supplied")
+        if record["tenantId"] != tenant_id:
+            raise ReleaseEvidenceRejected("accessibility evidence tenant mismatch")
         by_surface.setdefault(record["surface"], []).append(record)
     accepted: list[str] = []
     for surface, build_digest in sorted(deployed_builds.items()):

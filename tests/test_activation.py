@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import base64
 import copy
+from typing import Any
 
+import pytest
 import rfc8785
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from buyer_ops_contracts.activation import Ed25519ActivationDecisionSignatureVerifier
+from buyer_ops_contracts.activation import (
+    ActivationController,
+    Ed25519ActivationDecisionSignatureVerifier,
+)
+from buyer_ops_contracts.release_evidence import ReleaseEvidenceEvaluator
 
 
-def _decision() -> dict:
+def _decision() -> dict[str, Any]:
     return {
         "messageType": "activation_decision",
         "schemaVersion": "release-activation/1.1.0",
@@ -89,9 +95,25 @@ class _Connection:
         return None
 
 
-def test_activation_readback_returns_exact_payload_and_stays_inactive_without_evidence() -> None:
-    from buyer_ops_contracts.activation import ActivationController
+class _Disablement:
+    def proves_disabled(self, capability_id: str, evidence_refs: list[str]) -> bool:
+        del capability_id, evidence_refs
+        return False
 
+
+def test_activation_controller_rejects_mismatched_release_evaluator_tenant() -> None:
+    evaluator = ReleaseEvidenceEvaluator(
+        {"registry_version": "1.0.0", "gates": []},
+        "sha256:" + "a" * 64,
+        _Disablement(),
+        tenant_id="tenant-2",
+    )
+
+    with pytest.raises(ValueError, match="release evidence evaluator tenant mismatch"):
+        ActivationController(_Connection(), tenant_id="tenant-1", evaluator=evaluator)
+
+
+def test_activation_readback_returns_exact_payload_and_stays_inactive_without_evidence() -> None:
     payload = {
         "decisionId": "decision-1",
         "capabilityId": "email",

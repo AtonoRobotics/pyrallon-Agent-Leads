@@ -88,6 +88,8 @@ class ActivationController:
     ) -> None:
         if not tenant_id:
             raise ValueError("tenant_id is required")
+        if evaluator is not None and evaluator.tenant_id != tenant_id:
+            raise ValueError("release evidence evaluator tenant mismatch")
         self._connection = connection
         self._tenant_id = tenant_id
         self._evaluator = evaluator
@@ -276,6 +278,7 @@ class ActivationController:
             raise ValueError("activation gate evidence set mismatch")
         accessibility_ids = evaluate_accessibility_evidence(
             by_type.get("AccessibilityEvidence", []),
+            tenant_id=self._tenant_id,
             release_digest=decision["releaseDigest"],
             deployed_builds=decision["deployedBuildDigests"],
             now=now,
