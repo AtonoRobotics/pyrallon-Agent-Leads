@@ -109,56 +109,11 @@ class OperatorCommandService:
             )
         if command["command_type"] in _CANONICAL_MUTATION_COMMANDS:
             return self._dispatch_canonical_mutation(command, actor_id=actor_id, now=now)
-        duplicate = self._existing(command["idempotency_key"])
-        if duplicate is not None:
-            if duplicate["payload_digest"] != command["payload_digest"]:
-                raise OperatorCommandError(
-                    "payload_mismatch", retryable=False, detail="idempotency key reused"
-                )
-            return cast(dict[str, Any], duplicate["result"])
-        self._assert_authority(command, actor_id, now)
-        target = self._repository.get(command["target_record_id"])
-        if target is None:
-            raise OperatorCommandError(
-                "evidence_unavailable", retryable=False, detail="target missing"
-            )
-        if target.get("recordType") != command["target_record_type"]:
-            raise OperatorCommandError(
-                "validation_failed", retryable=False, detail="target type mismatch"
-            )
-        if int(target["version"]) != int(command["expected_version"]):
-            raise OperatorCommandError(
-                "version_conflict", retryable=True, detail="expected_version mismatch"
-            )
-        bound = operator_payload_digest(command)
-        if bound != command["payload_digest"]:
-            raise OperatorCommandError(
-                "payload_mismatch", retryable=False, detail="payload digest mismatch"
-            )
-        try:
-            result_refs, evidence_id, status = self._apply(command, target, now)
-        except VersionConflict as exc:
-            raise OperatorCommandError("version_conflict", retryable=True, detail=str(exc)) from exc
-        except ContractViolation as exc:
-            raise OperatorCommandError(
-                "validation_failed", retryable=False, detail=str(exc)
-            ) from exc
-        current = self._repository.get(command["target_record_id"])
-        current_version = int(current["version"]) if current else int(command["expected_version"])
-        result = {
-            "message_type": "operator_command_result",
-            "schema_version": "operator-surface/1.1.0",
-            "command_id": command["command_id"],
-            "tenant_id": self._tenant_id,
-            "status": status,
-            "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "decision_evidence_id": evidence_id,
-            "current_version": current_version,
-            "result_refs": result_refs,
-        }
-        validate_record(result, "operator_surface")
-        self._store(command, result)
-        return result
+        raise OperatorCommandError(
+            "validation_failed",
+            retryable=False,
+            detail="operator command semantics are unavailable",
+        )
 
     def _dispatch_canonical_mutation(
         self, command: dict[str, Any], *, actor_id: str, now: datetime
@@ -296,128 +251,6 @@ class OperatorCommandService:
             raise PermissionError("operator policy rule does not authorize this command")
         return target
 
-    def _assert_authority(self, command: dict[str, Any], actor_id: str, now: datetime) -> None:
-        authority = command["authority"]
-        policy_ref = authority["policy_ref"]
-        policy = self._policy_repository.get_current(str(policy_ref["record_id"]))
-        if policy is None:
-            raise OperatorCommandError(
-                "policy_denied", retryable=False, detail="operator policy missing"
-            )
-        if (
-            policy["record_version"] != policy_ref["version"]
-            or policy["status"] != "active"
-            or policy_ref["status"] != "active"
-        ):
-            raise OperatorCommandError(
-                "policy_denied", retryable=False, detail="operator policy version mismatch"
-            )
-        starts = datetime.fromisoformat(policy["effective_from"].replace("Z", "+00:00"))
-        ends = (
-            None
-            if "effective_to" not in policy
-            else datetime.fromisoformat(policy["effective_to"].replace("Z", "+00:00"))
-        )
-        if starts > now or (ends is not None and ends <= now):
-            raise OperatorCommandError(
-                "policy_denied", retryable=False, detail="operator policy is not effective"
-            )
-        matches = [
-            rule
-            for rule in policy["command_rules"]
-            if rule["command_type"] == command["command_type"]
-        ]
-        if len(matches) != 1:
-            raise OperatorCommandError(
-                "policy_denied", retryable=False, detail="operator command rule missing"
-            )
-        rule = matches[0]
-        if (
-            rule["action_class"] != authority["action_class"]
-            or command["target_record_type"] not in rule["target_record_types"]
-            or authority["actor_type"] not in rule["actor_types"]
-        ):
-            raise OperatorCommandError(
-                "policy_denied", retryable=False, detail="operator command rule mismatch"
-            )
-
-    def _apply(
-        self, command: dict[str, Any], target: dict[str, Any], now: datetime
-    ) -> tuple[list[dict[str, Any]], str, str]:
-        command_type = command["command_type"]
-        stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        if command_type in {"approve", "deny"}:
-            if target.get("recordType") != "Approval":
-                raise OperatorCommandError(
-                    "validation_failed", retryable=False, detail="not an Approval"
-                )
-            next_record = {
-                **target,
-                "version": int(target["version"]) + 1,
-                "updatedAt": stamp,
-                "decision": "approved" if command_type == "approve" else "denied",
-                "reason": command["reason"],
-            }
-            saved = self._repository.save(next_record, expected_version=int(target["version"]))
-            return [_ref(saved)], saved["id"], "applied"
-        if command_type == "revoke_approval":
-            if target.get("recordType") != "Approval":
-                raise OperatorCommandError(
-                    "validation_failed", retryable=False, detail="not an Approval"
-                )
-            next_record = {
-                **target,
-                "version": int(target["version"]) + 1,
-                "updatedAt": stamp,
-                "decision": "revoked",
-                "reason": command["reason"],
-            }
-            saved = self._repository.save(next_record, expected_version=int(target["version"]))
-            return [_ref(saved)], saved["id"], "applied"
-        if command_type == "revoke_authorization":
-            if target.get("recordType") != "Authorization":
-                raise OperatorCommandError(
-                    "validation_failed", retryable=False, detail="not an Authorization"
-                )
-            next_record = {
-                **target,
-                "version": int(target["version"]) + 1,
-                "updatedAt": stamp,
-                "authorizationState": "revoked",
-                "revokedAt": stamp,
-            }
-            saved = self._repository.save(next_record, expected_version=int(target["version"]))
-            return [_ref(saved)], saved["id"], "applied"
-        if command_type in {"correct_replace", "correct_invalidate"}:
-            if target.get("recordType") not in {"Assertion", "VerifiedFact", "Inference", "Memory"}:
-                raise OperatorCommandError(
-                    "validation_failed", retryable=False, detail="not an epistemic item"
-                )
-            state_field = {
-                "Assertion": "assertionState",
-                "VerifiedFact": "factState",
-                "Inference": "inferenceState",
-                "Memory": "memoryState",
-            }[target["recordType"]]
-            next_record = {
-                **target,
-                "version": int(target["version"]) + 1,
-                "updatedAt": stamp,
-                state_field: "invalidated"
-                if command_type == "correct_invalidate"
-                else "superseded",
-            }
-            saved = self._repository.save(next_record, expected_version=int(target["version"]))
-            return [_ref(saved)], saved["id"], "applied"
-        raise OperatorCommandError("validation_failed", retryable=False, detail="unknown command")
-
-    def _existing(self, idempotency_key: str) -> dict[str, Any] | None:
-        with self._connection.cursor() as cursor:
-            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))
-            result = self._existing_on(cursor, idempotency_key)
-        self._connection.commit()
-        return result
-
     def _existing_on(self, cursor: Any, idempotency_key: str) -> dict[str, Any] | None:
         cursor.execute(
             """
@@ -431,12 +264,6 @@ class OperatorCommandService:
         if row is None:
             return None
         return {"payload_digest": row[0], "result": row[1]}
-
-    def _store(self, command: dict[str, Any], result: dict[str, Any]) -> None:
-        with self._connection.cursor() as cursor:
-            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))
-            self._store_on(cursor, command, result)
-        self._connection.commit()
 
     def _store_on(self, cursor: Any, command: dict[str, Any], result: dict[str, Any]) -> None:
         cursor.execute(

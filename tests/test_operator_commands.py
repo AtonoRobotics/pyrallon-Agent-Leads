@@ -12,6 +12,12 @@ from buyer_ops_contracts.operator_commands import (
 )
 
 
+class _NeverPolicyRepository:
+    def get_current(self, policy_id: str) -> dict[str, Any] | None:
+        del policy_id
+        raise AssertionError("unpublished command semantics reached operator policy lookup")
+
+
 class _Cursor:
     def __enter__(self) -> _Cursor:
         return self
@@ -146,4 +152,42 @@ def test_incomplete_canonical_mutation_fails_before_repository_write(
         service.dispatch(_command(command_type, target), actor_id="agent-1")
 
     assert raised.value.code == "validation_failed"
+    assert repository.save_called is False
+
+
+@pytest.mark.parametrize("command_type", ["approve", "deny"])
+def test_unpublished_approval_transition_fails_before_policy_or_canonical_write(
+    command_type: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = {"id": "target-1", "recordType": "Approval", "version": 1}
+    repository = _Repository(target)
+    command = _command(command_type, target)
+    command["authority"]["policy_ref"]["record_type"] = "OperatorPolicy"
+    command["payload_digest"] = command_payload_digest(command)
+    grant = {
+        "recordId": "authorization-1",
+        "tenantId": "tenant-1",
+        "actorId": "agent-1",
+        "allowedCommands": [command_type],
+        "recordScopes": ["Approval"],
+        "policyVersion": "policy-1",
+        "authorizationVersion": 1,
+        "status": "active",
+    }
+    monkeypatch.setattr(
+        "buyer_ops_contracts.operator_commands.ActorTenantAuthorizationRepository.current",
+        lambda *args, **kwargs: grant,
+    )
+    service = OperatorCommandService(
+        _Connection(),
+        repository,  # type: ignore[arg-type]
+        tenant_id="tenant-1",
+        policy_repository=_NeverPolicyRepository(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(OperatorCommandError) as raised:
+        service.dispatch(command, actor_id="agent-1")
+
+    assert raised.value.code == "validation_failed"
+    assert raised.value.detail == "operator command semantics are unavailable"
     assert repository.save_called is False
