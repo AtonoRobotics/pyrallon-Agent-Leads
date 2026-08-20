@@ -309,6 +309,41 @@ def test_dst_resolution_slot_identity_and_expiry() -> None:
         validate_slot_set(stale, valid["policy"])
 
 
+def test_dst_ambiguous_boundary_uses_fold_zero_across_timezones() -> None:
+    valid = _load("availability_booking/valid.json")
+
+    los_angeles = copy.deepcopy(valid["policy"])
+    los_angeles["timeZone"] = "America/Los_Angeles"
+    los_angeles["weeklyWindows"] = [
+        {"dayOfWeek": 7, "localStart": "01:30:00", "localEnd": "02:30:00"}
+    ]
+    assert local_window_instants(los_angeles, date(2026, 11, 1)) == [
+        (
+            datetime(2026, 11, 1, 8, 30, tzinfo=UTC),
+            datetime(2026, 11, 1, 10, 30, tzinfo=UTC),
+        )
+    ]
+
+    berlin = copy.deepcopy(valid["policy"])
+    berlin["timeZone"] = "Europe/Berlin"
+    berlin["weeklyWindows"] = [{"dayOfWeek": 7, "localStart": "02:30:00", "localEnd": "03:30:00"}]
+    assert local_window_instants(berlin, date(2026, 10, 25)) == [
+        (
+            datetime(2026, 10, 25, 0, 30, tzinfo=UTC),
+            datetime(2026, 10, 25, 2, 30, tzinfo=UTC),
+        )
+    ]
+
+
+def test_dst_nonexistent_boundary_yields_no_window() -> None:
+    valid = _load("availability_booking/valid.json")
+    policy = copy.deepcopy(valid["policy"])
+    policy["timeZone"] = "America/Los_Angeles"
+    policy["weeklyWindows"] = [{"dayOfWeek": 7, "localStart": "02:30:00", "localEnd": "03:30:00"}]
+
+    assert local_window_instants(policy, date(2026, 3, 8)) == []
+
+
 def test_slot_set_ordering_uses_absolute_instants_across_offsets() -> None:
     booking = _load("availability_booking/valid.json")
     first = copy.deepcopy(booking["slotSet"]["slots"][0])
