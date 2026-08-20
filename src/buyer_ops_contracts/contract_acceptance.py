@@ -338,6 +338,11 @@ def validate_slot_set_context(
         and _time(snapshot["rangeStart"]) <= derived_at < _time(snapshot["rangeEnd"])
     ):
         raise ContractSemanticError("snapshot_not_current")
+    for slot in slot_set["slots"]:
+        if (_time(slot["endsAt"]) - _time(slot["startsAt"])).total_seconds() != policy[
+            "consultationDurationSeconds"
+        ]:
+            raise ContractSemanticError("slot_duration_mismatch")
 
 
 def validate_booking_command(command: dict[str, Any]) -> None:

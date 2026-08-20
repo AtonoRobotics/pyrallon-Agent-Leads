@@ -293,6 +293,26 @@ def test_slot_set_binds_current_readiness_policy_binding_and_snapshot() -> None:
         )
 
 
+def test_slot_set_rejects_wrong_consultation_duration() -> None:
+    booking = _load("availability_booking/valid.json")
+    readiness = copy.deepcopy(_load("qualification_readiness/valid.json")["readiness"])
+    readiness["expiresAt"] = "2026-03-08T08:05:00Z"
+    slot = booking["slotSet"]["slots"][0]
+    slot["endsAt"] = "2026-03-08T09:45:00Z"
+    slot_payload = {key: slot[key] for key in sorted(slot) if key not in {"slotId", "slotDigest"}}
+    slot["slotDigest"] = canonical_digest(slot_payload)
+    slot["slotId"] = slot["slotDigest"].split(":", 1)[1]
+
+    with pytest.raises(ContractSemanticError, match="slot_duration_mismatch"):
+        validate_slot_set_context(
+            booking["slotSet"],
+            policy=booking["policy"],
+            readiness=readiness,
+            binding=booking["binding"],
+            snapshot=booking["snapshot"],
+        )
+
+
 def test_authority_watermark_version_idempotency_and_reconciliation() -> None:
     valid = _load("availability_booking/valid.json")
     command = valid["command"]
