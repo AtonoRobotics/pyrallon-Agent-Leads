@@ -56,5 +56,12 @@ jobs:
         run: |
           uv build --sdist --wheel --out-dir dist
           sha256sum dist/*
+      - name: Smoke-test installed wheel resources
+        working-directory: /tmp
+        run: |
+          WHEEL_PATH="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$WHEEL_PATH"
+          PYTHONPATH="$WHEEL_PATH" "$GITHUB_WORKSPACE/.venv/bin/python" -c \
+            "from buyer_ops_contracts.telemetry import load_metric_catalog; catalog = load_metric_catalog(); assert catalog['catalogVersion'] == 'telemetry-slo-catalog/1.0.0'"
       - name: Scan for committed credential material
         run: uv run python scripts/scan_secrets.py

@@ -21,3 +21,11 @@ def test_every_github_action_is_pinned_to_an_immutable_commit() -> None:
 def test_contract_ci_builds_both_distribution_artifacts() -> None:
     workflow = (ROOT / ".github" / "workflows" / "contracts.yml").read_text()
     assert "uv build --sdist --wheel" in workflow
+
+
+def test_contract_ci_executes_the_built_wheel_outside_the_source_tree() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "contracts.yml").read_text()
+    assert "Smoke-test installed wheel resources" in workflow
+    assert 'PYTHONPATH="$WHEEL_PATH"' in workflow
+    assert "load_metric_catalog" in workflow
+    assert "working-directory: /tmp" in workflow
