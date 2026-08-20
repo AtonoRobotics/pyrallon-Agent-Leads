@@ -14,6 +14,7 @@ from typing import Any
 import psycopg
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from psycopg.types.json import Jsonb
 
 from buyer_ops_contracts.acknowledgment_repository import AcknowledgmentRepository
 from buyer_ops_contracts.activation import ActivationController, evidence_set_digest
@@ -87,6 +88,8 @@ RELEASE_ACTIVATION_CONCURRENCY_MIGRATION = (
 RELEASE_ACTIVATION_CONCURRENCY_ROLLBACK = (
     ROOT / "migrations" / "0015_release_activation_concurrency.rollback.sql"
 )
+DERIVED_CONTRACT_MIGRATION = ROOT / "migrations" / "0021_derived_contract_records.sql"
+DERIVED_CONTRACT_ROLLBACK = ROOT / "migrations" / "0021_derived_contract_records.rollback.sql"
 DSN = os.environ.get("BUYER_OPS_TEST_POSTGRES_DSN")
 
 
@@ -223,6 +226,10 @@ def postgres_dsn() -> str:
         admin.execute(ACTOR_AUTHORIZATION_MIGRATION.read_text())
         admin.execute(RELEASE_ACTIVATION_MIGRATION.read_text())
         admin.execute(RELEASE_ACTIVATION_CONCURRENCY_MIGRATION.read_text())
+        admin.execute(DERIVED_CONTRACT_MIGRATION.read_text())
+        admin.execute(DERIVED_CONTRACT_ROLLBACK.read_text())
+        assert admin.execute("SELECT to_regclass('derived_contract_records')").fetchone() == (None,)
+        admin.execute(DERIVED_CONTRACT_MIGRATION.read_text())
         admin.execute(
             "DO $$ BEGIN "
             "CREATE ROLE buyer_ops_test_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS; "
@@ -248,7 +255,7 @@ def postgres_dsn() -> str:
             "release_gate_evidence, release_activation_decisions, ingress_attribution, "
             "ingress_consent_presentation, operator_actor_tenancies, "
             "actor_tenant_authorization_versions, actor_tenant_authorizations_current, "
-            "release_activation_versions "
+            "release_activation_versions, derived_contract_records "
             "TO buyer_ops_test_runtime"
         )
     _seed_reference_graph(DSN)
@@ -1612,6 +1619,177 @@ def test_real_postgres_history_is_append_only(postgres_dsn: str) -> None:
                 "DELETE FROM canonical_record_versions "
                 "WHERE tenant_id = 'tenant-a' AND record_id = 'agreement-a'"
             )
+
+
+def _derived_contract_fixture(suffix: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    qualification = json.loads(
+        (ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text()
+    )["policy"]
+    availability = json.loads(
+        (ROOT / "tests/fixtures/availability_booking/valid.json").read_text()
+    )["binding"]
+    qualification["policyId"] = f"qualification-policy-{suffix}"
+    availability["bindingId"] = f"calendar-binding-{suffix}"
+    return qualification, availability
+
+
+def _insert_derived_contract_record(
+    connection: psycopg.Connection[Any],
+    *,
+    family: str,
+    record_id: str,
+    record_version: int,
+    record: dict[str, Any],
+) -> None:
+    connection.execute(
+        "INSERT INTO derived_contract_records "
+        "(tenant_id, contract_family, message_type, record_id, record_version, "
+        "schema_version, payload) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+        (
+            record["tenantId"],
+            family,
+            record["messageType"],
+            record_id,
+            record_version,
+            record["schemaVersion"],
+            Jsonb(record),
+        ),
+    )
+
+
+def test_new_contract_families_have_durable_storage(postgres_dsn: str) -> None:
+    qualification, availability = _derived_contract_fixture("durable")
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        _insert_derived_contract_record(
+            connection,
+            family="qualification_readiness",
+            record_id=qualification["policyId"],
+            record_version=1,
+            record=qualification,
+        )
+        _insert_derived_contract_record(
+            connection,
+            family="availability_booking",
+            record_id=availability["bindingId"],
+            record_version=1,
+            record=availability,
+        )
+        assert connection.execute(
+            "SELECT contract_family, message_type, record_id, record_version "
+            "FROM derived_contract_records WHERE record_id LIKE '%-durable' "
+            "ORDER BY contract_family"
+        ).fetchall() == [
+            (
+                "availability_booking",
+                "calendar_provider_binding",
+                "calendar-binding-durable",
+                1,
+            ),
+            (
+                "qualification_readiness",
+                "qualification_policy",
+                "qualification-policy-durable",
+                1,
+            ),
+        ]
+
+
+@pytest.mark.parametrize(
+    ("family", "tenant_id", "record_id", "record_version"),
+    [
+        ("ontology", "tenant-a", "qualification-policy-a", 1),
+        ("qualification_readiness", "tenant-b", "qualification-policy-a", 1),
+        ("qualification_readiness", "tenant-a", "wrong-policy-id", 1),
+        ("qualification_readiness", "tenant-a", "qualification-policy-a", 2),
+    ],
+)
+def test_new_contract_storage_rejects_unadmitted_or_mismatched_envelopes(
+    postgres_dsn: str,
+    family: str,
+    tenant_id: str,
+    record_id: str,
+    record_version: int,
+) -> None:
+    qualification = json.loads(
+        (ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text()
+    )["policy"]
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', %s, false)", (tenant_id,))
+        with pytest.raises(psycopg.errors.CheckViolation):
+            connection.execute(
+                "INSERT INTO derived_contract_records "
+                "(tenant_id, contract_family, message_type, record_id, record_version, "
+                "schema_version, payload) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    tenant_id,
+                    family,
+                    qualification["messageType"],
+                    record_id,
+                    record_version,
+                    qualification["schemaVersion"],
+                    Jsonb(qualification),
+                ),
+            )
+
+
+def test_new_contract_storage_is_tenant_scoped(postgres_dsn: str) -> None:
+    qualification, _ = _derived_contract_fixture("rls")
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        _insert_derived_contract_record(
+            connection,
+            family="qualification_readiness",
+            record_id=qualification["policyId"],
+            record_version=1,
+            record=qualification,
+        )
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-b', false)")
+        assert connection.execute(
+            "SELECT count(*) FROM derived_contract_records "
+            "WHERE record_id = 'qualification-policy-rls'"
+        ).fetchone() == (0,)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE derived_contract_records SET record_id = 'changed'",
+        "DELETE FROM derived_contract_records",
+    ],
+)
+def test_new_contract_storage_is_append_only(postgres_dsn: str, statement: str) -> None:
+    qualification, _ = _derived_contract_fixture("append-only")
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        _insert_derived_contract_record(
+            connection,
+            family="qualification_readiness",
+            record_id=qualification["policyId"],
+            record_version=1,
+            record=qualification,
+        )
+        with pytest.raises(psycopg.DatabaseError, match="append-only"):
+            connection.execute(statement + " WHERE record_id = 'qualification-policy-append-only'")
+
+
+def test_new_contract_storage_rollback_refuses_admitted_record_loss(postgres_dsn: str) -> None:
+    qualification, _ = _derived_contract_fixture("rollback")
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        _insert_derived_contract_record(
+            connection,
+            family="qualification_readiness",
+            record_id=qualification["policyId"],
+            record_version=1,
+            record=qualification,
+        )
+    with psycopg.connect(postgres_dsn, autocommit=True) as admin:
+        with pytest.raises(psycopg.DatabaseError, match="rollback refused"):
+            admin.execute(DERIVED_CONTRACT_ROLLBACK.read_text())
+        assert admin.execute("SELECT to_regclass('derived_contract_records')").fetchone() == (
+            "derived_contract_records",
+        )
 
 
 def test_database_rejects_record_envelope_mismatch(postgres_dsn: str) -> None:

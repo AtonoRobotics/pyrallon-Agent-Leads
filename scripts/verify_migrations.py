@@ -341,11 +341,30 @@ def main() -> None:
         raise SystemExit("OAuth return-origin migration missing return_origin")
     if "DROP COLUMN IF EXISTS return_origin" not in oauth_return_rollback.read_text():
         raise SystemExit("OAuth return-origin rollback missing return_origin removal")
+    derived_contracts = ROOT / "migrations" / "0021_derived_contract_records.sql"
+    derived_contracts_rollback = ROOT / "migrations" / "0021_derived_contract_records.rollback.sql"
+    if not derived_contracts.is_file() or not derived_contracts_rollback.is_file():
+        raise SystemExit("missing derived contract-family storage migration or rollback")
+    derived_contracts_sql = derived_contracts.read_text()
+    for fragment in (
+        "CREATE TABLE IF NOT EXISTS derived_contract_records",
+        "qualification_readiness",
+        "availability_booking",
+        "PRIMARY KEY (tenant_id, contract_family, message_type, record_id, record_version)",
+        "CHECK ((payload->>'tenantId') IS NOT DISTINCT FROM tenant_id)",
+        "FORCE ROW LEVEL SECURITY",
+        "derived_contract_records_append_only",
+    ):
+        if fragment not in derived_contracts_sql:
+            raise SystemExit(f"derived contract-family migration missing: {fragment}")
+    if "rollback refused" not in derived_contracts_rollback.read_text():
+        raise SystemExit("derived contract-family rollback must refuse admitted record loss")
     print(
         "canonical, evidence, identity, ontology 0.2/0.3, Habitat, inbound, operator 1.0/1.1, "
         "OT01 acknowledgment, OPEN-025 authorization, OPEN-026 activation, Release Activation "
         "1.1 concurrency, connector credentials, platform OAuth clients, Twilio OAuth, cognitive "
-        "credentials, OAuth return origin, and control-plane migration integrity verified"
+        "credentials, OAuth return origin, derived contract-family storage, and control-plane "
+        "migration integrity verified"
     )
 
 

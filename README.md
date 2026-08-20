@@ -107,9 +107,11 @@ Apply migrations in filename order:
 18. `0018_platform_oauth_twilio.sql`
 19. `0019_cognitive_credentials.sql`
 20. `0020_oauth_return_origin.sql`
+21. `0021_derived_contract_records.sql`
 
 Each migration has a rollback script for an empty, unactivated installation. Rollback deliberately
-refuses to discard populated canonical, evidence, identity, authority-decision, or permit stores;
+refuses to discard populated canonical, derived-contract, evidence, identity, authority-decision,
+or permit stores;
 deployed data requires a reviewed forward-repair migration.
 
 Runtime database roles must be non-superuser and must not have `BYPASSRLS`. Every repository operation
