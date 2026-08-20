@@ -174,6 +174,27 @@ def test_policy_supersession_is_contiguous_and_tenant_bound() -> None:
         validate_policy_version(successor, current)
 
 
+@pytest.mark.parametrize(
+    ("evaluated_at", "effective_to"),
+    [
+        ("2025-12-31T23:59:59Z", None),
+        ("2026-03-01T12:00:00Z", "2026-03-01T12:00:00Z"),
+        ("2026-03-01T12:00:01Z", "2026-03-01T12:00:00Z"),
+    ],
+)
+def test_only_policy_versions_in_the_half_open_effective_interval_apply(
+    evaluated_at: str, effective_to: str | None
+) -> None:
+    valid = _load("qualification_readiness/valid.json")
+    policy = copy.deepcopy(valid["policy"])
+    policy["effectiveTo"] = effective_to
+    inputs = copy.deepcopy(valid["input"])
+    inputs["evaluatedAt"] = evaluated_at
+
+    with pytest.raises(ContractSemanticError, match="policy_not_effective"):
+        validate_qualification(policy, inputs)
+
+
 def test_qualification_decisions_bind_exact_inputs_and_deterministic_results() -> None:
     valid = _load("qualification_readiness/valid.json")
     validate_qualification_decisions(

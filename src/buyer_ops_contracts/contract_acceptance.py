@@ -51,11 +51,16 @@ def validate_qualification(policy: dict[str, Any], inputs: dict[str, Any]) -> di
         raise ContractSemanticError("cross_tenant_reference")
     if policy["lifecycle"] != "active":
         raise ContractSemanticError("policy_not_active")
+    evaluated_at = _time(inputs["evaluatedAt"])
+    effective_to = policy.get("effectiveTo")
+    if evaluated_at < _time(policy["effectiveFrom"]) or (
+        effective_to is not None and evaluated_at >= _time(effective_to)
+    ):
+        raise ContractSemanticError("policy_not_effective")
     criteria = {item["criterionId"]: item for item in policy["criteria"]}
     if len(criteria) != len(policy["criteria"]):
         raise ContractSemanticError("duplicate_criterion")
     observations: dict[str, dict[str, Any]] = {}
-    evaluated_at = _time(inputs["evaluatedAt"])
     for observation in inputs["observations"]:
         criterion_id = observation["criterionId"]
         if criterion_id not in criteria:
