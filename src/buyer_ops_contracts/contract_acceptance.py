@@ -106,14 +106,21 @@ def select_next_question(policy: dict[str, Any], inputs: dict[str, Any]) -> tupl
 def readiness_result(policy: dict[str, Any], inputs: dict[str, Any]) -> tuple[str, list[str]]:
     observations = validate_qualification(policy, inputs)
     blocking: list[str] = []
+    policy_blocking: list[str] = []
     for criterion in policy["criteria"]:
+        observation = observations.get(criterion["criterionId"])
+        if (
+            observation is not None
+            and observation["contradictionRefs"]
+            and criterion["contradictionDisposition"] == "block_readiness"
+        ):
+            policy_blocking.append(criterion["criterionId"])
         if criterion["disposition"] not in {"required", "declinable"}:
             continue
-        observation = observations.get(criterion["criterionId"])
         if observation is None or not observation["validAtEvaluation"]:
             blocking.append(criterion["criterionId"])
-    if inputs["urgentEscalationRefs"]:
-        return ("blocked", sorted(blocking))
+    if inputs["urgentEscalationRefs"] or policy_blocking:
+        return ("blocked", sorted(set(blocking + policy_blocking)))
     if not inputs["serviceZoneEligible"] or not inputs["capacityAvailable"] or blocking:
         return ("not_ready", sorted(blocking))
     return ("ready", [])

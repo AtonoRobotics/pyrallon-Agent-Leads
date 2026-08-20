@@ -113,6 +113,54 @@ def test_decline_freshness_contradiction_and_digest_are_deterministic() -> None:
     assert readiness_result(policy, contradicted) == ("not_ready", ["budget"])
 
 
+def test_policy_blocking_optional_contradiction_blocks_readiness() -> None:
+    valid = _load("qualification_readiness/valid.json")
+    policy = copy.deepcopy(valid["policy"])
+    policy["criteria"].append(
+        {
+            "criterionId": "optional-risk",
+            "predicate": "optional_risk_recorded",
+            "disposition": "optional",
+            "acceptedObservationStates": ["asserted", "verified"],
+            "maxAgeSeconds": 2592000,
+            "priority": 20,
+            "questionTemplateRef": {
+                "recordId": "question-optional-risk",
+                "recordType": "QuestionTemplate",
+                "version": 1,
+            },
+            "missingDisposition": "ignore",
+            "contradictionDisposition": "block_readiness",
+        }
+    )
+    inputs = copy.deepcopy(valid["input"])
+    inputs["observations"].append(
+        {
+            "criterionId": "optional-risk",
+            "observationRef": {
+                "recordId": "obs-optional-risk",
+                "recordType": "Assertion",
+                "version": 1,
+            },
+            "observationState": "contradicted",
+            "observedAt": "2026-02-28T12:00:00Z",
+            "validAtEvaluation": False,
+            "contradictionRefs": [
+                {
+                    "recordId": "contradiction-optional-risk",
+                    "recordType": "Contradiction",
+                    "version": 1,
+                }
+            ],
+        }
+    )
+    inputs["inputDigest"] = canonical_digest(
+        {key: inputs[key] for key in sorted(inputs) if key not in {"inputDigest", "inputSetId"}}
+    )
+
+    assert readiness_result(policy, inputs) == ("blocked", ["optional-risk"])
+
+
 def test_policy_supersession_is_contiguous_and_tenant_bound() -> None:
     current = _load("qualification_readiness/valid.json")["policy"]
     validate_policy_version(current, None)
