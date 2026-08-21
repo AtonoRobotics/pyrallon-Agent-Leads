@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
@@ -35,14 +34,12 @@ class Open025ReleaseSignerAuthority:
         *,
         tenant_id: str,
         authority_command: str,
-        scope: Callable[[dict[str, Any]], str],
     ) -> None:
         if not authority_command:
             raise ValueError("authority_command must be supplied by governing configuration")
         self._repository = ActorTenantAuthorizationRepository(connection, tenant_id=tenant_id)
         self._tenant_id = tenant_id
         self._authority_command = authority_command
-        self._scope = scope
 
     def verify(self, activation: dict[str, Any], *, evaluated_at: datetime) -> bool:
         if activation.get("tenantId") != self._tenant_id:
@@ -51,7 +48,7 @@ class Open025ReleaseSignerAuthority:
         return bool(
             grant
             and self._authority_command in grant["allowedCommands"]
-            and self._scope(activation) in grant["recordScopes"]
+            and activation.get("releaseId") in grant["recordScopes"]
             and grant["policyVersion"] == activation["policyVersion"]
         )
 
@@ -178,16 +175,16 @@ class SelectedReleaseActivationAuthority:
         self,
         repository: ReleaseActivationRepository,
         *,
-        activation_record_id: Callable[[dict[str, Any]], str],
-        capability_id: Callable[[dict[str, Any]], str],
+        activation_record_id: str,
     ) -> None:
+        if not activation_record_id:
+            raise ValueError("activation_record_id is required")
         self._repository = repository
         self._activation_record_id = activation_record_id
-        self._capability_id = capability_id
 
     def authorizes(self, request: dict[str, Any], *, evaluated_at: datetime) -> bool:
         return self._repository.capability_activated(
-            self._activation_record_id(request),
-            self._capability_id(request),
+            self._activation_record_id,
+            str(request["capability"]),
             evaluated_at=evaluated_at,
         )

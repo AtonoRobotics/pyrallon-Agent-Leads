@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, date, datetime, time
+from collections.abc import Iterable, Sequence
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -149,6 +150,125 @@ def readiness_result(policy: dict[str, Any], inputs: dict[str, Any]) -> tuple[st
     if not inputs["serviceZoneEligible"] or not inputs["capacityAvailable"] or blocking:
         return ("not_ready", sorted(blocking))
     return ("ready", [])
+
+
+def derive_qualification_decisions(
+    policy: dict[str, Any],
+    inputs: dict[str, Any],
+    *,
+    derived_at: datetime,
+    expires_at: datetime,
+    principal_id: str,
+    next_question_id: str,
+    readiness_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Derive the governed next-question and readiness decisions.
+
+    The policy and input set are the complete owner-supplied decision context.  This
+    function applies only the algorithm published by Qualification Readiness 1.0;
+    decision identities, deriver principal, and expiry are explicit inputs so the
+    runtime cannot invent authority, retention, or configuration defaults.
+    """
+
+    if not principal_id or not next_question_id or not readiness_id:
+        raise ContractSemanticError("configuration_incomplete")
+    if derived_at.tzinfo is None or expires_at.tzinfo is None:
+        raise ContractSemanticError("timestamp_requires_offset")
+    derived_at = derived_at.astimezone(UTC)
+    expires_at = expires_at.astimezone(UTC)
+    if derived_at >= expires_at:
+        raise ContractSemanticError("invalid_decision_expiry")
+
+    validate_qualification(policy, inputs)
+    question_result, criterion_id = select_next_question(policy, inputs)
+    readiness, blocking_criteria = readiness_result(policy, inputs)
+    derived_by = {
+        "principalId": principal_id,
+        "implementationId": "qualification_readiness_v1",
+        "implementationVersion": "1.0.0",
+    }
+    policy_ref = {
+        "recordId": policy["policyId"],
+        "recordType": "QualificationPolicy",
+        "version": policy["version"],
+    }
+    input_ref = {
+        "recordId": inputs["inputSetId"],
+        "recordType": "QualificationInputSet",
+        "version": 1,
+    }
+    question_template = None
+    if criterion_id is not None:
+        question_template = next(
+            criterion["questionTemplateRef"]
+            for criterion in policy["criteria"]
+            if criterion["criterionId"] == criterion_id
+        )
+
+    question_reasons = {
+        "no_question": ["all_resolved"],
+        "ask": ["criterion_requires_answer"],
+        "agent_handle": ["criterion_requires_agent_handling"],
+    }
+    next_question = {
+        "messageType": "next_question_decision",
+        "schemaVersion": "qualification-readiness/1.0.0",
+        "tenantId": policy["tenantId"],
+        "decisionId": next_question_id,
+        "inputSetRef": input_ref,
+        "policyRef": policy_ref,
+        "result": question_result,
+        "criterionId": criterion_id,
+        "questionTemplateRef": question_template,
+        "reasonCodes": question_reasons[question_result],
+        "derivedAt": _iso(derived_at),
+        "derivedBy": derived_by,
+        "inputDigest": inputs["inputDigest"],
+    }
+
+    reasons: list[str] = []
+    if readiness == "ready":
+        reasons.append("all_required_resolved")
+    else:
+        if blocking_criteria:
+            reasons.append("blocking_criteria")
+        if inputs["urgentEscalationRefs"]:
+            reasons.append("urgent_escalation")
+        if not inputs["serviceZoneEligible"]:
+            reasons.append("service_zone_ineligible")
+        if not inputs["capacityAvailable"]:
+            reasons.append("capacity_unavailable")
+    readiness_decision = {
+        "messageType": "readiness_decision",
+        "schemaVersion": "qualification-readiness/1.0.0",
+        "tenantId": policy["tenantId"],
+        "decisionId": readiness_id,
+        "journeyRef": inputs["journeyRef"],
+        "inputSetRef": input_ref,
+        "policyRef": policy_ref,
+        "result": readiness,
+        "reasonCodes": list(dict.fromkeys(reasons)),
+        "blockingCriterionIds": blocking_criteria,
+        "derivedAt": _iso(derived_at),
+        "derivedBy": derived_by,
+        "inputDigest": inputs["inputDigest"],
+        "expiresAt": _iso(expires_at),
+        "evidenceIds": list(
+            dict.fromkeys(
+                [
+                    *(
+                        observation["observationRef"]["recordId"]
+                        for observation in inputs["observations"]
+                    ),
+                    inputs["serviceZoneDecisionRef"]["recordId"],
+                    inputs["capacityDecisionRef"]["recordId"],
+                    *(ref["recordId"] for ref in inputs["urgentEscalationRefs"]),
+                ]
+            )
+        ),
+    }
+    validate_qualification_decisions(policy, inputs, next_question, readiness_decision)
+    return next_question, readiness_decision
 
 
 def validate_qualification_decisions(
@@ -296,6 +416,197 @@ def validate_slot_set(slot_set: dict[str, Any], policy: dict[str, Any]) -> None:
         expected = canonical_digest(payload)
         if slot["slotDigest"] != expected or slot["slotId"] != expected.split(":", 1)[1]:
             raise ContractSemanticError("slot_identity_mismatch")
+
+
+def _iso(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _overlaps(
+    left_start: datetime, left_end: datetime, right_start: datetime, right_end: datetime
+) -> bool:
+    return left_start < right_end and right_start < left_end
+
+
+def derive_slot_set(
+    policy: dict[str, Any],
+    readiness: dict[str, Any],
+    binding: dict[str, Any],
+    snapshot: dict[str, Any],
+    *,
+    derived_at: datetime,
+    principal_id: str,
+    location_options: Sequence[tuple[str, Sequence[str]]],
+    blocked_intervals: Iterable[dict[str, str]] = (),
+) -> dict[str, Any]:
+    """Derive a deterministic SlotSet from one governed availability snapshot.
+
+    Location options and blocked intervals are the outputs of the owner-bound travel,
+    location, service-zone, and capacity policies. They are deliberately caller supplied;
+    this function does not invent a location, resource, travel rule, or capacity default.
+    """
+
+    validate_availability_policy(policy)
+    validate_calendar_snapshot(snapshot)
+    if not principal_id or not location_options:
+        raise ContractSemanticError("configuration_incomplete")
+    normalized_locations = tuple(
+        sorted(
+            (location_id, tuple(sorted(set(resource_ids))))
+            for location_id, resource_ids in location_options
+        )
+    )
+    if any(
+        not location_id or not resource_ids for location_id, resource_ids in normalized_locations
+    ):
+        raise ContractSemanticError("configuration_incomplete")
+    if len({location_id for location_id, _ in normalized_locations}) != len(normalized_locations):
+        raise ContractSemanticError("duplicate_location")
+    if any(record["tenantId"] != policy["tenantId"] for record in (readiness, binding, snapshot)):
+        raise ContractSemanticError("cross_tenant_reference")
+    if readiness["result"] != "ready":
+        raise ContractSemanticError("readiness_not_current")
+    if binding["lifecycle"] != "active":
+        raise ContractSemanticError("provider_binding_not_active")
+
+    derived_at = derived_at.astimezone(UTC)
+    if not (
+        _time(snapshot["observedAt"]) <= derived_at
+        and _time(snapshot["rangeStart"]) <= derived_at < _time(snapshot["rangeEnd"])
+    ):
+        raise ContractSemanticError("snapshot_not_current")
+    if _time(readiness["expiresAt"]) <= derived_at:
+        raise ContractSemanticError("readiness_not_current")
+
+    blocked: list[tuple[datetime, datetime]] = []
+    supplied_blocked_intervals = sorted(
+        list(blocked_intervals), key=lambda interval: (interval["startsAt"], interval["endsAt"])
+    )
+    before = timedelta(seconds=policy["beforeBufferSeconds"])
+    after = timedelta(seconds=policy["afterBufferSeconds"])
+    for interval in snapshot["busyIntervals"]:
+        blocked.append((_time(interval["startsAt"]) - before, _time(interval["endsAt"]) + after))
+    for interval in policy["blackouts"]:
+        blocked.append((_time(interval["startsAt"]), _time(interval["endsAt"])))
+    for interval in supplied_blocked_intervals:
+        starts = _time(interval["startsAt"])
+        ends = _time(interval["endsAt"])
+        if starts >= ends:
+            raise ContractSemanticError("non_positive_blocked_interval")
+        blocked.append((starts, ends))
+
+    range_start = max(derived_at, _time(snapshot["rangeStart"]))
+    range_end = min(
+        _time(snapshot["rangeEnd"]),
+        derived_at + timedelta(seconds=policy["horizonSeconds"]),
+    )
+    if range_start >= range_end:
+        raise ContractSemanticError("empty_snapshot_range")
+
+    slots: list[dict[str, Any]] = []
+    current_date = range_start.astimezone(ZoneInfo(policy["timeZone"])).date()
+    last_date = range_end.astimezone(ZoneInfo(policy["timeZone"])).date()
+    while current_date <= last_date:
+        for window_start, window_end in local_window_instants(policy, current_date):
+            candidate = window_start
+            increment = timedelta(seconds=policy["slotIncrementSeconds"])
+            duration = timedelta(seconds=policy["consultationDurationSeconds"])
+            while candidate + duration <= window_end:
+                slot_end = candidate + duration
+                if (
+                    candidate >= range_start
+                    and slot_end <= range_end
+                    and not any(
+                        _overlaps(candidate, slot_end, blocked_start, blocked_end)
+                        for blocked_start, blocked_end in blocked
+                    )
+                ):
+                    for location_id, resource_ids in normalized_locations:
+                        slots.append(
+                            {
+                                "startsAt": _iso(candidate),
+                                "endsAt": _iso(slot_end),
+                                "timeZone": policy["timeZone"],
+                                "locationId": location_id,
+                                "resourceIds": sorted(set(resource_ids)),
+                            }
+                        )
+                candidate += increment
+        current_date += timedelta(days=1)
+
+    for slot in slots:
+        payload = {key: slot[key] for key in sorted(slot)}
+        digest = canonical_digest(payload)
+        slot["slotDigest"] = digest
+        slot["slotId"] = digest.split(":", 1)[1]
+    slots.sort(key=lambda slot: (_time(slot["startsAt"]), slot["locationId"], slot["slotId"]))
+
+    input_digest = canonical_digest(
+        {
+            "policy": policy,
+            "readiness": readiness,
+            "binding": binding,
+            "snapshot": snapshot,
+            "locationOptions": [
+                {"locationId": location_id, "resourceIds": list(resource_ids)}
+                for location_id, resource_ids in normalized_locations
+            ],
+            "blockedIntervals": supplied_blocked_intervals,
+        }
+    )
+    expires_at = min(
+        derived_at + timedelta(seconds=min(policy["slotSetTtlSeconds"], 900)),
+        _time(snapshot["rangeEnd"]),
+        _time(readiness["expiresAt"]),
+    )
+    if expires_at <= derived_at:
+        raise ContractSemanticError("invalid_slot_set_expiry")
+    journey_ref = dict(readiness["journeyRef"])
+    slot_set: dict[str, Any] = {
+        "messageType": "slot_set",
+        "schemaVersion": "availability-booking/1.0.0",
+        "tenantId": policy["tenantId"],
+        "slotSetId": f"slot-set-{input_digest.split(':', 1)[1][:32]}",
+        "journeyRef": journey_ref,
+        "readinessDecisionRef": {
+            "recordId": readiness["decisionId"],
+            "recordType": "ReadinessDecision",
+            "version": 1,
+        },
+        "policyRef": {
+            "recordId": policy["policyId"],
+            "recordType": "AvailabilityPolicy",
+            "version": policy["version"],
+        },
+        "snapshotRef": {
+            "recordId": snapshot["snapshotId"],
+            "recordType": "CalendarSnapshot",
+            "version": 1,
+        },
+        "providerBindingRef": {
+            "recordId": binding["bindingId"],
+            "recordType": "CalendarProviderBinding",
+            "version": binding["version"],
+        },
+        "derivedAt": _iso(derived_at),
+        "derivedBy": {
+            "principalId": principal_id,
+            "implementationId": "availability_v1",
+            "implementationVersion": "1.0.0",
+        },
+        "expiresAt": _iso(expires_at),
+        "inputDigest": input_digest,
+        "slots": slots,
+        "reasonCodes": ["available" if slots else "no_available_slots"],
+    }
+    validate_slot_set_context(
+        slot_set,
+        policy=policy,
+        readiness=readiness,
+        binding=binding,
+        snapshot=snapshot,
+    )
+    return slot_set
 
 
 def validate_slot_set_context(

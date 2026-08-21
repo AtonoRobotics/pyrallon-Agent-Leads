@@ -29,3 +29,10 @@ def test_contract_ci_executes_the_built_wheel_outside_the_source_tree() -> None:
     assert 'PYTHONPATH="$WHEEL_PATH"' in workflow
     assert "load_metric_catalog" in workflow
     assert "working-directory: /tmp" in workflow
+
+
+def test_contract_ci_enforces_whole_repository_scope_before_tests() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "contracts.yml").read_text()
+    scope_check = "uv run python scripts/verify_production_scope.py"
+    assert scope_check in workflow
+    assert workflow.index(scope_check) < workflow.index("uv run pytest")

@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+uv run python scripts/production_guard.py
+exec uv run python scripts/verify_production_focus.py

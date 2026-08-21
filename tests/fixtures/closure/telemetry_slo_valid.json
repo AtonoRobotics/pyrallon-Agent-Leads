@@ -6,6 +6,8 @@
     "metricId": "value",
     "value": 0,
     "unit": "seconds",
+    "startEventType": "ingress_received",
+    "endEventType": "canonical_capture_committed",
     "eventStartedAt": "2030-01-01T00:00:00Z",
     "eventEndedAt": "2030-01-01T00:00:00Z",
     "observedAt": "2030-01-01T00:00:00Z",

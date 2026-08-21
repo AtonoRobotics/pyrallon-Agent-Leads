@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import hashlib
 import json
 import os
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -21,6 +23,7 @@ from buyer_ops_contracts.activation import ActivationController, evidence_set_di
 from buyer_ops_contracts.actor_authorization import ActorTenantAuthorizationRepository
 from buyer_ops_contracts.artifacts import ArtifactPointer
 from buyer_ops_contracts.audit import verify_tenant_export
+from buyer_ops_contracts.canonical_habitat import CanonicalLockedHabitatStateReader
 from buyer_ops_contracts.canonical_repository import CanonicalRepository, VersionConflict
 from buyer_ops_contracts.closure_repository import (
     ClosureVersionConflict,
@@ -36,6 +39,7 @@ from buyer_ops_contracts.derived_contract_repository import (
     QualificationDecisionPairRepository,
     SlotSetRepository,
 )
+from buyer_ops_contracts.digest import sha256_digest
 from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.evidence import EvidenceIntegrityError, verify_checkpoint
 from buyer_ops_contracts.evidence_lifecycle import (
@@ -101,6 +105,10 @@ RELEASE_ACTIVATION_CONCURRENCY_ROLLBACK = (
 )
 DERIVED_CONTRACT_MIGRATION = ROOT / "migrations" / "0021_derived_contract_records.sql"
 DERIVED_CONTRACT_ROLLBACK = ROOT / "migrations" / "0021_derived_contract_records.rollback.sql"
+WORKFLOW_OUTBOX_MIGRATION = ROOT / "migrations" / "0022_operator_workflow_outbox.sql"
+WORKFLOW_OUTBOX_ROLLBACK = ROOT / "migrations" / "0022_operator_workflow_outbox.rollback.sql"
+INGRESS_ARTIFACT_MIGRATION = ROOT / "migrations" / "0023_ingress_artifact_objects.sql"
+DISPATCH_CLAIM_MIGRATION = ROOT / "migrations" / "0024_effect_dispatch_claim.sql"
 DSN = os.environ.get("BUYER_OPS_TEST_POSTGRES_DSN")
 
 
@@ -198,6 +206,11 @@ def postgres_dsn() -> str:
     if DSN is None:
         pytest.skip("BUYER_OPS_TEST_POSTGRES_DSN is not configured")
     with psycopg.connect(DSN, autocommit=True) as admin:
+        # This fixture is explicitly documented for disposable databases. Reset the public
+        # schema so a prior local run or another test module cannot contaminate migration order.
+        admin.execute("DROP SCHEMA public CASCADE")
+        admin.execute("CREATE SCHEMA public")
+        admin.execute("GRANT ALL ON SCHEMA public TO public")
         admin.execute(MIGRATION.read_text())
         admin.execute(ROLLBACK.read_text())
         assert admin.execute("SELECT to_regclass('canonical_records_current')").fetchone() == (
@@ -238,6 +251,15 @@ def postgres_dsn() -> str:
         admin.execute(RELEASE_ACTIVATION_MIGRATION.read_text())
         admin.execute(RELEASE_ACTIVATION_CONCURRENCY_MIGRATION.read_text())
         admin.execute(DERIVED_CONTRACT_MIGRATION.read_text())
+        admin.execute(WORKFLOW_OUTBOX_MIGRATION.read_text())
+        admin.execute(INGRESS_ARTIFACT_MIGRATION.read_text())
+        admin.execute(DISPATCH_CLAIM_MIGRATION.read_text())
+        admin.execute(WORKFLOW_OUTBOX_ROLLBACK.read_text())
+        assert admin.execute("SELECT to_regclass('operator_workflow_outbox')").fetchone() == (None,)
+        assert admin.execute(
+            "SELECT to_regclass('operator_workflow_signal_receipts')"
+        ).fetchone() == (None,)
+        admin.execute(WORKFLOW_OUTBOX_MIGRATION.read_text())
         admin.execute(DERIVED_CONTRACT_ROLLBACK.read_text())
         assert admin.execute("SELECT to_regclass('derived_contract_records')").fetchone() == (None,)
         admin.execute(DERIVED_CONTRACT_MIGRATION.read_text())
@@ -266,7 +288,9 @@ def postgres_dsn() -> str:
             "release_gate_evidence, release_activation_decisions, ingress_attribution, "
             "ingress_consent_presentation, operator_actor_tenancies, "
             "actor_tenant_authorization_versions, actor_tenant_authorizations_current, "
-            "release_activation_versions, derived_contract_records "
+            "release_activation_versions, derived_contract_records, "
+            "operator_workflow_outbox, operator_workflow_signal_receipts, "
+            "ingress_artifact_objects "
             "TO buyer_ops_test_runtime"
         )
     _seed_reference_graph(DSN)
@@ -536,8 +560,8 @@ def _external_message_identity(
         "tenantId": "tenant-a",
         "recordId": f"message-identity-{external_event_id}",
         "recordVersion": 1,
-        "observedAt": "2029-01-01T00:00:00Z",
-        "effectiveFrom": "2029-01-01T00:00:00Z",
+        "observedAt": "2026-01-01T00:00:00Z",
+        "effectiveFrom": "2026-01-01T00:00:00Z",
         "status": "current",
         "evidenceRefs": ["provider-envelope-1"],
         "recordType": "ExternalMessageIdentity",
@@ -695,6 +719,40 @@ def test_real_postgres_closure_history_and_current_projection(postgres_dsn: str)
             )
 
 
+def test_real_postgres_habitat_reader_loads_current_effect_policy_rule(
+    postgres_dsn: str,
+) -> None:
+    policy = {
+        "schemaVersion": "open-019-024/1.1.0",
+        "tenantId": "tenant-a",
+        "recordId": "effect-policy-live-reader-1",
+        "recordVersion": 1,
+        "observedAt": "2026-01-01T00:00:00Z",
+        "effectiveFrom": "2026-01-01T00:00:00Z",
+        "expiresAt": "2030-02-01T00:00:00Z",
+        "status": "current",
+        "evidenceRefs": ["evidence-effect-policy-1"],
+        "recordType": "EffectPolicy",
+        "policyId": "effect-policy-live-reader",
+        "policyVersion": "effect-policy/1",
+        "rules": [{"actionClass": "send_message", "disposition": "allowed"}],
+    }
+    intent = _habitat_intent()
+    with _runtime_connection(postgres_dsn) as connection:
+        PostgresClosureRepository(connection, tenant_id="tenant-a").save(policy)
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", ("tenant-a",))
+        state = PostgresVersionLockedStateReader(CanonicalLockedHabitatStateReader()).load_current(
+            connection.cursor(), intent
+        )
+
+    assert state.effect_policy is not None
+    assert state.effect_policy["policyId"] == "effect-policy-live-reader"
+    assert state.effect_policy["selectedRule"] == {
+        "actionClass": "send_message",
+        "disposition": "allowed",
+    }
+
+
 def test_concurrent_closure_version_one_admission_has_one_lineage_winner(
     postgres_dsn: str,
 ) -> None:
@@ -790,7 +848,44 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
         "ownerId": "accessibility-owner",
         "expiresAt": "2030-01-01T00:00:00Z",
     }
-    evidence_ids = [release["recordId"], accessibility["recordId"]]
+    binding = {
+        "schemaVersion": "open-019-024/1.1.0",
+        "tenantId": "tenant-a",
+        "recordId": "a11y-binding-web",
+        "recordVersion": 1,
+        "observedAt": "2026-01-01T00:00:00Z",
+        "effectiveFrom": "2026-01-01T00:00:00Z",
+        "status": "current",
+        "evidenceRefs": ["operator-acceptance-web", accessibility["recordId"]],
+        "recordType": "AccessibilityBinding",
+        "operatorAcceptanceRecordId": "operator-acceptance-web",
+        "operatorAcceptanceDigest": "sha256:" + "c" * 64,
+        "closureEvidenceRecordId": accessibility["recordId"],
+        "closureEvidenceDigest": sha256_digest(accessibility),
+        "surface": "web",
+        "buildDigest": build_digest,
+        "releaseDigest": release_digest,
+        "expiresAt": "2030-01-01T00:00:00Z",
+    }
+    binding["bindingDigest"] = sha256_digest(
+        {
+            key: binding[key]
+            for key in (
+                "tenantId",
+                "recordId",
+                "recordVersion",
+                "operatorAcceptanceRecordId",
+                "operatorAcceptanceDigest",
+                "closureEvidenceRecordId",
+                "closureEvidenceDigest",
+                "surface",
+                "buildDigest",
+                "releaseDigest",
+                "expiresAt",
+            )
+        }
+    )
+    evidence_ids = [release["recordId"], accessibility["recordId"], binding["recordId"]]
     decision = {
         "messageType": "activation_decision",
         "schemaVersion": "release-activation/1.1.0",
@@ -808,9 +903,14 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
         "decision": "activate",
         "evidenceIds": [release["recordId"]],
         "accessibilityEvidenceIds": [accessibility["recordId"]],
+        "accessibilityBindingIds": [binding["recordId"]],
+        "accessibilityAcceptanceDigests": {"web": "sha256:" + "c" * 64},
         "evidenceSetDigest": evidence_set_digest(evidence_ids),
         "authorizedBy": "release-manager",
         "authorizationId": "release-authorization-1",
+        "authorizationVersion": 1,
+        "authorizationPolicyVersion": "release-policy-1",
+        "authorizationRecordScopes": ["all_external_effects"],
         "decidedAt": "2026-08-19T12:00:00Z",
         "rollbackState": "armed",
         "readbackRequired": True,
@@ -821,6 +921,26 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
         },
     }
     with _runtime_connection(postgres_dsn) as connection:
+        ActorTenantAuthorizationRepository(connection, tenant_id="tenant-a").save(
+            {
+                "schemaVersion": "open-025-027/1.0.0",
+                "recordType": "ActorTenantAuthorization",
+                "tenantId": "tenant-a",
+                "recordId": "release-authorization-1",
+                "observedAt": "2026-01-01T00:00:00Z",
+                "actorId": "release-manager",
+                "principalId": "principal-release-manager",
+                "role": "release_manager",
+                "allowedCommands": ["activate_release"],
+                "recordScopes": ["all_external_effects"],
+                "policyVersion": "release-policy-1",
+                "authorizationVersion": 1,
+                "effectiveAt": "2026-01-01T00:00:00Z",
+                "expiresAt": "2030-01-01T00:00:00Z",
+                "status": "active",
+            },
+            now=datetime(2026, 8, 19, tzinfo=UTC),
+        )
         controller = ActivationController(
             connection,
             tenant_id="tenant-a",
@@ -831,6 +951,7 @@ def test_real_postgres_activation_requires_release_and_build_bound_evidence(
         )
         controller.record_gate_evidence(release)
         controller.record_gate_evidence(accessibility)
+        PostgresClosureRepository(connection, tenant_id="tenant-a").save(binding)
         assert controller.record_decision(decision) == decision
         assert controller.capability_activated("all_external_effects") is True
 
@@ -961,6 +1082,21 @@ def _habitat_intent() -> dict[str, Any]:
         "activity_id": "activity-1",
         "action_class": "send_message",
         "connector_binding_id": "connector-1",
+        "effect_context": {
+            "activation_id": "activation-1",
+            "activation_digest": "sha256:" + "b" * 64,
+            "capability_id": "send",
+            "inventory_record_id": "inventory-1",
+            "inventory_record_version": 1,
+            "inventory_digest": "sha256:" + "c" * 64,
+            "constraint_digest": "sha256:" + "d" * 64,
+            "grant_id": "grant-1",
+            "grant_version": 1,
+            "draft_preview_record_id": "proposal-1",
+            "draft_preview_record_version": 1,
+            "draft_preview_digest": "sha256:" + "e" * 64,
+            "delegated_principal_id": "principal-1",
+        },
         "target_resource": {
             "resource_type": "conversation",
             "resource_id": "conversation-1",
@@ -3046,6 +3182,8 @@ def test_telemetry_series_limit_is_atomic_in_postgres(postgres_dsn: str) -> None
             "metricId": "capture_latency_seconds",
             "value": 12,
             "unit": "seconds",
+            "startEventType": "ingress_received",
+            "endEventType": "canonical_capture_committed",
             "eventStartedAt": "2030-01-01T00:00:00Z",
             "eventEndedAt": "2030-01-01T00:00:12Z",
             "observedAt": "2030-01-01T00:00:13Z",
@@ -3086,3 +3224,71 @@ def test_activation_concurrency_rollback_refuses_decision_loss(postgres_dsn: str
             "WHERE table_name = 'release_activation_decisions' "
             "AND column_name = 'activation_version'"
         ).fetchone() == ("activation_version",)
+
+
+def test_workflow_outbox_delivers_and_records_failure_receipts(postgres_dsn: str) -> None:
+    class Dispatcher:
+        def __init__(self, *, fail: bool = False) -> None:
+            self.fail = fail
+            self.calls: list[dict[str, Any]] = []
+
+        async def dispatch(self, **kwargs: Any) -> str:
+            self.calls.append(kwargs)
+            if self.fail:
+                raise RuntimeError("temporal unavailable")
+            return "provider-receipt-1"
+
+    outbox_id = f"outbox-{uuid.uuid4()}"
+    failed_outbox_id = f"outbox-{uuid.uuid4()}"
+    with _runtime_connection(postgres_dsn) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', 'tenant-a', false)")
+        connection.execute(
+            """
+            INSERT INTO operator_workflow_outbox (
+                tenant_id, outbox_id, command_id, idempotency_key,
+                workflow_id, run_id, signal_name, signal_id, signal_payload, state
+            ) VALUES ('tenant-a', %s, %s, %s, 'workflow-1', 'run-1',
+                      'pause', %s, '{}'::jsonb, 'pending')
+            """,
+            (outbox_id, f"command-{outbox_id}", f"key-{outbox_id}", f"signal-{outbox_id}"),
+        )
+        service = CanonicalOperatorCommandService(
+            connection,
+            CanonicalRepository(connection, tenant_id="tenant-a"),
+            tenant_id="tenant-a",
+        )
+        dispatcher = Dispatcher()
+        assert asyncio.run(service.dispatch_workflow_outbox(dispatcher)) == [
+            {"outbox_id": outbox_id, "command_id": f"command-{outbox_id}"}
+        ]
+        assert dispatcher.calls[0]["workflow_id"] == "workflow-1"
+        assert connection.execute(
+            "SELECT state, attempt FROM operator_workflow_outbox WHERE outbox_id = %s",
+            (outbox_id,),
+        ).fetchone() == ("dispatched", 1)
+        assert connection.execute(
+            "SELECT state, provider_receipt_id FROM operator_workflow_signal_receipts "
+            "WHERE outbox_id = %s",
+            (outbox_id,),
+        ).fetchone() == ("delivered", "provider-receipt-1")
+
+        connection.execute(
+            """
+            INSERT INTO operator_workflow_outbox (
+                tenant_id, outbox_id, command_id, idempotency_key,
+                workflow_id, run_id, signal_name, signal_id, signal_payload, state
+            ) VALUES ('tenant-a', %s, %s, %s, 'workflow-1', 'run-1',
+                      'resume', %s, '{}'::jsonb, 'pending')
+            """,
+            (
+                failed_outbox_id,
+                f"command-{failed_outbox_id}",
+                f"key-{failed_outbox_id}",
+                f"signal-{failed_outbox_id}",
+            ),
+        )
+        asyncio.run(service.dispatch_workflow_outbox(Dispatcher(fail=True)))
+        assert connection.execute(
+            "SELECT state, attempt, failure_code FROM operator_workflow_outbox WHERE outbox_id = %s",
+            (failed_outbox_id,),
+        ).fetchone() == ("failed", 1, "RuntimeError")

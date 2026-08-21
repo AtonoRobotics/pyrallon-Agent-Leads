@@ -217,7 +217,7 @@ Every admitted type uses the envelope `status` machine:
 | Transaction | `transactionState` | under_contract→active/terminated/cancelled/disputed; active→closing_pending/terminated/cancelled/disputed; closing_pending→closed/terminated/disputed |
 | TransactionMilestone | `confirmationState`, `milestoneState` | proposed→confirmed/disputed; pending→due/completed/waived/cancelled/superseded; due→completed/missed/waived/cancelled/superseded |
 | Authorization | `authorizationState` | pending→active/revoked; active→expired/revoked/superseded/disputed; disputed→active/revoked |
-| Approval | `decision` | immutable exact-payload decision; approved may only be superseded by a new revoked Approval |
+| Approval | `decision` | pending→approved/denied/revoked; decided records are immutable and supersession creates a new exact-payload decision |
 | EffectAttempt | `attemptState` | registered→dispatching→accepted/confirmed/rejected/unknown_outcome; accepted→confirmed/rejected/unknown_outcome; unknown_outcome→reconciled_failed/reconciled_succeeded |
 | Evidence | `evidenceState` | current→superseded/deleted/anonymized/invalid |
 | Assertion | `assertionState` | current→stale/contradicted/superseded/withdrawn/invalid |

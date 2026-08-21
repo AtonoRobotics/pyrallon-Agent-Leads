@@ -289,6 +289,18 @@ class TelemetryRecorder:
                     )
                 ]
             )
+        if observation["startEventType"] != metric.get("start") or observation[
+            "endEventType"
+        ] != metric.get("end"):
+            raise ContractViolation(
+                [
+                    Violation(
+                        "METRIC_EVENT_IDENTITY_MISMATCH",
+                        "$.startEventType",
+                        "source event identities must equal the telemetry catalog",
+                    )
+                ]
+            )
         if metric["unit"] == "ratio":
             raise ContractViolation(
                 [
@@ -435,6 +447,16 @@ class LatencySloEvaluator:
                 [Violation("UNKNOWN_SLO", "$.sloId", f"{slo_id} is not in the catalog")]
             )
         metric = self._metrics[slo["metricId"]]
+        if metric["unit"] == "ratio" and slo["statistic"] == "ratio":
+            return self._evaluate_ratio(
+                slo,
+                metric,
+                observations,
+                evaluation_id=evaluation_id,
+                window_started_at=window_started_at,
+                window_ended_at=window_ended_at,
+                evaluated_at=evaluated_at,
+            )
         if metric["unit"] != "seconds" or slo["statistic"] not in {"p50", "p95", "p99"}:
             raise ValueError("the published schemas do not bind this SLO input shape")
         window_start = _timestamp(window_started_at)
@@ -472,7 +494,12 @@ class LatencySloEvaluator:
                 raise ContractViolation(
                     [Violation("SLO_SOURCE_TYPE", "$", "source must be a metric observation")]
                 )
-            if observation["metricId"] != metric["id"] or observation["unit"] != "seconds":
+            if (
+                observation["metricId"] != metric["id"]
+                or observation["unit"] != "seconds"
+                or observation["startEventType"] != metric.get("start")
+                or observation["endEventType"] != metric.get("end")
+            ):
                 raise ContractViolation(
                     [
                         Violation(
@@ -552,6 +579,145 @@ class LatencySloEvaluator:
             "schemaVersion": "telemetry-slo/1.0.0",
             "evaluationId": evaluation_id,
             "sloId": slo_id,
+            "catalogVersion": self._catalog["catalogVersion"],
+            "windowStartedAt": window_started_at,
+            "windowEndedAt": window_ended_at,
+            "sampleCount": sample_count,
+            "objective": slo["objective"],
+            "actual": actual,
+            "comparator": slo["comparator"],
+            "status": status,
+            "errorBudgetConsumed": error_budget,
+            "sourceDigest": sha256_digest(sources),
+            "evaluatedAt": evaluated_at,
+        }
+        validate_record(evaluation, "telemetry_slo")
+        return evaluation
+
+    def _evaluate_ratio(
+        self,
+        slo: dict[str, Any],
+        metric: dict[str, Any],
+        observations: list[dict[str, Any]],
+        *,
+        evaluation_id: str,
+        window_started_at: str,
+        window_ended_at: str,
+        evaluated_at: str,
+    ) -> dict[str, Any]:
+        """Evaluate ratios from closure MetricObservation event-set bindings."""
+
+        window_start = _timestamp(window_started_at)
+        window_end = _timestamp(window_ended_at)
+        evaluated = _timestamp(evaluated_at)
+        if window_end <= window_start:
+            raise ContractViolation(
+                [Violation("SLO_WINDOW_ORDER", "$.windowEndedAt", "must follow window start")]
+            )
+        if slo["window"] == "rolling_24h" and (window_end - window_start).total_seconds() != 86400:
+            raise ContractViolation(
+                [
+                    Violation(
+                        "SLO_WINDOW_MISMATCH",
+                        "$.windowEndedAt",
+                        "rolling_24h requires an exact 24-hour half-open window",
+                    )
+                ]
+            )
+        if evaluated < window_end:
+            raise ContractViolation(
+                [
+                    Violation(
+                        "SLO_EVALUATED_BEFORE_WINDOW_END",
+                        "$.evaluatedAt",
+                        "evaluation cannot precede window end",
+                    )
+                ]
+            )
+
+        admitted: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for observation in observations:
+            validate_record(observation, "closure")
+            validate_closure_semantics(observation, now=evaluated)
+            if (
+                observation.get("recordType") != "MetricObservation"
+                or observation.get("metricId") != metric["id"]
+                or observation.get("numeratorEvent") != metric["numerator"]
+                or observation.get("denominatorEvent") != metric["denominator"]
+            ):
+                raise ContractViolation(
+                    [
+                        Violation(
+                            "SLO_SOURCE_METRIC_MISMATCH",
+                            "$.metricId",
+                            "closure source metric and event identities must match the cataloged SLO",
+                        )
+                    ]
+                )
+            observation_id = str(observation["recordId"])
+            if observation_id in seen_ids:
+                raise ContractViolation(
+                    [
+                        Violation(
+                            "DUPLICATE_SLO_SOURCE",
+                            "$.recordId",
+                            "a closure observation may contribute at most once",
+                        )
+                    ]
+                )
+            seen_ids.add(observation_id)
+            source_start = _timestamp(observation["windowStart"])
+            source_end = _timestamp(observation["windowEnd"])
+            if source_start >= source_end or source_start < window_start or source_end > window_end:
+                continue
+            if _timestamp(observation["observedAt"]) > evaluated:
+                raise ContractViolation(
+                    [
+                        Violation(
+                            "SLO_SOURCE_IN_FUTURE",
+                            "$.observedAt",
+                            "source observation cannot be observed after evaluation",
+                        )
+                    ]
+                )
+            admitted.append(observation)
+
+        numerator = sum(int(observation["numerator"]) for observation in admitted)
+        denominator = sum(int(observation["denominator"]) for observation in admitted)
+        sample_count = denominator
+        actual: float | None = None
+        error_budget: float | None = None
+        status = str(slo["noData"])
+        if denominator >= int(slo["minimumSamples"]):
+            actual = numerator / denominator if denominator else None
+            if actual is not None:
+                objective = float(slo["objective"])
+                comparator = str(slo["comparator"])
+                passed = (
+                    (comparator == "lte" and actual <= objective)
+                    or (comparator == "gte" and actual >= objective)
+                    or (comparator == "eq" and actual == objective)
+                )
+                status = "pass" if passed else "fail"
+                if comparator == "lte":
+                    error_budget = max(0.0, (actual - objective) / (1.0 - objective))
+                elif comparator == "gte":
+                    error_budget = max(0.0, (objective - actual) / objective)
+                else:
+                    error_budget = 0.0 if actual == objective else 1.0
+        sources = [
+            {
+                "observationId": observation["recordId"],
+                "digest": sha256_digest(observation),
+            }
+            for observation in sorted(admitted, key=lambda item: str(item["recordId"]))
+        ]
+        evaluation = {
+            "messageType": "slo_evaluation",
+            "schemaVersion": "telemetry-slo/1.0.0",
+            "evaluationId": evaluation_id,
+            "sloId": slo["id"],
             "catalogVersion": self._catalog["catalogVersion"],
             "windowStartedAt": window_started_at,
             "windowEndedAt": window_ended_at,
@@ -672,7 +838,7 @@ class LatencyAlertEvaluator:
                     )
                 ]
             )
-        if slo["statistic"] not in {"p50", "p95", "p99"}:
+        if slo["statistic"] not in {"p50", "p95", "p99", "ratio"}:
             raise ValueError("the published schemas do not bind this SLO input shape")
         expected_conditions = {
             "slo_warning": (

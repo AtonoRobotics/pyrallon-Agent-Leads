@@ -49,7 +49,7 @@ def classify_sender(sender: str) -> tuple[str, str]:
 def conversation_channel(envelope_channel: str) -> str:
     if envelope_channel == "form":
         return "web_chat"
-    if envelope_channel in {"email", "sms"}:
+    if envelope_channel in {"email", "sms", "phone"}:
         return envelope_channel
     raise CaptureIncomplete("validation_failed", "unsupported inbound channel for conversation")
 

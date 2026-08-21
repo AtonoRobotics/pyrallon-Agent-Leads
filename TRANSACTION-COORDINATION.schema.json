@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/transaction-coordination/1.0.0",
+  "title": "TransactionCoordinationContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["messageType", "schemaVersion", "transactionId", "journeyId", "executedArtifactId", "executedArtifactDigest", "transactionState", "milestones", "unresolvedItems", "legalInterpretation"],
+  "properties": {
+    "messageType": {"const": "transaction_coordination_plan"},
+    "schemaVersion": {"const": "transaction-coordination/1.0.0"},
+    "transactionId": {"type": "string", "minLength": 1},
+    "journeyId": {"type": "string", "minLength": 1},
+    "executedArtifactId": {"type": "string", "minLength": 1},
+    "executedArtifactDigest": {"type": "string", "pattern": "^[A-Za-z0-9_-]+:[A-Fa-f0-9]{32,}$"},
+    "transactionState": {"enum": ["under_contract", "active", "closing_pending", "closed", "terminated", "cancelled", "disputed"]},
+    "milestones": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["milestoneId", "milestoneType", "dueAt", "state", "confirmationEvidenceId", "sourceArtifactId"], "properties": {"milestoneId": {"type": "string", "minLength": 1}, "milestoneType": {"type": "string", "minLength": 1}, "dueAt": {"type": "string", "format": "date-time"}, "state": {"enum": ["pending", "due", "completed", "missed", "waived", "cancelled", "superseded"]}, "confirmationEvidenceId": {"type": "string", "minLength": 1}, "sourceArtifactId": {"type": "string", "minLength": 1}}}},
+    "unresolvedItems": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "legalInterpretation": {"const": false}
+  }
+}

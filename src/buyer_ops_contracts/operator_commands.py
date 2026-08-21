@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from psycopg.types.json import Jsonb
+from temporalio.client import Client
 
 from .actor_authorization import (
     ActorTenantAuthorizationRepository,
@@ -24,12 +25,57 @@ from .structural import validate_record
 
 _CANONICAL_MUTATION_COMMANDS = frozenset(
     {
+        "approve",
+        "deny",
         "correct_replace",
         "correct_invalidate",
         "revoke_authorization",
         "revoke_approval",
     }
 )
+_WORKFLOW_COMMANDS = frozenset({"pause_workflow", "resume_workflow", "request_reconciliation"})
+
+
+class WorkflowSignalDispatcher(Protocol):
+    async def dispatch(
+        self,
+        *,
+        workflow_id: str,
+        run_id: str,
+        signal_name: str,
+        signal_id: str,
+        payload: dict[str, Any],
+    ) -> str: ...
+
+
+class TemporalWorkflowSignalDispatcher:
+    """Deliver the allow-listed operator signals through the Temporal client."""
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+
+    async def dispatch(
+        self,
+        *,
+        workflow_id: str,
+        run_id: str,
+        signal_name: str,
+        signal_id: str,
+        payload: dict[str, Any],
+    ) -> str:
+        if signal_name not in {"pause", "resume", "canonical_changed"}:
+            raise ValueError(f"unsupported workflow signal: {signal_name}")
+        if signal_name == "canonical_changed":
+            if not payload:
+                raise ValueError("canonical_changed requires a payload")
+        elif payload:
+            raise ValueError(f"{signal_name} does not accept a payload")
+        handle = self._client.get_workflow_handle(workflow_id, run_id=run_id)
+        if signal_name == "canonical_changed":
+            await handle.signal(signal_name, payload)
+        else:
+            await handle.signal(signal_name)
+        return f"temporal:{workflow_id}:{run_id}:{signal_id}"
 
 
 class OperatorCommandError(RuntimeError):
@@ -109,6 +155,8 @@ class OperatorCommandService:
             )
         if command["command_type"] in _CANONICAL_MUTATION_COMMANDS:
             return self._dispatch_canonical_mutation(command, actor_id=actor_id, now=now)
+        if command["command_type"] in _WORKFLOW_COMMANDS:
+            return self._dispatch_workflow_command(command, actor_id=actor_id, now=now)
         raise OperatorCommandError(
             "validation_failed",
             retryable=False,
@@ -160,7 +208,7 @@ class OperatorCommandService:
                     )
                     records = [updated]
                     evidence_id = str(updated["revocationEvidenceId"])
-                else:
+                elif kind == "approval_revocation":
                     prior, revoked = self._repository.supersede_on(
                         cursor,
                         mutation["prior_approval_update"],
@@ -169,6 +217,15 @@ class OperatorCommandService:
                     )
                     records = [prior, revoked]
                     evidence_id = str(revoked["id"])
+                else:
+                    prior, decided = self._repository.supersede_on(
+                        cursor,
+                        mutation["prior_approval_update"],
+                        mutation["decided_approval_record"],
+                        expected_prior_version=int(command["expected_version"]),
+                    )
+                    records = [prior, decided]
+                    evidence_id = str(decided["id"])
                 current_version = int(records[0]["version"])
                 result = {
                     "message_type": "operator_command_result",
@@ -204,6 +261,241 @@ class OperatorCommandService:
             raise
         self._connection.commit()
         return result
+
+    def _dispatch_workflow_command(
+        self, command: dict[str, Any], *, actor_id: str, now: datetime
+    ) -> dict[str, Any]:
+        mutation = command["mutation"]
+        workflow_update = mutation["workflow_reference_update"]
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"operator-command:{self._tenant_id}:{command['idempotency_key']}",),
+                )
+                duplicate = self._existing_on(cursor, command["idempotency_key"])
+                if duplicate is not None:
+                    if duplicate["payload_digest"] != command["payload_digest"]:
+                        raise OperatorCommandError(
+                            "payload_mismatch", retryable=False, detail="idempotency key reused"
+                        )
+                    result = dict(cast(dict[str, Any], duplicate["result"]))
+                    result["status"] = "duplicate"
+                    self._connection.commit()
+                    return result
+                target = self._require_atomic_authority_on(cursor, command, actor_id, now)
+                current_workflow = self._repository.load_current_on(
+                    cursor, str(workflow_update["id"]), for_update=True
+                )
+                expected_workflow_version = int(mutation["workflow_reference_expected_version"])
+                if (
+                    current_workflow is None
+                    or current_workflow["recordType"] != "WorkflowReference"
+                    or int(current_workflow["version"]) != expected_workflow_version
+                    or current_workflow["workflowId"] != workflow_update["workflowId"]
+                    or current_workflow["runId"] != workflow_update["runId"]
+                ):
+                    raise VersionConflict("workflow reference changed before signal enqueue")
+                updated = self._repository.save_on(
+                    cursor,
+                    workflow_update,
+                    expected_version=expected_workflow_version,
+                )
+                result = {
+                    "message_type": "operator_command_result",
+                    "schema_version": "operator-surface/1.1.0",
+                    "command_id": command["command_id"],
+                    "tenant_id": self._tenant_id,
+                    "status": "applied",
+                    "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "decision_evidence_id": mutation["signal_id"],
+                    "current_version": int(updated["version"]),
+                    "result_refs": [_ref(target), _ref(updated)],
+                }
+                validate_record(result, "operator_surface")
+                self._store_on(cursor, command, result)
+                cursor.execute(
+                    """
+                    INSERT INTO operator_workflow_outbox (
+                        tenant_id, outbox_id, command_id, idempotency_key,
+                        workflow_id, run_id, signal_name, signal_id, signal_payload, state
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+                    """.strip(),
+                    (
+                        self._tenant_id,
+                        f"outbox-{command['command_id']}",
+                        command["command_id"],
+                        command["idempotency_key"],
+                        workflow_update["workflowId"],
+                        workflow_update["runId"],
+                        mutation["signal_name"],
+                        mutation["signal_id"],
+                        Jsonb(mutation["signal_payload"]),
+                    ),
+                )
+        except OperatorCommandError:
+            self._connection.rollback()
+            raise
+        except VersionConflict as exc:
+            self._connection.rollback()
+            raise OperatorCommandError("version_conflict", retryable=True, detail=str(exc)) from exc
+        except PermissionError as exc:
+            self._connection.rollback()
+            raise OperatorCommandError(
+                "authority_denied", retryable=False, detail=str(exc)
+            ) from exc
+        except (ContractViolation, ValueError, KeyError) as exc:
+            self._connection.rollback()
+            raise OperatorCommandError(
+                "validation_failed", retryable=False, detail=str(exc)
+            ) from exc
+        except Exception:
+            self._connection.rollback()
+            raise
+        self._connection.commit()
+        return result
+
+    async def dispatch_workflow_outbox(
+        self, dispatcher: WorkflowSignalDispatcher, *, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Deliver pending signals and persist a typed receipt for each attempt."""
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        delivered: list[dict[str, Any]] = []
+        for _ in range(limit):
+            with self._connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))
+                cursor.execute(
+                    """
+                    UPDATE operator_workflow_outbox
+                    SET state = 'pending', failure_code = NULL, dispatching_at = NULL
+                    WHERE tenant_id = %s
+                      AND attempt < 8
+                      AND (
+                          (state = 'dispatching'
+                           AND dispatching_at < clock_timestamp() - interval '5 minutes')
+                          OR
+                          (state = 'failed'
+                           AND dispatched_at < clock_timestamp() - interval '5 minutes')
+                      )
+                    """.strip(),
+                    (self._tenant_id,),
+                )
+                cursor.execute(
+                    """
+                    SELECT outbox_id, command_id, workflow_id, run_id, signal_name,
+                           signal_id, signal_payload, attempt
+                    FROM operator_workflow_outbox
+                    WHERE tenant_id = %s AND state = 'pending'
+                    ORDER BY created_at, outbox_id
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                    """.strip(),
+                    (self._tenant_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    self._connection.commit()
+                    break
+                (
+                    outbox_id,
+                    command_id,
+                    workflow_id,
+                    run_id,
+                    signal_name,
+                    signal_id,
+                    payload,
+                    attempt,
+                ) = row
+                cursor.execute(
+                    "UPDATE operator_workflow_outbox SET state = 'dispatching', attempt = attempt + 1, dispatching_at = clock_timestamp() WHERE tenant_id = %s AND outbox_id = %s",
+                    (self._tenant_id, outbox_id),
+                )
+            self._connection.commit()
+            try:
+                provider_receipt_id = await dispatcher.dispatch(
+                    workflow_id=str(workflow_id),
+                    run_id=str(run_id),
+                    signal_name=str(signal_name),
+                    signal_id=str(signal_id),
+                    payload=cast(dict[str, Any], payload),
+                )
+            except Exception as exc:
+                self._record_signal_receipt(
+                    str(outbox_id),
+                    str(command_id),
+                    str(workflow_id),
+                    str(run_id),
+                    str(signal_name),
+                    attempt=int(attempt) + 1,
+                    state="failed",
+                    failure_code=type(exc).__name__,
+                )
+                continue
+            self._record_signal_receipt(
+                str(outbox_id),
+                str(command_id),
+                str(workflow_id),
+                str(run_id),
+                str(signal_name),
+                attempt=int(attempt) + 1,
+                state="delivered",
+                provider_receipt_id=str(provider_receipt_id),
+            )
+            delivered.append({"outbox_id": str(outbox_id), "command_id": str(command_id)})
+        return delivered
+
+    def _record_signal_receipt(
+        self,
+        outbox_id: str,
+        command_id: str,
+        workflow_id: str,
+        run_id: str,
+        signal_name: str,
+        *,
+        attempt: int,
+        state: str,
+        provider_receipt_id: str | None = None,
+        failure_code: str | None = None,
+    ) -> None:
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))
+                cursor.execute(
+                    """
+                    INSERT INTO operator_workflow_signal_receipts (
+                        tenant_id, receipt_id, outbox_id, command_id, workflow_id, run_id,
+                        signal_name, attempt, state, provider_receipt_id, failure_code
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """.strip(),
+                    (
+                        self._tenant_id,
+                        f"receipt-{outbox_id}-{attempt}",
+                        outbox_id,
+                        command_id,
+                        workflow_id,
+                        run_id,
+                        signal_name,
+                        attempt,
+                        state,
+                        provider_receipt_id,
+                        failure_code,
+                    ),
+                )
+                cursor.execute(
+                    "UPDATE operator_workflow_outbox SET state = %s, failure_code = %s, dispatching_at = NULL, dispatched_at = clock_timestamp() WHERE tenant_id = %s AND outbox_id = %s",
+                    (
+                        "dispatched" if state == "delivered" else "failed",
+                        failure_code,
+                        self._tenant_id,
+                        outbox_id,
+                    ),
+                )
+        except Exception:
+            self._connection.rollback()
+            raise
+        self._connection.commit()
 
     def _require_atomic_authority_on(
         self,

@@ -795,7 +795,7 @@
             "scope": { "type": "string", "minLength": 1 },
             "decidedAt": { "$ref": "#/$defs/Timestamp" },
             "expiresAt": { "$ref": "#/$defs/Timestamp" },
-            "decision": { "enum": ["approved", "denied", "revoked"] },
+            "decision": { "enum": ["pending", "approved", "denied", "revoked"] },
             "reason": { "type": "string" }
           }
         }

@@ -1012,6 +1012,7 @@ class ApproverType(Enum):
 
 
 class Decision(Enum):
+    pending = 'pending'
     approved = 'approved'
     denied = 'denied'
     revoked = 'revoked'

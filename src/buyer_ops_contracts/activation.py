@@ -16,6 +16,7 @@ from .closure_repository import PostgresClosureRepository
 from .digest import sha256_digest
 from .release_evidence import (
     ReleaseEvidenceEvaluator,
+    evaluate_accessibility_bindings,
     evaluate_accessibility_evidence,
 )
 from .structural import validate_record
@@ -114,6 +115,7 @@ class ActivationController:
         try:
             with self._connection.cursor() as cursor:
                 self._set_tenant(cursor)
+                self._validate_authorization_on(cursor, decision)
                 cursor.execute(
                     "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                     (f"release-activation:{self._tenant_id}:{decision['capabilityId']}",),
@@ -134,7 +136,11 @@ class ActivationController:
                     raise ValueError("activation version conflict")
                 records = self._load_current_evidence_on(
                     cursor,
-                    [*decision["evidenceIds"], *decision["accessibilityEvidenceIds"]],
+                    [
+                        *decision["evidenceIds"],
+                        *decision["accessibilityEvidenceIds"],
+                        *decision["accessibilityBindingIds"],
+                    ],
                     for_share=True,
                 )
                 self._validate_decision_evidence(decision, records=records)
@@ -204,9 +210,14 @@ class ActivationController:
                 if decision.get("decision") != "activate":
                     self._connection.commit()
                     return False
+                self._validate_authorization_on(cursor, decision)
                 records = self._load_current_evidence_on(
                     cursor,
-                    [*decision["evidenceIds"], *decision["accessibilityEvidenceIds"]],
+                    [
+                        *decision["evidenceIds"],
+                        *decision["accessibilityEvidenceIds"],
+                        *decision["accessibilityBindingIds"],
+                    ],
                     for_share=True,
                 )
                 self._validate_decision_evidence(
@@ -258,7 +269,11 @@ class ActivationController:
         required = self._evaluator.required_gate_ids(decision["directlyApplicableGateIds"])
         if tuple(sorted(decision["requiredGateIds"])) != required:
             raise ValueError("activation required gate set mismatch")
-        all_ids = [*decision["evidenceIds"], *decision["accessibilityEvidenceIds"]]
+        all_ids = [
+            *decision["evidenceIds"],
+            *decision["accessibilityEvidenceIds"],
+            *decision["accessibilityBindingIds"],
+        ]
         records = self._load_current_evidence(all_ids) if records is None else records
         if len(records) != len(set(all_ids)):
             raise ValueError("activation evidence is missing or ambiguous")
@@ -285,6 +300,17 @@ class ActivationController:
         )
         if tuple(sorted(decision["accessibilityEvidenceIds"])) != tuple(sorted(accessibility_ids)):
             raise ValueError("activation accessibility evidence set mismatch")
+        binding_ids = evaluate_accessibility_bindings(
+            by_type.get("AccessibilityBinding", []),
+            by_type.get("AccessibilityEvidence", []),
+            tenant_id=self._tenant_id,
+            release_digest=decision["releaseDigest"],
+            deployed_builds=decision["deployedBuildDigests"],
+            acceptance_digests=decision["accessibilityAcceptanceDigests"],
+            now=now,
+        )
+        if tuple(sorted(decision["accessibilityBindingIds"])) != tuple(sorted(binding_ids)):
+            raise ValueError("activation accessibility binding set mismatch")
         if decision["evidenceSetDigest"] != evidence_set_digest(sorted(all_ids)):
             raise ValueError("activation evidence set digest mismatch")
 
@@ -319,6 +345,44 @@ class ActivationController:
 
     def _set_tenant(self, cursor: Any) -> None:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,))
+
+    def _validate_authorization_on(self, cursor: Any, decision: dict[str, Any]) -> None:
+        cursor.execute(
+            """
+            SELECT payload FROM actor_tenant_authorizations_current
+            WHERE tenant_id = %s AND record_id = %s
+            FOR SHARE
+            """.strip(),
+            (self._tenant_id, decision["authorizationId"]),
+        )
+        row = cursor.fetchone()
+        if row is None or not isinstance(row[0], dict):
+            raise ValueError("activation authorization is missing")
+        authorization = row[0]
+        decided_at = datetime.fromisoformat(
+            decision["decidedAt"].replace("Z", "+00:00")
+        ).astimezone(UTC)
+        effective_at = datetime.fromisoformat(
+            authorization["effectiveAt"].replace("Z", "+00:00")
+        ).astimezone(UTC)
+        expires_at = datetime.fromisoformat(
+            authorization["expiresAt"].replace("Z", "+00:00")
+        ).astimezone(UTC)
+        if (
+            authorization.get("recordType") != "ActorTenantAuthorization"
+            or authorization.get("recordId") != decision["authorizationId"]
+            or authorization.get("tenantId") != self._tenant_id
+            or authorization.get("actorId") != decision["authorizedBy"]
+            or authorization.get("authorizationVersion") != decision["authorizationVersion"]
+            or authorization.get("policyVersion") != decision["authorizationPolicyVersion"]
+            or authorization.get("recordScopes") != decision["authorizationRecordScopes"]
+            or decision["capabilityId"] not in authorization.get("recordScopes", [])
+            or "activate_release" not in authorization.get("allowedCommands", [])
+            or authorization.get("status") != "active"
+            or effective_at > decided_at
+            or expires_at <= decided_at
+        ):
+            raise ValueError("activation authorization binding mismatch")
 
 
 def evidence_set_digest(evidence_ids: list[str]) -> str:

@@ -24,17 +24,21 @@ def test_packaged_schemas_are_valid_and_hash_pinned() -> None:
         "availability_booking",
         "closure",
         "connector_gateway",
+        "consultation_operation",
         "context",
         "gateway",
         "gateway_runtime",
         "habitat",
+        "nurture_plan",
         "ontology",
         "operator_surface",
         "ot01_ingress",
         "qualification_readiness",
         "release_activation",
+        "representation_operation",
         "telemetry_slo",
         "temporal",
+        "transaction_coordination",
     )
     for name in registry.names:
         Draft202012Validator.check_schema(registry.get(name).schema)

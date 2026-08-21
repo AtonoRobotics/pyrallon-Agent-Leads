@@ -10,6 +10,15 @@ subject to `PRODUCTION-GATE-REGISTRY.yaml` and the open decisions in `DESIGN-TRU
 Canonical reference mappings and the bindings that remain unavailable are enumerated in
 `CANONICAL-REFERENCE-BINDING-AUDIT.md`; affected writes intentionally fail closed.
 
+## Production completion gate
+
+`PRODUCTION-COMPLETION-LEDGER.yaml` is the repository-wide completion ledger. It covers the PRD
+functional requirements, implementation packets, runtime/UI surfaces, and end-to-end evidence.
+`scripts/verify_production_ledger.py --check` validates its structure; CI also runs `--release`,
+which refuses release unless every item is complete, unblocked, backed by existing evidence, and all
+declared verification commands pass. A partial backend, deployment smoke test, or passing unit suite
+cannot satisfy this gate.
+
 Fair-housing compilation requires a current owner-supplied `FairHousingControlProfile`. The earlier
 profile-free `compile_features` and `evaluate_counterfactuals` APIs were removed because their
 hard-coded policy values were not governing authority. Callers must use `FairHousingCompiler` and the
@@ -22,6 +31,57 @@ published counterfactual and promotion-evidence boundaries instead.
 - PostgreSQL 17 for integration verification
 - Temporal Python SDK 1.30.0 and its SDK-selected compatible test server for workflow replay tests
 - Docker only when using the disposable local PostgreSQL workflow
+
+## Production deployment
+
+The repository includes a production application topology in `compose.production.yml`: persistent
+PostgreSQL 17, an ordered checksum-tracked migration job, the HTTP control plane, and the Temporal
+worker. Temporal is an existing shared production dependency, not a second server created by this
+application stack; `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` are required and are checked before the
+worker starts. It is intended for one deployment host with encrypted Docker volume storage and an
+operator-managed backup policy.
+
+Prepare the required configuration and deploy:
+
+```bash
+cp .env.production.example .env.production
+# Replace every example value with secret-manager output or generated random material.
+export BUYER_OPS_DEPLOYMENT_ENV_FILE=.env.production
+docker compose --env-file .env.production -f compose.production.yml build
+# The migration service is a one-shot job; always create a fresh run for each deploy.
+docker compose --env-file .env.production -f compose.production.yml up -d postgres
+docker compose --env-file .env.production -f compose.production.yml run --rm migrate
+docker compose --env-file .env.production -f compose.production.yml up -d control-plane worker
+curl --fail http://127.0.0.1:${BUYER_OPS_PUBLISHED_CONTROL_PORT:-8090}/health
+```
+
+Calendar and e-signature effects have a separate release-gated provider runner. It requires
+published tenant records, one Habitat effect intent per provider operation, and real provider
+credentials; it has no fake or fixture defaults:
+
+```bash
+uv run python scripts/run_live_calendar_esignature_e2e.py --base http://127.0.0.1:${BUYER_OPS_PUBLISHED_CONTROL_PORT:-8090}
+
+# Fails closed until the HTTPS callback origin, provider applications, and
+# signer-bound calendar/e-signature E2E records and Habitat permits are present.
+uv run python scripts/verify_provider_production_readiness.py --base http://127.0.0.1:${BUYER_OPS_PUBLISHED_CONTROL_PORT:-8090}
+```
+
+The runner must pass availability, provider snapshot, booking, replay, reconciliation, envelope
+presentation, and envelope reconciliation before `calendar_and_esignature` may advance in the
+production execution cursor.
+
+Do not expose PostgreSQL or Temporal directly to the public network. Put the control plane behind a
+TLS-terminating reverse proxy, store `.env.production` outside source control, and configure encrypted
+off-host PostgreSQL backups before admitting production data. The migration job refuses checksum drift
+and takes a PostgreSQL advisory lock so only one deployer can advance the schema.
+
+`BUYER_OPS_BOOTSTRAP_RECORDS_JSON` is also required. It must contain the owner-supplied initial
+`ActorTenantAuthorization`, `operator_policy`, the referenced owner `Person`, and exactly one active
+`LicenseHolder` record needed by the configured ingress capture path. The migration job admits them
+idempotently and refuses conflicting replacements; it never creates a demo tenant, actor, role,
+policy, scope, person, or license holder. Without these records the API correctly remains
+authenticated but denies workspace access or refuses to create a buyer journey.
 
 Install the exact locked runtime and development dependencies:
 
@@ -37,10 +97,12 @@ Control plane and Temporal worker require PostgreSQL 17. The control plane also 
 `BUYER_OPS_GATE_REGISTRY_PATH`, and `BUYER_OPS_RELEASE_PUBLIC_KEYS_JSON` (a JSON object
 mapping release key IDs to base64url-encoded raw Ed25519 public keys). A Temporal worker embedding
 requires `BUYER_OPS_DATABASE_DSN`, `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, a complete
-`TEMPORAL_WORKER_CONFIGURATION_JSON` matching `WorkerConfiguration`, and a governed OT-01
-`JourneyState` derivation. The published contracts do not currently provide that derivation, so the
-standalone worker remains operationally unavailable rather than installing an implementation-defined
-compiler interface.
+`TEMPORAL_WORKER_CONFIGURATION_JSON` matching `WorkerConfiguration`, and a current tenant-scoped
+canonical snapshot. The worker derives `JourneyState` deterministically from that snapshot and fails
+closed on missing, mixed-tenant, or ambiguous state; it does not provide implementation defaults.
+The worker also requires `BUYER_OPS_OUTBOX_TENANTS`, a comma-separated explicit allow-list of tenants
+whose committed workflow signals it may deliver. Outbox delivery is retry-bounded, records one receipt
+per attempt, and reclaims stale dispatches after a worker crash.
 The capture-side workflow starter likewise requires `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
 `TEMPORAL_TASK_QUEUE`, and a complete `TEMPORAL_RUNTIME_POLICY_JSON` once any Temporal address is
 configured. It does not supply a namespace or retry-policy default, and duplicate workflow starts
@@ -113,6 +175,7 @@ Apply migrations in filename order:
 19. `0019_cognitive_credentials.sql`
 20. `0020_oauth_return_origin.sql`
 21. `0021_derived_contract_records.sql`
+22. `0022_operator_workflow_outbox.sql`
 
 Each migration has a rollback script for an empty, unactivated installation. Rollback deliberately
 refuses to discard populated canonical, derived-contract, evidence, identity, authority-decision,

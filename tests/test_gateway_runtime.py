@@ -1,14 +1,32 @@
 import copy
+import json
 from datetime import UTC, datetime
 
 from buyer_ops_contracts.gateway_routing import RouteSelection
 from buyer_ops_contracts.gateway_runtime import (
+    HttpsProposalRuntime,
+    OpenAICompatibleProposalRuntime,
     ProposalNormalizer,
+    ProviderRuntimeError,
     RuntimeDescriptor,
     RuntimeObservation,
     SimulatedProposalRuntime,
     normalize_provider_failure,
 )
+
+
+class _Response:
+    def __init__(self, body: dict) -> None:
+        self._body = json.dumps(body).encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self) -> bytes:
+        return self._body
 
 
 def _selection(
@@ -151,3 +169,99 @@ def test_provider_errors_normalize_to_stable_states_without_raw_diagnostics(load
         "unmapped_provider_error",
     )
     assert "provider_internal_9182" not in unknown.diagnostic
+
+
+def test_https_runtime_transports_governed_operations_without_exposing_credential(
+    monkeypatch,
+) -> None:
+    calls: list[tuple[str, str, dict[str, str], bytes | None]] = []
+
+    def fake_urlopen(request, timeout):
+        calls.append((request.method, request.full_url, dict(request.header_items()), request.data))
+        if request.full_url.endswith("/health"):
+            return _Response({"status": "ok"})
+        if request.full_url.endswith("/invoke"):
+            return _Response({"candidate": {"schemaVersion": "cognitive-proposal/1.1.0"}})
+        if request.full_url.endswith("/usage"):
+            return _Response({"inputUnits": 4, "outputUnits": 2, "unitType": "tokens"})
+        return _Response({"status": "cancelled"})
+
+    monkeypatch.setattr("buyer_ops_contracts.gateway_runtime.urlopen", fake_urlopen)
+    runtime = HttpsProposalRuntime(
+        RuntimeDescriptor("provider", "adapter", "1.0.0", "https"),
+        endpoint="https://adapter.example.test/v1",
+        identity_ref="identity-1",
+        credential=lambda identity: "secret-for-" + identity,
+    )
+    assert runtime.health("identity-1") == "healthy"
+    assert runtime.cancel("invocation/1") == "cancelled"
+    assert runtime.usage("identity-1") == {"inputUnits": 4, "outputUnits": 2, "unitType": "tokens"}
+    for _method, url, headers, body in calls:
+        assert "secret-for-identity-1" not in url
+        if body is not None:
+            assert b"secret-for-identity-1" not in body
+        if "/health" in url or "/usage" in url:
+            assert headers["Authorization"] == "Bearer secret-for-identity-1"
+
+
+def test_https_runtime_rejects_invalid_provider_response(monkeypatch, load_fixture) -> None:
+    monkeypatch.setattr(
+        "buyer_ops_contracts.gateway_runtime.urlopen",
+        lambda request, timeout: _Response({"candidate": []}),
+    )
+    runtime = HttpsProposalRuntime(
+        RuntimeDescriptor("provider", "adapter", "1.0.0", "https"),
+        endpoint="https://adapter.example.test/v1",
+        identity_ref="identity-1",
+        credential=lambda _identity: "token",
+    )
+    request = load_fixture("valid/cognitive_work_request.json")
+    try:
+        runtime.invoke(request)
+    except ProviderRuntimeError as exc:
+        assert exc.code == "invalid_provider_response"
+        assert not exc.retryable
+    else:
+        raise AssertionError("invalid provider response was accepted")
+
+
+def test_openai_compatible_runtime_parses_strict_json_and_records_usage(
+    monkeypatch, load_fixture
+) -> None:
+    calls: list[tuple[str, bytes | None]] = []
+    candidate = copy.deepcopy(load_fixture("valid/cognitive_proposal.json"))
+    candidate.pop("runtimeEvidence")
+
+    def fake_urlopen(request, timeout):
+        calls.append((request.full_url, request.data))
+        if request.full_url.endswith("/v1/models"):
+            return _Response({"data": []})
+        return _Response(
+            {
+                "id": "chatcmpl-1",
+                "choices": [
+                    {"message": {"content": "```json\n" + json.dumps(candidate) + "\n```"}}
+                ],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        )
+
+    monkeypatch.setattr("buyer_ops_contracts.gateway_runtime.urlopen", fake_urlopen)
+    runtime = OpenAICompatibleProposalRuntime(
+        RuntimeDescriptor("openai", "openai-chat", "1.0.0", "https"),
+        endpoint="https://api.openai.com",
+        identity_ref="identity-1",
+        model_id="gpt-production",
+        credential=lambda _identity: "secret-token",
+    )
+    work = load_fixture("valid/cognitive_work_request.json")
+    assert runtime.health("identity-1") == "healthy"
+    result = runtime.invoke(work)
+    assert result.candidate == candidate
+    assert runtime.usage("identity-1") == {
+        "inputUnits": 11,
+        "outputUnits": 7,
+        "unitType": "tokens",
+    }
+    assert calls[1][0].endswith("/v1/chat/completions")
+    assert b"secret-token" not in (calls[1][1] or b"")

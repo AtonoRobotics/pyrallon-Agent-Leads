@@ -186,11 +186,36 @@
         "revoked_approval_record": { "$ref": "#/$defs/CanonicalRecordPayload" }
       }
     },
+    "ApprovalDecisionMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "prior_approval_update", "decided_approval_record"],
+      "properties": {
+        "kind": { "const": "approval_decision" },
+        "prior_approval_update": { "$ref": "#/$defs/CanonicalRecordPayload" },
+        "decided_approval_record": { "$ref": "#/$defs/CanonicalRecordPayload" }
+      }
+    },
+    "WorkflowCommandMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "workflow_reference_update", "workflow_reference_expected_version", "signal_name", "signal_id", "signal_payload"],
+      "properties": {
+        "kind": { "const": "workflow_command" },
+        "workflow_reference_update": { "$ref": "#/$defs/CanonicalRecordPayload" },
+        "workflow_reference_expected_version": { "type": "integer", "minimum": 1 },
+        "signal_name": { "enum": ["pause", "resume", "canonical_changed"] },
+        "signal_id": { "$ref": "#/$defs/Id" },
+        "signal_payload": { "type": "object" }
+      }
+    },
     "CanonicalMutation": {
       "oneOf": [
         { "$ref": "#/$defs/CorrectionMutation" },
         { "$ref": "#/$defs/AuthorizationRevocationMutation" },
-        { "$ref": "#/$defs/ApprovalRevocationMutation" }
+        { "$ref": "#/$defs/ApprovalRevocationMutation" },
+        { "$ref": "#/$defs/ApprovalDecisionMutation" },
+        { "$ref": "#/$defs/WorkflowCommandMutation" }
       ]
     },
     "OfflineBinding": {
@@ -245,8 +270,12 @@
           "then": { "required": ["mutation"], "properties": { "mutation": { "$ref": "#/$defs/ApprovalRevocationMutation" } } }
         },
         {
-          "if": { "properties": { "command_type": { "enum": ["approve", "deny", "pause_workflow", "resume_workflow", "request_reconciliation"] } }, "required": ["command_type"] },
-          "then": { "properties": { "mutation": false } }
+          "if": { "properties": { "command_type": { "enum": ["approve", "deny"] } }, "required": ["command_type"] },
+          "then": { "required": ["mutation"], "properties": { "mutation": { "$ref": "#/$defs/ApprovalDecisionMutation" } } }
+        },
+        {
+          "if": { "properties": { "command_type": { "enum": ["pause_workflow", "resume_workflow", "request_reconciliation"] } }, "required": ["command_type"] },
+          "then": { "required": ["mutation"], "properties": { "mutation": { "$ref": "#/$defs/WorkflowCommandMutation" } } }
         }
       ]
     },

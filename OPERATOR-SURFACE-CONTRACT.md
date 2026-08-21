@@ -41,6 +41,8 @@ before any write.
   `revocationEvidenceId` and `revokedAt`.
 - `revoke_approval` carries the exact closing version of the prior approval plus a new append-only
   revoked `Approval` whose `supersedesId` identifies it. It does not overwrite the prior decision.
+- `approve` and `deny` carry the exact closing version of a pending approval plus a new append-only
+  decided `Approval` whose `supersedesId` identifies it. A decided approval cannot be decided again.
 
 The command does not generate canonical identifiers, attribution, evidence, effective times,
 replacement content, or revocation reasons. Those values are supplied by the authorized caller and

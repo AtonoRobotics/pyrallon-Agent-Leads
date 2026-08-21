@@ -16,16 +16,112 @@ from test_ingress import _envelope, _message_identity
 
 from buyer_ops_contracts.canonical_repository import Connection as RepositoryConnection
 from buyer_ops_contracts.connector_service import ConnectorDenied
-from buyer_ops_contracts.control_plane import ControlPlane, IngressProviderRuntimeFactory
+from buyer_ops_contracts.control_plane import (
+    ControlPlane,
+    IngressProviderRuntimeFactory,
+    _connector_capability,
+    load_journey_view_policy,
+)
 from buyer_ops_contracts.ingress import InboundEnvelope, RegisteredInboundEvent
 from buyer_ops_contracts.ingress_service import IngressProviderRuntime
 from buyer_ops_contracts.structural import validate_record
+
+
+def test_journey_view_policy_requires_explicit_versioned_bindings() -> None:
+    policy = load_journey_view_policy(
+        json.dumps(
+            {
+                "compiler_version": "journey-view/1.0.0",
+                "blocker_bindings": {"contactability_unknown": ["connector", "agent"]},
+            }
+        )
+    )
+
+    assert policy.compiler_version == "journey-view/1.0.0"
+    assert policy.binding_for("contactability_unknown") == ("connector", "agent")
+
+
+def test_oauth_callback_route_serves_the_ui_shell_for_browser_completion() -> None:
+    from buyer_ops_contracts.control_plane import _ui_asset
+
+    asset = _ui_asset("/api/connectors/callback?code=opaque&state=opaque")
+
+    assert asset is not None
+    assert asset[1] == "text/html"
+    assert b"/assets/app.js" in asset[0]
+
+
+def test_journey_view_policy_rejects_missing_configuration() -> None:
+    with pytest.raises(ValueError, match="BUYER_OPS_JOURNEY_VIEW_POLICY_JSON is required"):
+        load_journey_view_policy("")
+
+
+def test_journey_view_policy_rejects_categories_outside_published_schema() -> None:
+    with pytest.raises(ValueError, match="bindings must map"):
+        load_journey_view_policy(
+            json.dumps(
+                {
+                    "compiler_version": "journey-view/1.0.0",
+                    "blocker_bindings": {"contactability_unknown": ["contactability", "agent"]},
+                }
+            )
+        )
+
+
+def test_provider_action_is_separate_from_governed_connector_capability() -> None:
+    assert _connector_capability("calendar.book") == "create"
+    assert _connector_capability("calendar.reschedule") == "update"
+    assert _connector_capability("esign.create") == "create"
+    assert _connector_capability("esign.get") == "read"
+
+
+def test_esign_recipient_resolution_requires_verified_contactable_email() -> None:
+    class Repository:
+        def __init__(self, connection: object, *, tenant_id: str) -> None:
+            del connection, tenant_id
+
+        def list_by_type(self, record_type: str) -> list[dict[str, Any]]:
+            return {
+                "BuyingParty": [
+                    {
+                        "id": "party-1",
+                        "members": [{"personId": "person-1", "role": "buyer"}],
+                    }
+                ],
+                "Person": [{"id": "person-1", "displayName": "Buyer One"}],
+                "ContactEndpoint": [
+                    {
+                        "id": "endpoint-1",
+                        "ownerId": "person-1",
+                        "endpointType": "email",
+                        "normalizedValue": "buyer@example.test",
+                        "ownershipState": "authorized",
+                        "verificationState": "verified",
+                        "contactabilityState": "contactable",
+                    }
+                ],
+            }[record_type]
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        import buyer_ops_contracts.control_plane as module
+
+        monkeypatch.setattr(module, "CanonicalRepository", Repository)
+        recipients = ControlPlane._resolve_esign_recipients(
+            object(),
+            "tenant-1",
+            {"buyerPartyIds": ["party-1"]},
+        )
+    finally:
+        monkeypatch.undo()
+    assert recipients == [{"roleName": "Buyer", "name": "Buyer One", "email": "buyer@example.test"}]
 
 
 def _plane(
     connection: object,
     *,
     ingress_provider_runtime_factory: IngressProviderRuntimeFactory | None = None,
+    ingress_webhook_factory: Any | None = None,
 ) -> ControlPlane:
     public = Ed25519PrivateKey.generate().public_key()
     plane = ControlPlane(
@@ -35,6 +131,7 @@ def _plane(
         release_public_keys={"health-test": public},
         gate_registry_path=Path("PRODUCTION-GATE-REGISTRY.yaml"),
         ingress_provider_runtime_factory=ingress_provider_runtime_factory,
+        ingress_webhook_factory=ingress_webhook_factory,
     )
     plane._connection = lambda: connection  # type: ignore[method-assign]
     return plane
@@ -218,7 +315,10 @@ def test_workspace_routes_refuse_unpublished_projection_and_mutation_semantics(
         b"{}" if method == "POST" else b"",
     )
     assert status == 422
-    assert payload["code"] == "configuration_incomplete"
+    if method == "POST":
+        assert payload["code"] == "validation_failed"
+    else:
+        assert payload["code"] == "configuration_incomplete"
 
 
 def test_workspace_requires_tenant_and_actor() -> None:
@@ -274,7 +374,7 @@ def test_tenancies_require_authenticated_actor() -> None:
     assert payload["code"] == "authentication_required"
 
 
-def test_operator_policy_post_fails_closed_without_owner_admission_contract() -> None:
+def test_operator_policy_post_admits_a_valid_owner_policy() -> None:
     policy = {
         "message_type": "operator_policy",
         "schema_version": "operator-surface/1.1.0",
@@ -313,11 +413,11 @@ def test_operator_policy_post_fails_closed_without_owner_admission_contract() ->
         },
         json.dumps(policy).encode(),
     )
-    assert status == 422
-    assert payload["code"] == "configuration_incomplete"
+    assert status == 200
+    assert payload["message_type"] == "operator_policy"
 
 
-def test_actor_authorization_post_fails_closed_without_owner_admission_contract() -> None:
+def test_actor_authorization_post_validates_the_published_record() -> None:
     plane = _plane(AuthorizationConnection())  # type: ignore[arg-type]
     plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
     status, payload = plane.handle(
@@ -331,7 +431,7 @@ def test_actor_authorization_post_fails_closed_without_owner_admission_contract(
         b"{}",
     )
     assert status == 422
-    assert payload["code"] == "configuration_incomplete"
+    assert payload["code"] == "validation_failed"
 
 
 def test_operator_policy_post_requires_authenticated_actor() -> None:
@@ -452,6 +552,28 @@ def test_ingress_envelope_fails_closed_without_provider_configuration() -> None:
     assert payload["code"] == "configuration_incomplete"
 
 
+def test_configured_webhook_route_uses_provider_authentication_boundary() -> None:
+    class _WebhookFactory:
+        def handle_webhook(
+            self, connection: object, provider_id: str, headers: dict[str, str], body: bytes
+        ) -> dict[str, Any]:
+            assert provider_id == "primary-form"
+            assert headers["x-provider-signature"] == "signed"
+            assert body == b"{}"
+            return {"journey_id": "journey-1"}
+
+    plane = _plane(Connection(), ingress_webhook_factory=_WebhookFactory())
+    status, payload = plane.handle(
+        "POST",
+        "/v1/ingress/webhook/primary-form",
+        {"x-provider-signature": "signed"},
+        b"{}",
+    )
+
+    assert status == 200
+    assert payload == {"journey_id": "journey-1"}
+
+
 def test_ingress_envelope_uses_deployment_supplied_provider_runtime() -> None:
     seen_tenants: list[str] = []
 
@@ -557,7 +679,7 @@ def test_connector_http_errors_preserve_typed_outcomes(code: str, expected_statu
         ("/v1/cognition/oauth/poll", {"sessionId": "oauth-session-1"}),
     ],
 )
-def test_cognition_binding_routes_fail_closed_without_identity_admission(
+def test_cognition_binding_routes_return_typed_provider_outcomes(
     route: str, request_payload: dict[str, Any]
 ) -> None:
     plane = _plane(Connection())
@@ -575,8 +697,11 @@ def test_cognition_binding_routes_fail_closed_without_identity_admission(
     )
 
     assert status == 422
-    assert payload["code"] == "configuration_incomplete"
-    assert payload["detail"] == "credential_identity_admission_unavailable"
+    if route == "/v1/cognition/oauth/poll":
+        assert payload["code"] == "configuration_incomplete"
+        assert payload["detail"] == "OPENAI_CHATGPT_DEVICE_TOKEN_URL is required"
+    else:
+        assert payload["code"] in {"provider_unavailable", "provider_rejected"}
 
 
 def test_invalid_operator_command_returns_typed_operator_error() -> None:
@@ -653,8 +778,8 @@ def test_platform_oauth_client_save_requires_actor_tenancy_and_owner_contract() 
             {"issuer": "google", "clientId": "google-client", "clientSecret": "google-secret"}
         ).encode(),
     )
-    assert status == 422
-    assert payload["code"] == "configuration_incomplete"
+    assert status == 200
+    assert payload == {"issuer": "google", "clientId": "google-client", "configured": "true"}
 
 
 def test_platform_oauth_secret_material_has_no_http_readback_surface() -> None:
@@ -684,7 +809,7 @@ def test_connector_oauth_completion_requires_authenticated_actor() -> None:
     assert payload["code"] == "authentication_required"
 
 
-def test_connector_oauth_http_routes_fail_closed_without_admission_contract() -> None:
+def test_connector_oauth_http_routes_require_provider_configuration_and_valid_session() -> None:
     plane = _plane(Connection())
     plane._require_actor = lambda tenant_id, actor_id: None  # type: ignore[method-assign]
     headers = {
@@ -718,7 +843,7 @@ def test_connector_oauth_http_routes_fail_closed_without_admission_contract() ->
     assert start_status == 422
     assert start_payload["code"] == "configuration_incomplete"
     assert complete_status == 422
-    assert complete_payload["code"] == "configuration_incomplete"
+    assert complete_payload["code"] == "validation_failed"
 
 
 def test_platform_oauth_client_metadata_requires_authenticated_actor() -> None:

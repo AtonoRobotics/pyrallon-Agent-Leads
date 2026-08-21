@@ -131,6 +131,27 @@ class CanonicalRepository:
         self._connection.commit()
         return [cast(dict[str, Any], row[0]) for row in rows]
 
+    def current_records(self) -> list[dict[str, Any]]:
+        """Read the tenant's current canonical snapshot for deterministic projections."""
+        try:
+            with self._connection.cursor() as cursor:
+                self._set_tenant(cursor)
+                cursor.execute(
+                    """
+                    SELECT record
+                    FROM canonical_records_current
+                    WHERE tenant_id = %s
+                    ORDER BY record_id
+                    """.strip(),
+                    (self._tenant_id,),
+                )
+                rows = cursor.fetchall()
+        except Exception:
+            self._connection.rollback()
+            raise
+        self._connection.commit()
+        return [cast(dict[str, Any], row[0]) for row in rows]
+
     def save(
         self,
         raw_record: Mapping[str, Any],

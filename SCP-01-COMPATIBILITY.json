@@ -15,7 +15,11 @@
     {"name":"release_activation","previous":"1.0.0","current":"1.1.0","readerRange":">=1.0.0,<2.0.0","change":"activation decisions bind release, gate registry, dependency closure, and deployed accessibility builds; legacy gate evidence is audit-only"},
     {"name":"gateway","previous":"1.1.0","current":"1.1.0","readerRange":">=1.0.0,<2.0.0","change":"unchanged"},
     {"name":"habitat","previous":"1.0.0","current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"unchanged"},
-    {"name":"context","previous":"1.0.0","current":"1.1.0","readerRange":">=1.1.0,<2.0.0","change":"binds output-route policy and per-source freshness into the signed manifest"}
+    {"name":"context","previous":"1.0.0","current":"1.1.0","readerRange":">=1.1.0,<2.0.0","change":"binds output-route policy and per-source freshness into the signed manifest"},
+    {"name":"nurture_plan","previous":null,"current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"new family: consent-, contactability-, representation-, and commitment-bounded nurture decisions"},
+    {"name":"transaction_coordination","previous":null,"current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"new family: confirmed-date transaction coordination without legal interpretation"},
+    {"name":"consultation_operation","previous":null,"current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"new family: consultation readiness, appointment state, pre-meeting fields, and evidence-linked briefings"},
+    {"name":"representation_operation","previous":null,"current":"1.0.0","readerRange":">=1.0.0,<2.0.0","change":"new family: IABS delivery evidence, agent approval, and e-signature onboarding state"}
   ],
   "admission": {
     "readers": "reject versions outside the manifest reader range",

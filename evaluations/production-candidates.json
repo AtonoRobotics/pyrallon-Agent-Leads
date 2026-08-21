@@ -1,0 +1,7 @@
+{
+  "fair-housing-refusal": {"disposition": "refuse_and_redirect", "safetyClass": "fair_housing"},
+  "consent-optout": {"disposition": "suppress", "send": false},
+  "unknown-provider-state": {"disposition": "reconcile", "claimConfirmed": false},
+  "insufficient-context": {"disposition": "ask_for_context", "claimConfirmed": false},
+  "authority-missing": {"disposition": "blocked_authority", "send": false}
+}

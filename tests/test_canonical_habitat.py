@@ -7,7 +7,7 @@ from buyer_ops_contracts.canonical_habitat import (
     CanonicalLockedHabitatStateReader,
     PlatformPolicyEvaluator,
 )
-from buyer_ops_contracts.habitat import HabitatState
+from buyer_ops_contracts.habitat import HabitatState, PolicyDisposition
 
 
 def test_unconfigured_platform_policy_never_invents_allowed_action_classes() -> None:
@@ -19,6 +19,46 @@ def test_unconfigured_platform_policy_never_invents_allowed_action_classes() -> 
     assert disposition.disposition == "prohibited"
     assert disposition.policy_id == "policy-unavailable"
     assert disposition.policy_version == "unconfigured"
+
+
+def test_platform_policy_evaluator_uses_current_canonical_rule() -> None:
+    policy = {
+        "recordId": "effect-policy-1",
+        "policyId": "effect-policy",
+        "policyVersion": "7",
+        "tenantId": "tenant-1",
+        "status": "current",
+        "effectiveFrom": "2026-01-01T00:00:00Z",
+        "expiresAt": "2030-01-01T00:00:00Z",
+        "selectedRule": {"actionClass": "send_message", "disposition": "allowed"},
+    }
+    disposition = PlatformPolicyEvaluator().evaluate(
+        {"tenant_id": "tenant-1", "action_class": "send_message"},
+        HabitatState(records={}, effect_policy=policy),
+        datetime(2026, 8, 19, tzinfo=UTC),
+    )
+    assert disposition == PolicyDisposition("allowed", "effect-policy", "7")
+
+
+def test_platform_policy_evaluator_rejects_expired_or_invalid_rule() -> None:
+    policy = {
+        "recordId": "effect-policy-1",
+        "policyId": "effect-policy",
+        "policyVersion": "7",
+        "tenantId": "tenant-1",
+        "status": "current",
+        "effectiveFrom": "2026-01-01T00:00:00Z",
+        "expiresAt": "2026-08-01T00:00:00Z",
+        "selectedRule": {"actionClass": "send_message", "disposition": "allowed"},
+    }
+    disposition = PlatformPolicyEvaluator().evaluate(
+        {"tenant_id": "tenant-1", "action_class": "send_message"},
+        HabitatState(records={}, effect_policy=policy),
+        datetime(2026, 8, 19, tzinfo=UTC),
+    )
+    assert disposition == PolicyDisposition(
+        "prohibited", "policy-invalid", "outside-effective-window"
+    )
 
 
 class _Cursor:
@@ -90,14 +130,30 @@ def _intent() -> dict[str, Any]:
         "workflow_id": "workflow-1",
         "buyer_journey_id": "journey-1",
         "connector_binding_id": "grant-1",
+        "effect_context": {
+            "activation_id": "activation-1",
+            "activation_digest": "sha256:" + "b" * 64,
+            "capability_id": "send",
+            "inventory_record_id": "inventory-1",
+            "inventory_record_version": 1,
+            "inventory_digest": "sha256:" + "c" * 64,
+            "constraint_digest": "sha256:" + "d" * 64,
+            "grant_id": "grant-1",
+            "grant_version": 1,
+            "draft_preview_record_id": "proposal-1",
+            "draft_preview_record_version": 1,
+            "draft_preview_digest": "sha256:" + "e" * 64,
+            "delegated_principal_id": "principal-1",
+        },
         "intent_id": "intent-1",
         "canonical_version_vector": {},
     }
 
 
-def test_reader_does_not_infer_capability_channel_or_consent_without_resolver() -> None:
+def test_reader_loads_exact_grant_but_does_not_infer_channel_or_consent() -> None:
     state = CanonicalLockedHabitatStateReader().load_current(_Cursor(), _intent())  # type: ignore[arg-type]
-    assert state.connector_grant is None
+    assert state.connector_grant is not None
+    assert state.connector_grant["id"] == "grant-1"
     assert state.consent is None
     assert state.suppression is None
 

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/consultation-operation/1.0.0",
+  "title": "ConsultationOperationContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "messageType", "schemaVersion", "tenantId", "journeyId", "canonicalVersion",
+    "decisionId", "consultationState", "eligible", "reasonCodes", "appointmentRef",
+    "preMeetingFields", "briefingItems", "reminderPlan", "derivedAt", "inputDigest", "evidenceIds"
+  ],
+  "properties": {
+    "messageType": { "const": "consultation_decision" },
+    "schemaVersion": { "const": "consultation-operation/1.0.0" },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "journeyId": { "type": "string", "minLength": 1 },
+    "canonicalVersion": { "type": "integer", "minimum": 1 },
+    "decisionId": { "type": "string", "minLength": 1 },
+    "consultationState": {
+      "enum": ["not_ready", "ready", "offering", "provider_pending", "booked", "completed", "cancelled", "blocked"]
+    },
+    "eligible": { "type": "boolean" },
+    "reasonCodes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "appointmentRef": {
+      "oneOf": [
+        { "$ref": "#/$defs/RecordRef" },
+        { "type": "null" }
+      ]
+    },
+    "preMeetingFields": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "briefingItems": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/BriefingItem" }
+    },
+    "reminderPlan": {
+      "oneOf": [
+        { "$ref": "#/$defs/ReminderPlan" },
+        { "type": "null" }
+      ]
+    },
+    "derivedAt": { "type": "string", "format": "date-time" },
+    "inputDigest": { "$ref": "#/$defs/Digest" },
+    "evidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+  },
+  "$defs": {
+    "Digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "RecordRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recordId", "recordType", "version"],
+      "properties": {
+        "recordId": { "type": "string", "minLength": 1 },
+        "recordType": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "BriefingItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemId", "label", "epistemicState", "summary", "evidenceIds", "timeSensitivity"],
+      "properties": {
+        "itemId": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "epistemicState": { "enum": ["evidence", "assertion", "verified_fact", "inference", "memory", "unknown", "contradicted", "stale"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "timeSensitivity": { "enum": ["none", "informational", "due", "overdue", "expires_soon"] }
+      }
+    },
+    "ReminderPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "planId", "appointmentRef", "policyRef", "state", "reminders", "derivedBy", "derivedAt", "inputDigest", "evidenceIds"],
+      "properties": {
+        "messageType": { "const": "reminder_plan" },
+        "schemaVersion": { "const": "consultation-operation/1.0.0" },
+        "tenantId": { "type": "string", "minLength": 1 },
+        "planId": { "type": "string", "minLength": 1 },
+        "appointmentRef": { "$ref": "#/$defs/RecordRef" },
+        "policyRef": { "$ref": "#/$defs/RecordRef" },
+        "state": { "enum": ["scheduled", "complete", "blocked"] },
+        "reminders": { "type": "array", "items": { "$ref": "#/$defs/Reminder" } },
+        "derivedBy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["principalId", "implementationId", "implementationVersion"],
+          "properties": {
+            "principalId": { "type": "string", "minLength": 1 },
+            "implementationId": { "const": "reminder_plan_v1" },
+            "implementationVersion": { "const": "1.0.0" }
+          }
+        },
+        "derivedAt": { "type": "string", "format": "date-time" },
+        "inputDigest": { "$ref": "#/$defs/Digest" },
+        "evidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "Reminder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reminderId", "appointmentRef", "recipientRef", "channel", "offsetSeconds", "dueAt", "state"],
+      "properties": {
+        "reminderId": { "type": "string", "minLength": 1 },
+        "appointmentRef": { "$ref": "#/$defs/RecordRef" },
+        "recipientRef": { "$ref": "#/$defs/RecordRef" },
+        "channel": { "enum": ["email", "sms"] },
+        "offsetSeconds": { "type": "integer", "exclusiveMinimum": 0 },
+        "dueAt": { "type": "string", "format": "date-time" },
+        "state": { "enum": ["scheduled", "sent", "skipped", "failed", "unknown_outcome"] }
+      }
+    }
+  }
+}

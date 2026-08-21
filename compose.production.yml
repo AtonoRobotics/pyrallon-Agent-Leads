@@ -1,0 +1,121 @@
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [buyer-ops]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Bootstrap records are JSON.  Pass them through the deployment env file
+    # rather than Compose interpolation, which removes unescaped JSON quotes.
+    env_file:
+      - ${BUYER_OPS_DEPLOYMENT_ENV_FILE:-/dev/null}
+    environment:
+      BUYER_OPS_DATABASE_DSN: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+    entrypoint: ["python"]
+    command: ["scripts/apply_migrations.py"]
+    networks: [buyer-ops]
+
+  temporal-check:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    environment:
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:?TEMPORAL_ADDRESS is required}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:?TEMPORAL_NAMESPACE is required}
+      TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE:?TEMPORAL_TASK_QUEUE is required}
+      TEMPORAL_RUNTIME_POLICY_JSON: ${TEMPORAL_RUNTIME_POLICY_JSON:?TEMPORAL_RUNTIME_POLICY_JSON is required}
+    entrypoint: ["python"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["scripts/check_temporal.py"]
+    networks: [buyer-ops]
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - ${BUYER_OPS_DEPLOYMENT_ENV_FILE:-/dev/null}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      temporal-check:
+        condition: service_completed_successfully
+    environment: &app-environment
+      BUYER_OPS_DATABASE_DSN: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      BUYER_OPS_GATE_REGISTRY_PATH: /app/PRODUCTION-GATE-REGISTRY.yaml
+      BUYER_OPS_CONTROL_HOST: 0.0.0.0
+      BUYER_OPS_CONTROL_PORT: 8090
+    command: ["serve"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BUYER_OPS_PUBLISHED_CONTROL_PORT:-8090}:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,urllib.request; request=urllib.request.Request('http://127.0.0.1:8090/health',headers={'x-buyer-ops-token':os.environ['BUYER_OPS_CONTROL_TOKEN']}); urllib.request.urlopen(request)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [buyer-ops]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - ${BUYER_OPS_DEPLOYMENT_ENV_FILE:-/dev/null}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      temporal-check:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["worker"]
+    networks: [buyer-ops]
+
+  provider-readiness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["provider-e2e"]
+    env_file:
+      - ${BUYER_OPS_DEPLOYMENT_ENV_FILE:-/dev/null}
+    restart: "no"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    entrypoint: ["python"]
+    command:
+      ["scripts/verify_provider_production_readiness.py", "--base", "http://control-plane:8090", "--env-file", "/dev/null"]
+    networks: [buyer-ops]
+
+volumes:
+  postgres-data:
+
+networks:
+  buyer-ops:
+    driver: bridge

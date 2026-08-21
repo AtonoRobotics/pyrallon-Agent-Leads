@@ -7,9 +7,11 @@ from typing import Any
 
 import pytest
 
+from buyer_ops_contracts.digest import sha256_digest
 from buyer_ops_contracts.release_evidence import (
     ReleaseEvidenceEvaluator,
     ReleaseEvidenceRejected,
+    evaluate_accessibility_bindings,
     evaluate_accessibility_evidence,
     load_gate_registry,
 )
@@ -177,7 +179,6 @@ def test_accessibility_acceptance_is_exactly_build_and_release_bound() -> None:
             deployed_builds={"web": web["buildDigest"], "ios": ios["buildDigest"]},
             now=NOW,
         )
-
     wrong = copy.deepcopy(web)
     wrong["buildDigest"] = "sha256:" + "d" * 64
     with pytest.raises(ReleaseEvidenceRejected, match="current build-bound"):
@@ -186,5 +187,87 @@ def test_accessibility_acceptance_is_exactly_build_and_release_bound() -> None:
             tenant_id="tenant-1",
             release_digest="sha256:" + "a" * 64,
             deployed_builds={"web": web["buildDigest"], "ios": ios["buildDigest"]},
+            now=NOW,
+        )
+
+
+def test_accessibility_binding_binds_acceptance_evidence_surface_and_build() -> None:
+    web = _accessibility("web", "sha256:" + "b" * 64)
+    acceptance_digest = "sha256:" + "c" * 64
+    binding = {
+        "schemaVersion": "open-019-024/1.1.0",
+        "tenantId": "tenant-1",
+        "recordId": "binding-web",
+        "recordVersion": 1,
+        "observedAt": "2030-01-01T00:00:00Z",
+        "effectiveFrom": "2030-01-01T00:00:00Z",
+        "status": "current",
+        "evidenceRefs": ["acceptance-web", web["recordId"]],
+        "recordType": "AccessibilityBinding",
+        "operatorAcceptanceRecordId": "acceptance-web",
+        "operatorAcceptanceDigest": acceptance_digest,
+        "closureEvidenceRecordId": web["recordId"],
+        "closureEvidenceDigest": sha256_digest(web),
+        "surface": "web",
+        "buildDigest": web["buildDigest"],
+        "releaseDigest": web["releaseDigest"],
+        "expiresAt": "2030-01-02T00:00:00Z",
+    }
+    binding["bindingDigest"] = sha256_digest(
+        {
+            key: binding[key]
+            for key in (
+                "tenantId",
+                "recordId",
+                "recordVersion",
+                "operatorAcceptanceRecordId",
+                "operatorAcceptanceDigest",
+                "closureEvidenceRecordId",
+                "closureEvidenceDigest",
+                "surface",
+                "buildDigest",
+                "releaseDigest",
+                "expiresAt",
+            )
+        }
+    )
+    assert evaluate_accessibility_bindings(
+        [binding],
+        [web],
+        tenant_id="tenant-1",
+        release_digest=web["releaseDigest"],
+        deployed_builds={"web": web["buildDigest"]},
+        acceptance_digests={"web": acceptance_digest},
+        now=NOW,
+    ) == ("binding-web",)
+
+    drifted = copy.deepcopy(binding)
+    drifted["operatorAcceptanceDigest"] = "sha256:" + "d" * 64
+    drifted["bindingDigest"] = sha256_digest(
+        {
+            key: drifted[key]
+            for key in (
+                "tenantId",
+                "recordId",
+                "recordVersion",
+                "operatorAcceptanceRecordId",
+                "operatorAcceptanceDigest",
+                "closureEvidenceRecordId",
+                "closureEvidenceDigest",
+                "surface",
+                "buildDigest",
+                "releaseDigest",
+                "expiresAt",
+            )
+        }
+    )
+    with pytest.raises(ReleaseEvidenceRejected, match="acceptance digest mismatch"):
+        evaluate_accessibility_bindings(
+            [drifted],
+            [web],
+            tenant_id="tenant-1",
+            release_digest=web["releaseDigest"],
+            deployed_builds={"web": web["buildDigest"]},
+            acceptance_digests={"web": acceptance_digest},
             now=NOW,
         )

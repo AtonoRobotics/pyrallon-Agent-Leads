@@ -13,7 +13,7 @@
     {
       "name": "closure",
       "resource": "schemas/closure.schema.json",
-      "sha256": "6f9215a5bb532f416f874bfcf6abd4a03c49ee785401e9a857ca01a53fc14b7b",
+      "sha256": "f490e9e671502d160a1898b50e13e994714b07a9bf6d25e4aca02cafc8f33782",
       "schemaId": "https://buyer-ops.example/schemas/open-019-024-closure/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.1.0,<2.0.0",
@@ -22,61 +22,61 @@
     {
       "name": "gateway",
       "resource": "schemas/gateway.schema.json",
+      "sha256": "bb92926cd369e75e7f47112a46f77bef7b210be6ded8439fe8093349e4af6482",
       "schemaId": "https://buyer-ops.example/schemas/cognitive-runtime-gateway/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "bb92926cd369e75e7f47112a46f77bef7b210be6ded8439fe8093349e4af6482",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
     {
       "name": "gateway_runtime",
       "resource": "schemas/gateway_runtime.schema.json",
+      "sha256": "058458d5a122bdae2afe82cabd8016b7470d24d2bb23dd78e3e7c318e4b3efea",
       "schemaId": "https://buyer-ops.example/schemas/gateway-runtime-config/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "058458d5a122bdae2afe82cabd8016b7470d24d2bb23dd78e3e7c318e4b3efea",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
     {
       "name": "ontology",
       "resource": "schemas/ontology.schema.json",
+      "sha256": "5abf97a33d2086cd98cf17098b444441cbd3c20a90587cf198908c61bb15831f",
       "schemaId": "https://buyer-ops.example/schemas/ontology/buyer-ops/0.3.0",
       "schemaVersion": "0.3.0",
-      "sha256": "30e3ebfc1b2756cd3dedd0b83fb7a849d8ca66589255a62afb8dc98058cb9f2b",
       "readerRange": ">=0.3.0,<0.4.0",
       "writerVersion": "0.3.0"
     },
     {
       "name": "habitat",
       "resource": "schemas/habitat.schema.json",
+      "sha256": "0163912ac4126af0ce618526731cc8e7f4c66019d5407cc7f2eb6e4800fc9a19",
       "schemaId": "https://buyer-ops.example/schemas/habitat/effect-intent/1.0.0",
       "schemaVersion": "1.0.0",
-      "sha256": "be417326ab84220822ad9f94da888e806cba7d11a9a2235ce828887e519d7cad",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.0.0"
     },
     {
       "name": "temporal",
       "resource": "schemas/temporal.schema.json",
+      "sha256": "d4ba5449f44f7ac29bc7f262f77b68c2b345231233e54e60b2cdf8e00b60a1fb",
       "schemaId": "https://buyer-ops.example/schemas/temporal/ot01-workflow/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "d4ba5449f44f7ac29bc7f262f77b68c2b345231233e54e60b2cdf8e00b60a1fb",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
     {
       "name": "context",
       "resource": "schemas/context.schema.json",
+      "sha256": "47d4678deba7b45e61bb9f38ba7b403ac0c484b12339e7e0a9a1d6494e3748cd",
       "schemaId": "https://buyer-ops.example/schemas/context-compiler/1.1.0",
       "schemaVersion": "1.1.0",
-      "sha256": "47d4678deba7b45e61bb9f38ba7b403ac0c484b12339e7e0a9a1d6494e3748cd",
       "readerRange": ">=1.1.0,<2.0.0",
       "writerVersion": "1.1.0"
     },
     {
       "name": "operator_surface",
       "resource": "schemas/operator_surface.schema.json",
-      "sha256": "7fed6bd1604d4265d1588dd6424d744829044bdf475b12b35d86063230ac4752",
+      "sha256": "f3575f70f6588d37a7bf42eaefe17f0c2bb7e872bc9c9f07fbf755fb30cf5974",
       "schemaId": "https://buyer-ops.example/schemas/operator-surface/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.1.0,<2.0.0",
@@ -85,7 +85,7 @@
     {
       "name": "telemetry_slo",
       "resource": "schemas/telemetry_slo.schema.json",
-      "sha256": "2c76186f857d38da79cfbde35d8d6c111212e162e4b25f2d43ba6debdb50b25a",
+      "sha256": "79a1d41d68e7896c352543661ef997a3b6b611b3bc543c595c387a3044bbdb32",
       "schemaId": "https://buyer-ops.example/schemas/telemetry-slo/1.0.0",
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",
@@ -94,7 +94,7 @@
     {
       "name": "ot01_ingress",
       "resource": "schemas/ot01_ingress.schema.json",
-      "sha256": "33807386f791893686b9310c3c5a5be4af449a52cb896ead314f80a5780ef506",
+      "sha256": "475443e83885ce7eec61bfca297becb0a22af070272557be9595605a70d1f4fe",
       "schemaId": "https://buyer-ops.example/schemas/ot01-ingress/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.1.0,<2.0.0",
@@ -103,7 +103,7 @@
     {
       "name": "connector_gateway",
       "resource": "schemas/connector_gateway.schema.json",
-      "sha256": "f6aad043bd2be4fe41908c75325f0c5ac5fc4fdfd07f53ba619c4b40bfca6ae8",
+      "sha256": "66a67713789649f6ed32a90bce75cf8c79fe6eae8c7b0376c3709070ab3add02",
       "schemaId": "https://buyer-ops.example/schemas/connector-gateway/1.0.0",
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",
@@ -112,7 +112,7 @@
     {
       "name": "release_activation",
       "resource": "schemas/release_activation.schema.json",
-      "sha256": "42d847efd6d8386ad6772d977788d9e4f6c012a4423d35901c26b76a98953ecb",
+      "sha256": "d69e9b58284b46fa5816d04aa6af9161550ceae9a25ceaa30a5d0ad2662619e5",
       "schemaId": "https://buyer-ops.example/schemas/release-activation/1.1.0",
       "schemaVersion": "1.1.0",
       "readerRange": ">=1.0.0,<2.0.0",
@@ -132,6 +132,42 @@
       "resource": "schemas/availability_booking.schema.json",
       "sha256": "ad7d4a416f55338829c72777035adece4b689245c237b5fe28ac47ae6ee7dc47",
       "schemaId": "https://buyer-ops.example/schemas/availability-booking/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "nurture_plan",
+      "resource": "schemas/nurture_plan.schema.json",
+      "sha256": "39b8b19892df844b563ca7386247bc588e8adb6c2b7f5aa27a0bd70a50fdc481",
+      "schemaId": "https://buyer-ops.example/schemas/nurture-plan/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "transaction_coordination",
+      "resource": "schemas/transaction_coordination.schema.json",
+      "sha256": "6d5c46f06e37e66325a3fbd21a977ab36279d535b079160b355293f47afe3153",
+      "schemaId": "https://buyer-ops.example/schemas/transaction-coordination/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "consultation_operation",
+      "resource": "schemas/consultation_operation.schema.json",
+      "sha256": "e29fea35405e954eae556cf46aa8b6b0474aa775cf83f59d5e411f2e89deb832",
+      "schemaId": "https://buyer-ops.example/schemas/consultation-operation/1.0.0",
+      "schemaVersion": "1.0.0",
+      "readerRange": ">=1.0.0,<2.0.0",
+      "writerVersion": "1.0.0"
+    },
+    {
+      "name": "representation_operation",
+      "resource": "schemas/representation_operation.schema.json",
+      "sha256": "e5497c66b97546c9daafa4fb38e5b239f829eaf9a9fe6360b8740f58537076f2",
+      "schemaId": "https://buyer-ops.example/schemas/representation-operation/1.0.0",
       "schemaVersion": "1.0.0",
       "readerRange": ">=1.0.0,<2.0.0",
       "writerVersion": "1.0.0"

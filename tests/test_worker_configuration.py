@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import os
 from pathlib import Path
 
 import pytest
 
 from buyer_ops_contracts.worker_main import (
     _run,
+    load_outbox_tenants,
     load_worker_configuration,
     validate_compiled_journey_state,
 )
@@ -32,6 +32,14 @@ def test_worker_configuration_requires_complete_owner_supplied_contract(
     assert load_worker_configuration(json.dumps(configuration)) == configuration
 
 
+def test_outbox_tenants_require_an_explicit_unique_allow_list() -> None:
+    assert load_outbox_tenants(" tenant-a,tenant-b ") == ("tenant-a", "tenant-b")
+    with pytest.raises(ValueError, match="is required"):
+        load_outbox_tenants("")
+    with pytest.raises(ValueError, match="duplicates"):
+        load_outbox_tenants("tenant-a,tenant-a")
+
+
 def test_worker_configuration_rejects_partial_or_wrong_temporal_record() -> None:
     configuration = _records()["WorkerConfiguration"]
     partial = copy.deepcopy(configuration)
@@ -43,13 +51,14 @@ def test_worker_configuration_rejects_partial_or_wrong_temporal_record() -> None
         load_worker_configuration(json.dumps(_records()["JourneyState"]))
 
 
-def test_worker_process_refuses_unpublished_journey_state_compiler(
+def test_worker_process_requires_published_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("BUYER_OPS_DATABASE_DSN", "postgresql://unused")
-    monkeypatch.setenv("TEMPORAL_ADDRESS", os.environ.get("TEMPORAL_ADDRESS", "unconfigured"))
-    monkeypatch.setenv("TEMPORAL_NAMESPACE", os.environ.get("TEMPORAL_NAMESPACE", "unconfigured"))
-    with pytest.raises(SystemExit, match="JourneyState derivation is unavailable"):
+    monkeypatch.setenv("TEMPORAL_ADDRESS", "unconfigured")
+    monkeypatch.setenv("TEMPORAL_NAMESPACE", "unconfigured")
+    monkeypatch.delenv("TEMPORAL_WORKER_CONFIGURATION_JSON", raising=False)
+    with pytest.raises(ValueError, match="TEMPORAL_WORKER_CONFIGURATION_JSON is required"):
         asyncio.run(_run())
 
 

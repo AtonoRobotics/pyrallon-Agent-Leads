@@ -766,7 +766,7 @@
     "scope": "value",
     "decidedAt": "2030-01-01T00:00:00Z",
     "expiresAt": "2030-01-01T00:00:00Z",
-    "decision": "approved"
+    "decision": "pending"
   },
   "Evidence": {
     "id": "id-1",

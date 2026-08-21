@@ -111,9 +111,14 @@ class ActivationDecision(BaseModel):
     decision: Decision
     evidenceIds: list[Id] = Field(..., min_length=1)
     accessibilityEvidenceIds: list[Id] = Field(..., min_length=1)
+    accessibilityBindingIds: list[Id] = Field(..., min_length=1)
+    accessibilityAcceptanceDigests: dict[str, Digest]
     evidenceSetDigest: Digest
     authorizedBy: Id
     authorizationId: Id
+    authorizationVersion: conint(ge=1)
+    authorizationPolicyVersion: Id
+    authorizationRecordScopes: list[Id] = Field(..., min_length=1)
     decidedAt: Time
     rollbackState: RollbackState
     readbackRequired: Literal[True]

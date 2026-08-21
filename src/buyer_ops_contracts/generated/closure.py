@@ -179,6 +179,28 @@ class OutputClassMapping(Base):
     effectEligibility: EffectEligibility
 
 
+class Disposition(Enum):
+    allowed = 'allowed'
+    prohibited = 'prohibited'
+    approval_required = 'approval_required'
+
+
+class Rule(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionClass: Id
+    disposition: Disposition
+
+
+class EffectPolicy(Base):
+    recordType: Literal['EffectPolicy']
+    policyId: Id
+    policyVersion: Version
+    rules: list[Rule] = Field(..., min_length=1)
+    expiresAt: Timestamp
+
+
 class Unit(Enum):
     ratio = 'ratio'
     count = 'count'
@@ -291,6 +313,18 @@ class AccessibilityEvidence(Base):
     waiverApproverId: Id | None = None
 
 
+class AccessibilityBinding(Base):
+    recordType: Literal['AccessibilityBinding']
+    operatorAcceptanceRecordId: Id
+    operatorAcceptanceDigest: Digest
+    closureEvidenceRecordId: Id
+    closureEvidenceDigest: Digest
+    surface: Id
+    buildDigest: Digest
+    releaseDigest: Digest
+    bindingDigest: Digest
+
+
 class Open019024GoverningClosureRecords(
     RootModel[
         ExternalMessageIdentity
@@ -298,10 +332,12 @@ class Open019024GoverningClosureRecords(
         | EffectDraftPreview
         | ContextSourceFreshness
         | OutputClassMapping
+        | EffectPolicy
         | MetricDefinition
         | MetricObservation
         | ReleaseEvidence
         | AccessibilityEvidence
+        | AccessibilityBinding
     ]
 ):
     root: (
@@ -310,8 +346,10 @@ class Open019024GoverningClosureRecords(
         | EffectDraftPreview
         | ContextSourceFreshness
         | OutputClassMapping
+        | EffectPolicy
         | MetricDefinition
         | MetricObservation
         | ReleaseEvidence
         | AccessibilityEvidence
+        | AccessibilityBinding
     ) = Field(..., title='OPEN-019–024 governing closure records')

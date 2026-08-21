@@ -32,6 +32,8 @@ def closure_identity_key(record: dict[str, Any]) -> str:
         "MetricObservation": ("recordId",),
         "ReleaseEvidence": ("gateId", "scope", "releaseDigest"),
         "AccessibilityEvidence": ("surface", "buildDigest", "releaseDigest"),
+        "AccessibilityBinding": ("surface", "buildDigest", "releaseDigest"),
+        "EffectPolicy": ("policyId",),
     }
     fields = fields_by_type.get(record_type)
     if fields is None:

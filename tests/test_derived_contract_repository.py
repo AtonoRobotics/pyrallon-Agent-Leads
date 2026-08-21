@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -208,6 +209,31 @@ def test_qualification_decision_pair_is_validated_before_atomic_append() -> None
         "next_question_decision",
         "readiness_decision",
     ]
+
+
+def test_qualification_repository_derives_before_atomic_append() -> None:
+    connection = _WriteConnection()
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    fixture = json.loads((ROOT / "tests/fixtures/qualification_readiness/valid.json").read_text())
+    next_question, readiness = QualificationDecisionPairRepository(
+        connection_factory, tenant_id="tenant-a"
+    ).derive_and_append_decision_pair(
+        policy=fixture["policy"],
+        inputs=fixture["input"],
+        derived_at=datetime(2026, 3, 1, 12, 0, 1, tzinfo=UTC),
+        expires_at=datetime(2026, 3, 1, 12, 15, tzinfo=UTC),
+        principal_id="compiler-a",
+        next_question_id="question-decision-a",
+        readiness_id="readiness-a",
+    )
+
+    assert next_question == fixture["nextQuestion"]
+    assert readiness == fixture["readiness"]
+    assert connection.commits == 1
 
 
 def test_qualification_decision_pair_rejects_invalid_records_before_opening() -> None:
@@ -452,6 +478,82 @@ def test_slot_set_repository_appends_validated_caller_supplied_record() -> None:
         slot_set["schemaVersion"],
     )
     assert json.loads(cast(str, insert[6])) == slot_set
+
+
+def test_slot_set_repository_appends_provider_snapshot_before_slot_derivation() -> None:
+    connection = _WriteConnection()
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    _policy, _readiness, _binding, snapshot, _slot_set = _slot_set_records()
+    SlotSetRepository(connection_factory, tenant_id="tenant-a").append_calendar_snapshot(
+        snapshot=snapshot
+    )
+
+    insert = connection.cursor_instance.executions[1][1]
+    assert insert[1:6] == (
+        "availability_booking",
+        "calendar_snapshot",
+        snapshot["snapshotId"],
+        1,
+        snapshot["schemaVersion"],
+    )
+    assert json.loads(cast(str, insert[6])) == snapshot
+
+
+def test_booking_outcome_repository_appends_command_before_effect_dispatch() -> None:
+    connection = _WriteConnection()
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    _binding, command, _result, _reconciliation = _booking_records()
+    assert (
+        BookingOutcomeRepository(connection_factory, tenant_id="tenant-a").append_booking_command(
+            command=command
+        )
+        == "new"
+    )
+    assert connection.commits == 1
+    insert = connection.cursor_instance.executions[-1][1]
+    assert insert[1:6] == (
+        "availability_booking",
+        "booking_command",
+        command["commandId"],
+        1,
+        command["schemaVersion"],
+    )
+    assert json.loads(cast(str, insert[6])) == command
+
+
+def test_slot_set_repository_derives_before_atomic_append() -> None:
+    connection = _WriteConnection()
+
+    @contextmanager
+    def connection_factory() -> Iterator[_WriteConnection]:
+        yield connection
+
+    policy, readiness, binding, snapshot, _ = _slot_set_records()
+    slot_set = SlotSetRepository(
+        connection_factory, tenant_id="tenant-a"
+    ).derive_and_append_slot_set(
+        policy=policy,
+        readiness=readiness,
+        binding=binding,
+        snapshot=snapshot,
+        derived_at=datetime(2026, 3, 8, 8, tzinfo=UTC),
+        principal_id="availability-compiler-a",
+        location_options=(("office-a", ("agent-a",)),),
+        blocked_intervals=({"startsAt": "2026-03-08T09:20:00Z", "endsAt": "2026-03-08T09:40:00Z"},),
+    )
+
+    assert slot_set["derivedBy"]["implementationId"] == "availability_v1"
+    assert slot_set["expiresAt"] == "2026-03-08T08:05:00Z"
+    assert connection.commits == 1
+    assert json.loads(cast(str, connection.cursor_instance.executions[1][1][6])) == slot_set
 
 
 @pytest.mark.parametrize("failure", ["structural", "roles", "tenant", "context"])

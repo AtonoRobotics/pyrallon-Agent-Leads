@@ -1,6 +1,6 @@
 # Implementation Completion Audit
 
-**Audit date:** 2026-08-19  
+**Audit date:** 2026-08-20
 **Disposition:** Governing owner/provider/derivation bindings are published; implementation may
 proceed at the declared seams. Production activation remains fail-closed until applicable deployment
 and capability gates are evidenced.
@@ -35,78 +35,84 @@ tests now guard the executable graph; remediation requiring a new current record
 published correction, supersession, or reevaluation mechanisms rather than mutating a terminal
 state.
 
-`GAP-ACCESSIBILITY-BINDING` remains a governing-contract gap. Operator Surface 1.1 requires an
-`AccessibilityAcceptance` record, while Release Activation 1.1 consumes closure
-`AccessibilityEvidence`; neither published schema provides an identifier, digest, or version binding
-between those records. Runtime admission must not infer that relationship. Web and iOS activation
-therefore remain fail-closed until the specification owner publishes the binding or consolidates the
-two evidence types.
+Accessibility binding is implemented as a closure-family `AccessibilityBinding` record. It carries
+the exact operator acceptance record ID and digest, closure evidence record ID and digest, surface,
+build digest, release digest, expiry, and a binding digest over that material. Release Activation
+1.1 requires one current binding per deployed surface and includes the binding IDs and acceptance
+digests in the signed decision and evidence-set digest. Missing, stale, cross-surface, cross-build,
+cross-release, or digest-drifted bindings fail activation.
 
-`GAP-TELEMETRY-EVENT-IDENTITY` remains a governing-contract gap. The telemetry catalog names the
-required start and end event identities for every metric, but `MetricObservation` carries only event
-timestamps and opaque source-event IDs. Implementations can enforce the cataloged unit, retention,
-duration, dimensions, and series limit, but cannot prove event-type equality until the schema adds
-those bindings. Production SLO activation remains fail-closed on that missing proof.
+Telemetry observations now repeat `startEventType` and `endEventType`, and recorder/evaluator admission
+requires exact equality with the cataloged event identities in addition to unit, retention, duration,
+dimensions, and series-limit checks. Ratio SLOs use the closure event-set binding described below;
+generic telemetry observations cannot be converted into ratio evidence.
 
-`GAP-TELEMETRY-RATIO-BINDING` also remains open. Ratio observations produced from governed
-numerator and denominator event sets use the closure `MetricObservation` shape, while SLO 1.0 names
-a distinct `MetricObservation` value envelope without event-set or definition references. Neither
-schema binds one to the other. Ratio SLOs cannot activate until that relationship is published.
+Ratio SLO evaluation is now bound at the runtime seam to closure `MetricObservation` records: the
+evaluator verifies catalog metric identity, numerator/denominator event identities, closure record
+validity, event-set digests, window, denominator minimum, and zero-denominator behavior before
+producing an SLO evaluation. The separate telemetry-slo/1.0 observation envelope remains latency/count
+only; arbitrary conversion of that envelope into ratio evidence is still rejected. Production SLO
+activation still requires the release evidence and catalog bindings described above.
 
-Release Activation 1.1 carries `authorizedBy` and an unversioned `authorizationId`, while OPEN-026
-requires current OPEN-025 authority and invalidation on policy change. The decision has no
-authorization version, policy version, or governed mapping from capability to `recordScopes`.
-The earlier injected authority-verifier interface was removed during drift reconciliation; this
-audit records the missing binding without treating that interface as governing behavior.
+Release Activation 1.1 now carries the authorization version, policy version, and exact
+`recordScopes` snapshot alongside `authorizedBy` and `authorizationId`. Activation admission and
+readback lock and verify the current OPEN-025 authorization, require `activate_release`, require the
+exact capability scope, and reject actor, tenant, version, policy, temporal, expiry, or revocation
+drift.
 
-`GAP-OPERATOR-APPROVAL-TRANSITION` remains open. Operator Surface 1.1 declares `approve` and `deny`
-commands targeting an existing `Approval`, forbids a canonical mutation payload for those commands,
-and requires an atomic canonical write. Ontology 0.3.0 simultaneously requires every `Approval` to
-already contain a decision and makes that decision immutable across versions. There is therefore no
-admitted pending-to-decided transition or complete successor record for the server to persist.
-`approve` and `deny` are not executable until the specification owner publishes a transition; the
-other Operator Surface 1.1 commands retain their existing admission behavior.
+The published Production Runtime Closure approval transition is implemented. Ontology 0.3.0 now
+admits an explicit `pending` Approval, while `approve` and `deny` require a complete mutation carrying
+the pending predecessor update and immutable decided successor. Operator semantic admission binds
+the exact target, decision, payload fields, supersession, effective interval, and command type; the
+canonical repository persists the predecessor closure and successor atomically. A decided Approval
+cannot be decided again; `revoke_approval` remains the separate revocation path.
 
-`GAP-OPERATOR-PROJECTION-RULES` remains open. Operator Surface 1.1 defines the structural
-`JourneyView` result but does not define deterministic source selection or derivation rules for its
-orthogonal states, blockers, recovery owners, next actions, briefing summaries, epistemic labels,
-time sensitivity, or ETag material. The previous local assembler guessed those meanings, including
-hard-coded acknowledgment and consultation states and substring-based effect matching. That
-assembler and its replacement interface have been removed. The projection remains operationally
-unavailable; it does not synthesize a view from unpublished rules.
+The `GAP-OPERATOR-PROJECTION-RULES` seam is now implemented against the published runtime contract.
+`OperatorProjection` invokes the deterministic JourneyState compiler, preserves orthogonal states,
+binds current record references, emits only grounded evidence references, and computes the closure
+ETag. Recovery-owner and blocker-category bindings remain explicit deployment configuration through
+`JourneyViewDerivationPolicy`; missing bindings return `configuration_incomplete` rather than using a
+default. Briefing and next-action lists remain empty until their source-selection rules are supplied;
+the projection never invents narrative or action semantics.
 
-`GAP-OPERATOR-WORKFLOW-COMMANDS` remains open. Operator Surface 1.1 names `pause_workflow`,
-`resume_workflow`, and `request_reconciliation`, but the Temporal family publishes no corresponding
-signal or command record and no binding for command identity, expected workflow/run ownership,
-idempotency, durable outcome, canonical `WorkflowReference` updates, or atomic `CommandResult`
-persistence. The prior local `WorkflowOperator` protocol dropped material command fields and could
-signal Temporal before a later database failure. These commands now fail semantic admission rather
-than executing that non-governing partial protocol.
+Workflow commands are implemented at the published transactional-outbox seam. Operator Surface
+commands carry a complete `WorkflowReference` successor and exact signal envelope; semantic admission
+binds target, tenant/journey, workflow/run ownership, expected version, signal identity, and
+pause/resume/reconciliation state. The command result, canonical successor, and pending outbox row
+commit atomically with idempotent replay. Outbox delivery persists an append-only delivered or
+typed-failure signal receipt; Temporal remains a signal target and never becomes canonical truth.
 
-`GAP-TEMPORAL-JOURNEY-STATE-COMPILER` remains open. The Temporal schema defines the `JourneyState`
-shape but does not publish deterministic derivation rules from canonical records. The prior worker
-entrypoint obtained those values from the already-provisional operator projection and silently
-substituted implementation defaults such as `identified`, `pending`, `not_ready`, and `inactive`.
-It also hard-coded worker concurrency, cache, and shutdown values. Those defaults have been removed.
-Worker runtime configuration must now be supplied as a complete validated `WorkerConfiguration`.
-The agent-authored compiler interface was removed, and the standalone worker remains operationally
-unavailable until canonical-to-`JourneyState` derivation is published.
+Qualification Readiness 1.0 is implemented at the published derivation seam. The compiler applies
+the exact progressive question and `all_required_resolved_no_blocking_contradiction_zone_and_capacity_v1`
+algorithms to an owner-supplied policy and input set, binds both decisions to the input digest and
+policy version, and requires explicit deriver identity, decision identities, and expiry. It does not
+invent policy, service-zone, capacity, escalation, or retention defaults. The decision-pair repository
+now derives through that compiler before validating and appending both records atomically; production
+writer activation still requires the deployment evidence recorded in `QUALIFICATION-READINESS-COMPATIBILITY.json`.
 
-`GAP-HABITAT-EFFECT-CONTEXT` remains open. Habitat `EffectIntent` 1.0 carries an action class and
-connector binding but does not bind the signed `CapabilityInventory`, `EffectDraftPreview`,
-capability, constraint digest, or communication channel. It therefore cannot prove the prior local
-action-to-capability table, infer a channel from the first matching connector scope, decide that a
-capability requires consent, or evaluate channel-specific suppression. Those hard-coded mappings
-have been removed. Canonical authority and workflow records are still read under lock, but connector
-and communication authority remain unavailable. The agent-authored resolver interface was removed.
+`GAP-TEMPORAL-JOURNEY-STATE-COMPILER` is implemented at the published seam. The worker loads one
+tenant-scoped current canonical snapshot and `journey_state.py` applies the published precedence,
+currentness, ambiguity, blocker, input-digest, output-digest, and evidence rules. Worker runtime
+configuration remains complete and validated through `WorkerConfiguration`; no implementation
+defaults are supplied. Production acceptance still requires PostgreSQL/Temporal replay and fault
+evidence against the exact deployment configuration.
+
+`GAP-HABITAT-EFFECT-CONTEXT` is narrowed but remains a production-activation blocker. Habitat
+`EffectIntent` 1.0 now binds the exact activation, signed inventory, capability, constraint digest,
+connector grant, delegated principal, and draft preview. The locked canonical reader loads those
+authorities in the same transaction, checks the latest activation for the exact capability, and the
+kernel rejects digest, version, tenant, mapping, payload, target, recipient, execution-window, grant,
+and principal mismatches. Activation and inventory signature verification are explicit and fail-closed
+when no verifier is configured. The remaining blocker is supplying the governed inventory verifier
+configuration and redeeming the current Habitat EffectPermit before provider invocation; the provider
+gateway already enforces that permit boundary. The implementation does not infer any missing values.
 Ambiguous current canonical matches also do not authorize an effect.
 
-`GAP-CONNECTOR-ACTIVATION-ID` remains open. Neither Connector Gateway 1.0, Capability Inventory
-1.1, nor Release Activation 1.1 defines how connector and capability identities map to the opaque
-activation `capabilityId`. The control-plane connector facade no longer constructs an undocumented
-`connector:<connectorId>` identifier or reports activation from it. It also no longer treats a
-connector ID containing the substring `voice` as a policy decision. Live adapters remain disabled;
-an owner policy and exact activation binding are required before invocation.
+Connector activation now uses the exact request capability ID against the explicitly selected release
+activation record. The authority no longer derives an activation ID from a connector name or callback
+mapping; the signed activation and current capability inventory must each contain that exact capability
+ID, while the gateway independently verifies connector grant, inventory signature, preview, permit,
+payload, target, recipient, and execution-window bindings. Live adapters remain deployment-gated.
 
 The canonical-reference audit identifies several opaque ID fields whose target domains are not
 published. Earlier work converted that observation into `REFERENCE_BINDING_UNDEFINED` admission

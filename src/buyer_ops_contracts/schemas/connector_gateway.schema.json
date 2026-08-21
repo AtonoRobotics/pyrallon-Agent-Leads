@@ -178,6 +178,9 @@
                         },
                         "payloadDigest": {
                             "$ref": "#/$defs/Digest"
+                        },
+                        "providerResponse": {
+                            "type": "object"
                         }
                     }
                 }

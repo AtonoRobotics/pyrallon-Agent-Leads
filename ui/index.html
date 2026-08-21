@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Buyer Operations agent workspace" />
+    <title>Buyer Operations</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">BUYER OPERATIONS</p>
+        <h1>Agent workspace</h1>
+      </div>
+      <div id="connection-status" class="status status-neutral">Not connected</div>
+    </header>
+    <main class="layout">
+      <section class="panel connection-panel" aria-labelledby="connection-title">
+        <div class="panel-heading">
+          <h2 id="connection-title">Connect workspace</h2>
+          <p>Credentials stay in this browser and are sent only to this control plane.</p>
+        </div>
+        <form id="connection-form" class="connection-form">
+          <label>Control token <input id="control-token" type="password" autocomplete="off" required /></label>
+          <label>Tenant ID <input id="tenant-id" autocomplete="organization" required /></label>
+          <label>Actor ID <input id="actor-id" autocomplete="username" required /></label>
+          <button type="submit">Load workspace</button>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="summary-title">
+        <div class="panel-heading">
+          <h2 id="summary-title">Operational view</h2>
+          <p id="summary-detail">Connect to load current journeys and decisions.</p>
+        </div>
+        <div id="summary-cards" class="summary-cards" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="journeys-title">
+        <div class="panel-heading row">
+          <div>
+            <h2 id="journeys-title">Journeys</h2>
+            <p>Current canonical state only. Missing governed projection rules remain visible.</p>
+          </div>
+          <button id="refresh-button" class="secondary" type="button" disabled>Refresh</button>
+        </div>
+        <div id="journeys" class="journeys" aria-live="polite">
+          <p class="empty">No workspace loaded.</p>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="connectors-title">
+        <div class="panel-heading row">
+          <div>
+            <h2 id="connectors-title">Provider connections</h2>
+            <p>Provider identity, capability, grant, and authorization state; credentials are never rendered.</p>
+          </div>
+        </div>
+        <div id="connectors" class="data-grid" aria-live="polite"><p class="empty">No provider data loaded.</p></div>
+      </section>
+
+      <section class="panel" aria-labelledby="provider-setup-title">
+        <div class="panel-heading">
+          <h2 id="provider-setup-title">Provider authorization</h2>
+          <p>Start a governed OAuth grant. Tokens are exchanged and encrypted by the control plane; they are never displayed here.</p>
+        </div>
+        <form id="platform-oauth-client-form" class="connection-form">
+          <label>Provider
+            <select id="platform-oauth-issuer" required>
+              <option value="google">Google Workspace</option>
+              <option value="microsoft">Microsoft 365</option>
+              <option value="docusign">DocuSign</option>
+            </select>
+          </label>
+          <label>OAuth client ID <input id="platform-oauth-client-id" autocomplete="off" required /></label>
+          <label>OAuth client secret <input id="platform-oauth-client-secret" type="password" autocomplete="off" required /></label>
+          <label>Microsoft directory ID (Microsoft only) <input id="platform-oauth-directory-id" autocomplete="off" /></label>
+          <button type="submit">Register provider application</button>
+        </form>
+        <div id="platform-oauth-client-result" class="message" aria-live="polite">No provider application registered.</div>
+        <form id="provider-oauth-form" class="connection-form">
+          <label>Connector ID <input id="oauth-connector-id" placeholder="google.workspace.calendar" required /></label>
+          <label>Redirect URI <input id="oauth-redirect-uri" type="url" placeholder="https://app.example.com/api/connectors/callback" required /></label>
+          <label>Return origin <input id="oauth-return-origin" type="url" placeholder="https://app.example.com" required /></label>
+          <button type="submit">Start provider authorization</button>
+        </form>
+        <div id="oauth-result" class="message" aria-live="polite">No authorization started.</div>
+      </section>
+
+      <section class="panel" aria-labelledby="cognition-title">
+        <div class="panel-heading">
+          <h2 id="cognition-title">Cognitive runtime identities</h2>
+          <p>Explicit route identity, policy, capacity, and authorization state.</p>
+        </div>
+        <div id="cognition-identities" class="data-grid" aria-live="polite"><p class="empty">No cognitive identities loaded.</p></div>
+      </section>
+
+      <section class="panel" aria-labelledby="cognition-setup-title">
+        <div class="panel-heading">
+          <h2 id="cognition-setup-title">Cognitive provider binding</h2>
+          <p>Bind a metered provider key or an approved local HTTPS runtime. The secret is sent once to the authenticated control plane and is not persisted in this page.</p>
+        </div>
+        <form id="cognition-metered-form" class="connection-form">
+          <label>Metered connector ID <input id="metered-connector-id" placeholder="openai.api" required /></label>
+          <label>API key <input id="metered-api-key" type="password" autocomplete="off" required /></label>
+          <button type="submit">Bind metered provider</button>
+        </form>
+        <form id="cognition-local-form" class="connection-form">
+          <label>Local base URL <input id="local-base-url" type="url" placeholder="https://cognitive.example.com" required /></label>
+          <label>Model ID <input id="local-model-id" placeholder="model-id" required /></label>
+          <label>Runtime token <input id="local-token" type="password" autocomplete="off" required /></label>
+          <button type="submit">Bind local runtime</button>
+        </form>
+        <div id="cognition-setup-result" class="message" aria-live="polite">No cognitive provider binding submitted.</div>
+      </section>
+
+      <section class="panel" aria-labelledby="activation-title">
+        <div class="panel-heading">
+          <h2 id="activation-title">Release and gate evidence</h2>
+          <p>Activation decisions remain separate from configuration and are shown with their current state.</p>
+        </div>
+        <div id="activation" class="data-grid" aria-live="polite"><p class="empty">No activation data loaded.</p></div>
+      </section>
+
+      <section class="panel" aria-labelledby="error-title">
+        <div class="panel-heading">
+          <h2 id="error-title">System messages</h2>
+          <p>Typed failures are preserved instead of being hidden behind a generic success state.</p>
+        </div>
+        <pre id="system-message" class="message" aria-live="assertive">Ready.</pre>
+      </section>
+    </main>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

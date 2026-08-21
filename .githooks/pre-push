@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+# A push cannot advance a narrowed cursor or a false completion claim.
+exec uv run python scripts/production_guard.py

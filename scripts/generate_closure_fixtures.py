@@ -1,12 +1,16 @@
 import copy
 import json
+from hashlib import sha256
 from pathlib import Path
+from typing import Any
+
+import rfc8785
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "tests" / "fixtures" / "generated"
 
 
-def base(record_type: str) -> dict:
+def base(record_type: str) -> dict[str, Any]:
     return {
         "schemaVersion": "open-019-024/1.1.0",
         "tenantId": "tenant-1",
@@ -20,10 +24,43 @@ def base(record_type: str) -> dict:
     }
 
 
-def records() -> dict[str, dict]:
+def records() -> dict[str, dict[str, Any]]:
     digest_a = "sha256:" + "a" * 64
     digest_b = "sha256:" + "b" * 64
     digest_c = "sha256:" + "c" * 64
+    binding = base("AccessibilityBinding") | {
+        "expiresAt": "2030-02-01T00:00:00Z",
+        "operatorAcceptanceRecordId": "acceptance-web",
+        "operatorAcceptanceDigest": digest_c,
+        "closureEvidenceRecordId": "accessibilityevidence",
+        "closureEvidenceDigest": digest_a,
+        "surface": "web",
+        "buildDigest": digest_a,
+        "releaseDigest": digest_b,
+    }
+    binding["bindingDigest"] = (
+        "sha256:"
+        + sha256(
+            rfc8785.dumps(
+                {
+                    key: binding[key]
+                    for key in (
+                        "tenantId",
+                        "recordId",
+                        "recordVersion",
+                        "operatorAcceptanceRecordId",
+                        "operatorAcceptanceDigest",
+                        "closureEvidenceRecordId",
+                        "closureEvidenceDigest",
+                        "surface",
+                        "buildDigest",
+                        "releaseDigest",
+                        "expiresAt",
+                    )
+                }
+            )
+        ).hexdigest()
+    )
     return {
         "ExternalMessageIdentity": base("ExternalMessageIdentity")
         | {
@@ -95,6 +132,13 @@ def records() -> dict[str, dict]:
             "groundingMode": "all_claims_grounded",
             "effectEligibility": "none",
         },
+        "EffectPolicy": base("EffectPolicy")
+        | {
+            "expiresAt": "2030-02-01T00:00:00Z",
+            "policyId": "effect-policy-1",
+            "policyVersion": "effect-policy/1",
+            "rules": [{"actionClass": "send_message", "disposition": "allowed"}],
+        },
         "MetricDefinition": base("MetricDefinition")
         | {
             "metricId": "qualification_completion_ratio",
@@ -153,6 +197,7 @@ def records() -> dict[str, dict]:
             "outcome": "current",
             "ownerId": "accessibility-owner",
         },
+        "AccessibilityBinding": binding,
     }
 
 
@@ -164,10 +209,12 @@ def main() -> None:
         "EffectDraftPreview": "inventoryDigest",
         "ContextSourceFreshness": "freshUntil",
         "OutputClassMapping": "allowedArtifactTypes",
+        "EffectPolicy": "rules",
         "MetricDefinition": "correlationKey",
         "MetricObservation": "denominatorEventDigest",
         "ReleaseEvidence": "gateRegistryDigest",
         "AccessibilityEvidence": "buildDigest",
+        "AccessibilityBinding": "bindingDigest",
     }
     invalid = {}
     for name, record in valid.items():

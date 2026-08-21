@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from datetime import datetime
 from typing import Any, cast
 
 from .canonical_repository import Connection, TenantIsolationViolation
 from .contract_acceptance import (
+    ContractSemanticError,
+    derive_qualification_decisions,
+    derive_slot_set,
     validate_booking_command,
     validate_booking_result_context,
+    validate_calendar_snapshot,
     validate_qualification_decisions,
     validate_reconciliation,
     validate_slot_set_context,
@@ -126,6 +131,79 @@ class SlotSetRepository:
                 connection.rollback()
                 raise
 
+    def append_calendar_snapshot(self, *, snapshot: dict[str, Any]) -> None:
+        """Append one provider-observed snapshot before availability is derived."""
+        validate_record(snapshot, "availability_booking", self._registry)
+        if snapshot.get("messageType") != "calendar_snapshot":
+            raise ValueError("calendar snapshot has an unexpected message type")
+        if snapshot.get("tenantId") != self._tenant_id:
+            raise TenantIsolationViolation(
+                "calendar snapshot tenantId does not match repository tenant"
+            )
+        validate_calendar_snapshot(snapshot)
+        with self._connection_factory() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('app.tenant_id', %s, true)", (self._tenant_id,)
+                    )
+                    cursor.execute(
+                        """
+                        INSERT INTO derived_contract_records
+                            (tenant_id, contract_family, message_type, record_id,
+                             record_version, schema_version, payload)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                        ON CONFLICT (tenant_id, contract_family, message_type, record_id, record_version)
+                        DO NOTHING
+                        """.strip(),
+                        (
+                            self._tenant_id,
+                            "availability_booking",
+                            "calendar_snapshot",
+                            snapshot["snapshotId"],
+                            1,
+                            snapshot["schemaVersion"],
+                            json.dumps(snapshot, sort_keys=True, separators=(",", ":")),
+                        ),
+                    )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+
+    def derive_and_append_slot_set(
+        self,
+        *,
+        policy: dict[str, Any],
+        readiness: dict[str, Any],
+        binding: dict[str, Any],
+        snapshot: dict[str, Any],
+        derived_at: datetime,
+        principal_id: str,
+        location_options: tuple[tuple[str, tuple[str, ...]], ...],
+        blocked_intervals: tuple[dict[str, str], ...] = (),
+    ) -> dict[str, Any]:
+        """Derive and atomically append a SlotSet from explicit owner inputs."""
+
+        slot_set = derive_slot_set(
+            policy,
+            readiness,
+            binding,
+            snapshot,
+            derived_at=derived_at,
+            principal_id=principal_id,
+            location_options=location_options,
+            blocked_intervals=blocked_intervals,
+        )
+        self.append_slot_set(
+            policy=policy,
+            readiness=readiness,
+            binding=binding,
+            snapshot=snapshot,
+            slot_set=slot_set,
+        )
+        return slot_set
+
 
 class BookingOutcomeRepository:
     """Append validated booking outcomes without invoking or activating provider effects."""
@@ -159,6 +237,70 @@ class BookingOutcomeRepository:
         validate_booking_result_context(command=command, binding=binding, result=result)
         self._append(result, identity_field="resultId")
 
+    def append_booking_command(self, *, command: dict[str, Any]) -> str:
+        """Append one command, enforcing tenant scope and idempotency before dispatch."""
+        validate_record(command, "availability_booking", self._registry)
+        if command.get("messageType") != "booking_command":
+            raise ValueError("booking command has an unexpected message type")
+        if command.get("tenantId") != self._tenant_id:
+            raise TenantIsolationViolation(
+                "booking command tenantId does not match repository tenant"
+            )
+        validate_booking_command(command)
+        with self._connection_factory() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('app.tenant_id', %s, true)",
+                        (self._tenant_id,),
+                    )
+                    cursor.execute(
+                        """
+                        SELECT payload
+                        FROM derived_contract_records
+                        WHERE tenant_id = %s
+                          AND contract_family = 'availability_booking'
+                          AND message_type = 'booking_command'
+                          AND payload->>'idempotencyKey' = %s
+                        FOR SHARE
+                        """.strip(),
+                        (self._tenant_id, command["idempotencyKey"]),
+                    )
+                    existing = cursor.fetchone()
+                    if existing is not None:
+                        prior = cast(dict[str, Any], existing[0])
+                        if prior.get("payloadDigest") != command.get("payloadDigest"):
+                            raise ContractSemanticError("idempotency_key_payload_conflict")
+                        connection.commit()
+                        return "duplicate"
+                    cursor.execute(
+                        """
+                        INSERT INTO derived_contract_records
+                            (tenant_id, contract_family, message_type, record_id,
+                             record_version, schema_version, payload)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                        """.strip(),
+                        (
+                            self._tenant_id,
+                            "availability_booking",
+                            "booking_command",
+                            command["commandId"],
+                            1,
+                            command["schemaVersion"],
+                            json.dumps(
+                                command,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                ensure_ascii=False,
+                            ),
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        return "new"
+
     def append_booking_reconciliation(
         self,
         *,
@@ -181,6 +323,41 @@ class BookingOutcomeRepository:
         validate_booking_result_context(command=command, binding=binding, result=prior_result)
         validate_reconciliation(prior_result, reconciliation)
         self._append(reconciliation, identity_field="reconciliationId")
+
+    def get_booking_result(self, *, command_id: str) -> dict[str, Any] | None:
+        if not command_id:
+            raise ValueError("command_id is required")
+        with self._connection_factory() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('app.tenant_id', %s, true)",
+                        (self._tenant_id,),
+                    )
+                    cursor.execute(
+                        """
+                        SELECT payload
+                        FROM derived_contract_records
+                        WHERE tenant_id = %s
+                          AND contract_family = 'availability_booking'
+                          AND message_type = 'booking_result'
+                          AND payload->'commandRef'->>'recordId' = %s
+                        ORDER BY record_version DESC
+                        LIMIT 1
+                        """.strip(),
+                        (self._tenant_id, command_id),
+                    )
+                    row = cursor.fetchone()
+                    if row is None:
+                        connection.commit()
+                        return None
+                    result = cast(dict[str, Any], row[0])
+                    validate_record(result, "availability_booking", self._registry)
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        return result
 
     def _validate_records(
         self,
@@ -306,6 +483,36 @@ class QualificationDecisionPairRepository:
                 connection.rollback()
                 raise
             connection.commit()
+
+    def derive_and_append_decision_pair(
+        self,
+        *,
+        policy: dict[str, Any],
+        inputs: dict[str, Any],
+        derived_at: datetime,
+        expires_at: datetime,
+        principal_id: str,
+        next_question_id: str,
+        readiness_id: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Derive and atomically append the governed qualification decision pair."""
+
+        next_question, readiness = derive_qualification_decisions(
+            policy,
+            inputs,
+            derived_at=derived_at,
+            expires_at=expires_at,
+            principal_id=principal_id,
+            next_question_id=next_question_id,
+            readiness_id=readiness_id,
+        )
+        self.append_decision_pair(
+            policy=policy,
+            inputs=inputs,
+            next_question=next_question,
+            readiness=readiness,
+        )
+        return next_question, readiness
 
 
 class DerivedContractReader:

@@ -11,6 +11,8 @@ from buyer_ops_contracts.contract_acceptance import (
     ContractSemanticError,
     admit_idempotency,
     canonical_digest,
+    derive_qualification_decisions,
+    derive_slot_set,
     local_window_instants,
     readiness_result,
     require_unknown_outcome_resolution,
@@ -89,6 +91,52 @@ def test_qualification_inputs_bind_the_exact_policy_version() -> None:
 
     with pytest.raises(ContractSemanticError, match="input_policy_reference_mismatch"):
         validate_qualification(policy, inputs)
+
+
+def test_qualification_compiler_derives_fixture_decisions_deterministically() -> None:
+    valid = _load("qualification_readiness/valid.json")
+    next_question, readiness = derive_qualification_decisions(
+        valid["policy"],
+        valid["input"],
+        derived_at=datetime.fromisoformat("2026-03-01T12:00:01+00:00"),
+        expires_at=datetime.fromisoformat("2026-03-01T12:15:00+00:00"),
+        principal_id="compiler-a",
+        next_question_id="question-decision-a",
+        readiness_id="readiness-a",
+    )
+
+    assert next_question == valid["nextQuestion"]
+    assert readiness == valid["readiness"]
+    assert derive_qualification_decisions(
+        valid["policy"],
+        valid["input"],
+        derived_at=datetime.fromisoformat("2026-03-01T12:00:01+00:00"),
+        expires_at=datetime.fromisoformat("2026-03-01T12:15:00+00:00"),
+        principal_id="compiler-a",
+        next_question_id="question-decision-a",
+        readiness_id="readiness-a",
+    ) == (next_question, readiness)
+
+
+def test_qualification_compiler_requires_explicit_deriver_and_expiry() -> None:
+    valid = _load("qualification_readiness/valid.json")
+    arguments = {
+        "derived_at": datetime.fromisoformat("2026-03-01T12:00:01+00:00"),
+        "expires_at": datetime.fromisoformat("2026-03-01T12:15:00+00:00"),
+        "principal_id": "compiler-a",
+        "next_question_id": "question-decision-a",
+        "readiness_id": "readiness-a",
+    }
+    with pytest.raises(ContractSemanticError, match="configuration_incomplete"):
+        derive_qualification_decisions(
+            valid["policy"], valid["input"], **{**arguments, "principal_id": ""}
+        )
+    with pytest.raises(ContractSemanticError, match="invalid_decision_expiry"):
+        derive_qualification_decisions(
+            valid["policy"],
+            valid["input"],
+            **{**arguments, "expires_at": arguments["derived_at"]},
+        )
 
 
 def test_missing_qualification_policy_or_reference_fails_closed() -> None:
@@ -317,6 +365,51 @@ def test_dst_resolution_slot_identity_and_expiry() -> None:
     stale["expiresAt"] = "2026-03-08T08:10:01Z"
     with pytest.raises(ContractSemanticError, match="invalid_slot_set_expiry"):
         validate_slot_set(stale, valid["policy"])
+
+
+def test_availability_v1_derives_stable_slots_and_applies_buffers() -> None:
+    booking = _load("availability_booking/valid.json")
+    booking["policy"]["horizonSeconds"] = 21600
+    qualification = _load("qualification_readiness/valid.json")
+    readiness = copy.deepcopy(qualification["readiness"])
+    readiness["expiresAt"] = "2026-03-08T08:05:00Z"
+    derived = derive_slot_set(
+        booking["policy"],
+        readiness,
+        booking["binding"],
+        booking["snapshot"],
+        derived_at=datetime(2026, 3, 8, 8, tzinfo=UTC),
+        principal_id="availability-compiler-a",
+        location_options=(("office-a", ("agent-a",)),),
+        blocked_intervals=({"startsAt": "2026-03-08T09:20:00Z", "endsAt": "2026-03-08T09:40:00Z"},),
+    )
+
+    assert derived["derivedBy"]["implementationId"] == "availability_v1"
+    assert derived["expiresAt"] == "2026-03-08T08:05:00Z"
+    assert [slot["startsAt"] for slot in derived["slots"]] == [
+        "2026-03-08T09:45:00Z",
+        "2026-03-08T10:00:00Z",
+        "2026-03-08T10:15:00Z",
+        "2026-03-08T10:30:00Z",
+    ]
+    assert all(slot["slotId"] == slot["slotDigest"].split(":", 1)[1] for slot in derived["slots"])
+    assert derived["inputDigest"].startswith("sha256:")
+
+
+def test_availability_v1_requires_owner_supplied_location_and_resource_policy() -> None:
+    booking = _load("availability_booking/valid.json")
+    readiness = copy.deepcopy(_load("qualification_readiness/valid.json")["readiness"])
+    readiness["expiresAt"] = "2026-03-08T08:05:00Z"
+    with pytest.raises(ContractSemanticError, match="configuration_incomplete"):
+        derive_slot_set(
+            booking["policy"],
+            readiness,
+            booking["binding"],
+            booking["snapshot"],
+            derived_at=datetime(2026, 3, 8, 8, tzinfo=UTC),
+            principal_id="availability-compiler-a",
+            location_options=(),
+        )
 
 
 def test_dst_ambiguous_boundary_uses_fold_zero_across_timezones() -> None:

@@ -5,7 +5,7 @@ import copy
 import pytest
 
 from buyer_ops_contracts.errors import ContractViolation
-from buyer_ops_contracts.telemetry import RatioEvent, RatioTelemetryRecorder
+from buyer_ops_contracts.telemetry import LatencySloEvaluator, RatioEvent, RatioTelemetryRecorder
 
 
 def _definition() -> dict:
@@ -145,3 +145,58 @@ def test_zero_denominator_behavior_is_definition_driven(
     )
     assert observation["calculationState"] == expected_state
     assert observation.get("value") == expected_value
+
+
+def test_ratio_slo_aggregates_closure_event_set_observations() -> None:
+    definition = _definition()
+    definition.update(
+        {
+            "metricId": "provider_unknown_outcome_ratio",
+            "numeratorEvent": "provider_outcome_unknown",
+            "denominatorEvent": "provider_effect_attempted",
+        }
+    )
+    recorder = RatioTelemetryRecorder(_Connection(), tenant_id="tenant-1")
+    observations = []
+    for index in range(100):
+        denominator = _event(f"attempt-{index}", "provider_effect_attempted", f"journey-{index}")
+        numerator_events = (
+            [_event("unknown-0", "provider_outcome_unknown", "journey-0")] if index == 0 else []
+        )
+        observations.append(
+            recorder.record(
+                definition,
+                observation_id=f"observation-{index}",
+                observed_at="2030-01-02T00:00:01Z",
+                window_start="2030-01-01T00:00:00Z",
+                window_end="2030-01-02T00:00:00Z",
+                numerator_events=numerator_events,
+                denominator_events=[denominator],
+                dimension_values={"channel": "web"},
+                evidence_refs=[f"event-export-{index}"],
+            )
+        )
+
+    evaluation = LatencySloEvaluator().evaluate(
+        "provider_unknown_ratio",
+        observations,
+        evaluation_id="ratio-evaluation",
+        window_started_at="2030-01-01T00:00:00Z",
+        window_ended_at="2030-01-02T00:00:00Z",
+        evaluated_at="2030-01-02T00:00:01Z",
+    )
+    assert evaluation["sampleCount"] == 100
+    assert evaluation["actual"] == 0.01
+    assert evaluation["status"] == "pass"
+
+    drifted = copy.deepcopy(observations)
+    drifted[0]["numeratorEvent"] = "different_event"
+    with pytest.raises(ContractViolation, match="SLO_SOURCE_METRIC_MISMATCH"):
+        LatencySloEvaluator().evaluate(
+            "provider_unknown_ratio",
+            drifted,
+            evaluation_id="ratio-evaluation-drifted",
+            window_started_at="2030-01-01T00:00:00Z",
+            window_ended_at="2030-01-02T00:00:00Z",
+            evaluated_at="2030-01-02T00:00:01Z",
+        )

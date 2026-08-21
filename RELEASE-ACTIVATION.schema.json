@@ -26,7 +26,7 @@
     },
     "ActivationDecision": {
       "type": "object", "additionalProperties": false,
-      "required": ["messageType", "schemaVersion", "decisionId", "capabilityId", "tenantId", "environment", "releaseDigest", "gateRegistryVersion", "gateRegistryDigest", "directlyApplicableGateIds", "requiredGateIds", "deployedBuildDigests", "expectedActivationVersion", "decision", "evidenceIds", "accessibilityEvidenceIds", "evidenceSetDigest", "authorizedBy", "authorizationId", "decidedAt", "rollbackState", "readbackRequired", "signature"],
+      "required": ["messageType", "schemaVersion", "decisionId", "capabilityId", "tenantId", "environment", "releaseDigest", "gateRegistryVersion", "gateRegistryDigest", "directlyApplicableGateIds", "requiredGateIds", "deployedBuildDigests", "expectedActivationVersion", "decision", "evidenceIds", "accessibilityEvidenceIds", "accessibilityBindingIds", "accessibilityAcceptanceDigests", "evidenceSetDigest", "authorizedBy", "authorizationId", "authorizationVersion", "authorizationPolicyVersion", "authorizationRecordScopes", "decidedAt", "rollbackState", "readbackRequired", "signature"],
       "properties": {
         "messageType": { "const": "activation_decision" },
         "schemaVersion": { "const": "release-activation/1.1.0" },
@@ -44,9 +44,14 @@
         "decision": { "enum": ["activate", "deactivate", "deny"] },
         "evidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
         "accessibilityEvidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "accessibilityBindingIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "accessibilityAcceptanceDigests": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/$defs/Digest" } },
         "evidenceSetDigest": { "$ref": "#/$defs/Digest" },
         "authorizedBy": { "$ref": "#/$defs/Id" },
         "authorizationId": { "$ref": "#/$defs/Id" },
+        "authorizationVersion": { "type": "integer", "minimum": 1 },
+        "authorizationPolicyVersion": { "$ref": "#/$defs/Id" },
+        "authorizationRecordScopes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
         "decidedAt": { "$ref": "#/$defs/Time" },
         "rollbackState": { "enum": ["not_required", "armed", "executing", "completed", "failed"] },
         "readbackRequired": { "const": true },
