@@ -8,6 +8,7 @@ from buyer_ops_contracts.provider_adapters import (
     DirectProviderConfig,
     ProviderAdapterError,
 )
+from buyer_ops_contracts.workload_provider_credentials import ProviderWorkloadIdentity
 
 
 class Transport:
@@ -23,6 +24,15 @@ class Transport:
             {"x-api-version": "test-v1", "x-message-id": "provider-message-1"},
             json.dumps(self.response).encode(),
         )
+
+
+class RenewableCredential:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def token(self) -> str:
+        self.calls += 1
+        return "renewable-provider-token-1234567890"
 
 
 def _request(connector: str) -> dict:
@@ -76,6 +86,43 @@ def test_google_calendar_adapter_binds_idempotency_and_bearer_without_leaking_cr
     event = json.loads(body)
     assert event["start"] == {"dateTime": "2026-03-08T09:00:00Z", "timeZone": "UTC"}
     assert event["end"] == {"dateTime": "2026-03-08T09:30:00Z", "timeZone": "UTC"}
+
+
+def test_google_workload_identity_adapter_uses_renewable_bearer_at_provider_boundary() -> None:
+    transport = Transport({"id": "event-workload", "status": "confirmed"})
+    credential = RenewableCredential()
+    identity = ProviderWorkloadIdentity.from_value(
+        {
+            "provider": "google_calendar",
+            "credentialMode": "google_service_account",
+            "credentialEnv": "GOOGLE_SERVICE_ACCOUNT_JSON",
+            "subjectEnv": "GOOGLE_CALENDAR_SUBJECT",
+        }
+    )
+    adapter = DirectProviderAdapter(
+        DirectProviderConfig(
+            "calendar-google", "google_calendar", "GOOGLE_SERVICE_ACCOUNT_JSON", workload_identity=identity
+        ),
+        transport=transport,
+        credential_resolver=credential,
+    )
+
+    result = adapter.invoke(
+        _request("calendar-google"),
+        json.dumps(
+            {
+                "action": "calendar.book",
+                "calendarId": "primary",
+                "summary": "Consult",
+                "start": "2026-03-08T09:00:00Z",
+                "end": "2026-03-08T09:30:00Z",
+            }
+        ).encode(),
+    )
+
+    assert result["receiptId"] == "event-workload"
+    assert credential.calls == 1
+    assert transport.calls[0][2]["Authorization"] == "Bearer renewable-provider-token-1234567890"
 
 
 def test_google_calendar_reschedule_updates_existing_event():

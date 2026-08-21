@@ -44,3 +44,45 @@ def test_readiness_rejects_mismatched_deployed_callback() -> None:
     )
     assert any("publicOrigin" in error for error in errors)
     assert any("redirectUri" in error for error in errors)
+
+
+def test_readiness_accepts_complete_workload_identity_configuration_without_callback() -> None:
+    environment = {name: "{}" for name in MODULE.E2E_RECORDS}
+    environment.update({name: "{}" for name in MODULE.E2E_PERMITS})
+    environment.update(
+        {
+            "GOOGLE_SERVICE_ACCOUNT_JSON": "service-account-json",
+            "GOOGLE_CALENDAR_SUBJECT": "agent@example.com",
+            "MICROSOFT_CLIENT_CERTIFICATE": "certificate-pem",
+            "DOCUSIGN_RSA_KEY": "private-key-pem",
+            "BUYER_OPS_DIRECT_PROVIDER_ADAPTERS_JSON": __import__("json").dumps(
+                [
+                    {
+                        "connectorId": "calendar-google",
+                        "provider": "google_calendar",
+                        "credentialMode": "google_service_account",
+                        "credentialEnv": "GOOGLE_SERVICE_ACCOUNT_JSON",
+                        "subjectEnv": "GOOGLE_CALENDAR_SUBJECT",
+                    },
+                    {
+                        "connectorId": "calendar-microsoft",
+                        "provider": "microsoft_graph",
+                        "credentialMode": "microsoft_client_certificate",
+                        "credentialEnv": "MICROSOFT_CLIENT_CERTIFICATE",
+                        "clientId": "application-id",
+                        "tenantId": "tenant-id",
+                    },
+                    {
+                        "connectorId": "esign-docusign",
+                        "provider": "docusign",
+                        "credentialMode": "docusign_jwt",
+                        "credentialEnv": "DOCUSIGN_RSA_KEY",
+                        "clientId": "integration-key",
+                        "userId": "user-id",
+                    },
+                ]
+            ),
+        }
+    )
+
+    assert MODULE.readiness_errors(environment, {"clients": []}) == []

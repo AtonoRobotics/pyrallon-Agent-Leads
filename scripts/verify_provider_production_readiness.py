@@ -73,14 +73,56 @@ def _is_https_origin(value: str) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc) and not parsed.params and not parsed.query
 
 
+def _workload_providers(environment: dict[str, str]) -> tuple[set[str], list[str]]:
+    raw = environment.get("BUYER_OPS_DIRECT_PROVIDER_ADAPTERS_JSON", "").strip()
+    if not raw:
+        return set(), []
+    try:
+        values = json.loads(raw)
+    except json.JSONDecodeError:
+        return set(), ["BUYER_OPS_DIRECT_PROVIDER_ADAPTERS_JSON must be valid JSON"]
+    if not isinstance(values, list):
+        return set(), ["BUYER_OPS_DIRECT_PROVIDER_ADAPTERS_JSON must be an array"]
+    expected = {
+        ("google_calendar", "google_service_account"): "google",
+        ("microsoft_graph", "microsoft_client_certificate"): "microsoft",
+        ("docusign", "docusign_jwt"): "docusign",
+    }
+    configured: set[str] = set()
+    errors: list[str] = []
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        provider = {"google": "google_calendar", "microsoft": "microsoft_graph"}.get(
+            str(value.get("provider") or "").lower(), str(value.get("provider") or "").lower()
+        )
+        issuer = expected.get((provider, str(value.get("credentialMode") or "").lower()))
+        if issuer is None:
+            continue
+        credential_env = value.get("credentialEnv")
+        if not isinstance(credential_env, str) or not environment.get(credential_env, "").strip():
+            errors.append(f"{issuer} workload identity credentialEnv is missing")
+            continue
+        if issuer == "google":
+            subject_env = value.get("subjectEnv")
+            if not isinstance(subject_env, str) or not environment.get(subject_env, "").strip():
+                errors.append("google workload identity subjectEnv is missing")
+                continue
+        configured.add(issuer)
+    return configured, errors
+
+
 def readiness_errors(
     environment: dict[str, str], metadata: dict[str, Any] | None
 ) -> list[str]:
     errors: list[str] = []
+    workload_issuers, workload_errors = _workload_providers(environment)
+    errors.extend(workload_errors)
+    delegated_issuers = set(OAUTH_ISSUERS) - workload_issuers
     public_origin = environment.get("OPERATOR_PUBLIC_URL", "").strip().rstrip("/")
-    if not _is_https_origin(public_origin):
+    if delegated_issuers and not _is_https_origin(public_origin):
         errors.append("OPERATOR_PUBLIC_URL must be an HTTPS operator origin for provider callbacks")
-    elif metadata is not None:
+    elif public_origin and metadata is not None:
         expected_callback = public_origin + "/api/connectors/callback"
         if metadata.get("publicOrigin") != public_origin:
             errors.append("deployed control plane publicOrigin does not match OPERATOR_PUBLIC_URL")
@@ -94,7 +136,7 @@ def readiness_errors(
             for item in clients if isinstance(clients, list) and isinstance(item, dict)
             and str(item.get("configured")).lower() == "true"
         }
-        missing = sorted(set(OAUTH_ISSUERS) - configured)
+        missing = sorted(delegated_issuers - configured)
         if missing:
             errors.append("platform OAuth applications are not registered: " + ", ".join(missing))
 

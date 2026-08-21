@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from .connector_gateway import ConnectorAdapter
+from .workload_provider_credentials import ProviderWorkloadCredential, ProviderWorkloadIdentity
 
 
 class ProviderAdapterError(RuntimeError):
@@ -42,6 +43,10 @@ class ProviderTransport(Protocol):
         body: bytes | None,
         timeout: float,
     ) -> tuple[int, Mapping[str, str], bytes]: ...
+
+
+class CredentialResolver(Protocol):
+    def token(self) -> str: ...
 
 
 ProviderResult = tuple[int, Mapping[str, str], dict[str, Any]]
@@ -83,6 +88,7 @@ class DirectProviderConfig:
     account_id: str | None = None
     api_base: str | None = None
     timeout_seconds: float = 20.0
+    workload_identity: ProviderWorkloadIdentity | None = None
 
     @classmethod
     def from_value(cls, value: Any) -> DirectProviderConfig:
@@ -105,6 +111,15 @@ class DirectProviderConfig:
         base = value.get("apiBase")
         if base is not None and (not isinstance(base, str) or not base.startswith("https://")):
             raise ValueError("direct provider apiBase must use HTTPS")
+        mode = value.get("credentialMode", "static")
+        if not isinstance(mode, str):
+            raise ValueError("credentialMode must be a string")
+        mode = mode.strip().lower()
+        workload_identity = None
+        if mode != "static":
+            workload_value = dict(value)
+            workload_value["provider"] = provider
+            workload_identity = ProviderWorkloadIdentity.from_value(workload_value)
         return cls(
             connector_id=str(value["connectorId"]),
             provider=provider,
@@ -112,6 +127,7 @@ class DirectProviderConfig:
             account_id=str(value["accountId"]) if value.get("accountId") else None,
             api_base=base,
             timeout_seconds=timeout,
+            workload_identity=workload_identity,
         )
 
 
@@ -124,13 +140,15 @@ class DirectProviderAdapter(ConnectorAdapter):
         *,
         transport: ProviderTransport | None = None,
         credential: str | None = None,
+        credential_resolver: CredentialResolver | None = None,
     ) -> None:
         self.config = config
         self._transport = transport or UrllibProviderTransport()
-        self._credential = (
-            credential if credential is not None else os.environ.get(config.credential_env, "")
-        )
-        if len(self._credential) < 16:
+        self._credential_resolver = credential_resolver
+        if self._credential_resolver is None and config.workload_identity is not None:
+            self._credential_resolver = ProviderWorkloadCredential(config.workload_identity)
+        self._credential = credential if credential is not None else os.environ.get(config.credential_env, "")
+        if self._credential_resolver is None and len(self._credential) < 16:
             raise ValueError(
                 f"provider credential env {config.credential_env} is missing or too short"
             )
@@ -398,7 +416,7 @@ class DirectProviderAdapter(ConnectorAdapter):
         elif self.config.provider == "twilio":
             pass
         else:
-            headers["Authorization"] = f"Bearer {self._credential}"
+            headers["Authorization"] = f"Bearer {self._access_token()}"
         status, response_headers, raw = self._transport.request(
             method, url, headers=headers, body=body, timeout=self.config.timeout_seconds
         )
@@ -417,6 +435,17 @@ class DirectProviderAdapter(ConnectorAdapter):
                 retryable=status == 429 or status >= 500,
             )
         return status, response_headers, decoded
+
+
+    def _access_token(self) -> str:
+        if self._credential_resolver is None:
+            return self._credential
+        token = self._credential_resolver.token()
+        if len(token) < 16:
+            raise ProviderAdapterError(
+                "credential_invalid", "provider workload credential is invalid", retryable=False
+            )
+        return token
 
 
 def _safe_provider_response(value: dict[str, Any]) -> dict[str, Any]:
