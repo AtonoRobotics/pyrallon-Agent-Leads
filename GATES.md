@@ -30,7 +30,7 @@ Scope: Complete and release the whole repository in production, including every 
 - [x] G6: The production dependency graph is deployed with PostgreSQL and the existing Temporal service, migrations applied, workers running, and health/readiness checks green.
   CHECK: uv run python scripts/verify_production_deployment.py
   EXPECT: production deployment verification passed
-  EVIDENCE: production deployment verification passed
+  EVIDENCE: 2026-08-21 canonical `buyer-ops-production-local` deployment: PostgreSQL healthy, 28 migrations applied, Temporal connectivity passed, control plane and worker running, and `/health` passed on port 18091.
 
 - [ ] G7: Calendar and e-signature providers execute authorized availability, booking, replay/idempotency, reconciliation, signature presentation, completion, failure, and recovery end to end against configured production providers.
   EVIDENCE: pending — requires explicitly authorized provider accounts, payloads, recipients, and external-effect execution
@@ -47,17 +47,17 @@ Scope: Complete and release the whole repository in production, including every 
   EVIDENCE: pending
 
 - [ ] G11: PostgreSQL backup, restore, artifact durability, and post-restore application verification pass against the deployed production database.
-  EVIDENCE: pending — backup/restore requires a named artifact and explicitly authorized destructive restore target
+  EVIDENCE: 2026-08-21 checksum-verified custom-format backup restored to isolated `buyer_ops_restore_e2e`; source and target both contained 28 migrations and 236 canonical current records. Durable artifact-store/retention evidence remains pending.
 
-- [x] G12: Temporal workflows pass replay, restart, timeout, delayed webhook, compensation, and recovery verification against the deployed Temporal service.
-  CHECK: TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default uv run python scripts/check_temporal.py
-  EXPECT: Temporal connectivity verification passed
-  EVIDENCE: Temporal connectivity verification passed
+- [ ] G12: Temporal workflows pass replay, restart, timeout, delayed webhook, compensation, and recovery verification against the deployed Temporal service.
+  CHECK: uv run pytest -q tests/test_temporal_workflow.py && uv run python scripts/run_live_production_e2e.py
+  EXPECT: all workflow recovery scenarios and deployed Temporal evidence pass
+  EVIDENCE: pending deployed replay, restart, timeout, delayed-webhook, compensation, and recovery evidence
 
-- [x] G13: The complete production candidate/evaluation suite passes with recorded results, thresholds, provenance, and no disabled capability silently omitted.
+- [ ] G13: The complete production candidate/evaluation suite passes with recorded results, thresholds, provenance, and no disabled capability silently omitted.
   CHECK: uv run python scripts/run_evaluations.py --candidates evaluations/production-candidates.json
   EXPECT: passed": true
-  EVIDENCE: "suiteVersion": "production-safety/1.0.0" | }
+  EVIDENCE: pending configured-provider evaluation evidence and complete recorded suite results
 
 - [ ] G14: Every governing production gate has independently reconstructable evidence and all release predicates are satisfied.
   CHECK: uv run python scripts/verify_gate_registry.py
