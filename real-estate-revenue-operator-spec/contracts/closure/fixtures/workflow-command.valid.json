@@ -1,0 +1,2 @@
+{"command_id":"c1","command_type":"pause_workflow","tenant_id":"t1","journey_id":"j1","actor_id":"a1","expected_version":3,"idempotency_key":"0123456789abcdef","status":"accepted"}
+
