@@ -1,0 +1,2 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://pyrallon.local/contracts/approval-transition/v2","type":"object","required":["approval_id","from","to","actor_id","policy_version","decision_evidence_id"],"properties":{"approval_id":{"type":"string"},"from":{"const":"pending"},"to":{"enum":["approved","denied","expired","revoked"]},"actor_id":{"type":"string"},"policy_version":{"type":"string"},"decision_evidence_id":{"type":"string"}},"additionalProperties":false}
+
