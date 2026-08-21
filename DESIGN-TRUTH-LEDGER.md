@@ -63,7 +63,8 @@ An implementation convenience cannot override a higher-ranked source. A new conf
 |---|---|---|
 | Canonical business state and typed relationships | PostgreSQL | Transactional domain repositories |
 | Source artifacts | Encrypted object storage | Digest-addressed artifact API and retention policy |
-| Durable workflow signals, wakes, timers, leases, retries, compensation, recovery, workflow concurrency, worker lifecycle | Temporal | Versioned workflow/activity contracts |
+| Autonomous buyer-operations loop: observation, work selection, context, proposal evaluation, semantic progression, replanning, run lifecycle | Habitat | Habitat runtime contract |
+| Durable timers, signals, leases, retries, compensation, recovery, replay, workflow concurrency, worker lifecycle | Temporal as Habitat substrate | Versioned Temporal adapter/workflow contracts |
 | Event-schema and tenant admission | Habitat | `AdmitEvent` API |
 | Current policy and authority evaluation | Habitat | `EvaluateAuthority` API |
 | Effect admission, permit issuance/redemption, idempotency registration | Habitat + PostgreSQL | DW2-C1 |
@@ -77,7 +78,8 @@ An implementation convenience cannot override a higher-ranked source. A new conf
 ### Ownership prohibitions
 
 - Temporal does not own business truth, policy authority, or provider-changing permission.
-- Habitat does not own workflow clocks, wakes, leases, retries, compensation, worker lifecycle, or business truth.
+- Habitat owns the autonomous-loop semantics and run lifecycle; it does not own canonical business truth or provider truth.
+- Temporal is a replaceable substrate used by Habitat for durable clocks, execution, retries, replay, and recovery; it does not independently own buyer semantics, policy authority, or external-effect permission.
 - The cognitive gateway does not own workflows, context truth, memory, connectors, or policy.
 - Connectors do not infer authority from possession of credentials.
 - Neo4j, pgvector, summaries, runtime threads, and provider memory do not own canonical facts.
@@ -157,7 +159,7 @@ Every setting has schema, owner, version, effective time, validation, audit hist
 | `alphavector-core` | Small contract-compatible modules/concepts only | Typed intent, fail-closed parsing, model/credential separation | Filesystem truth, free-form routing, API-key-only credential shape, hard-coded providers, habitat lifecycle |
 | LangChain/LangGraph | Bounded cognitive harness candidate | Tool loops, structured output, specialist delegation | Durable orchestration, canonical memory, authority, connector writes |
 | Deep Agents | Optional bounded specialist after evaluation | Planning/research/document analysis where measured | Product kernel, workflow engine, policy judge, system of record |
-| Temporal | Adopt for durable workflow ownership | Signals, timers, leases, retries, compensation, recovery | Canonical business truth or external authority |
+| Temporal | Use as Habitat's replaceable durability substrate | Durable signals, timers, leases, retries, compensation, recovery, replay, workflow concurrency | Autonomous-loop semantics, canonical business truth, policy authority, or external authority |
 
 ## 13. Open deployment decisions
 

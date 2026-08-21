@@ -56,7 +56,8 @@ Without live cognition, the thread may activate only deterministic capture, iden
 | Concern | Owner |
 |---|---|
 | Canonical person/journey/conversation/consent/qualification/appointment state | PostgreSQL services |
-| Provider events and durable workflow | Temporal |
+| Autonomous buyer-journey loop and semantic progression | Habitat |
+| Durable execution substrate for the Habitat loop | Temporal |
 | Event schema/tenant admission and every external effect permit | Habitat |
 | Deterministic acknowledgment selection | Communications policy service |
 | Context assembly | Context compiler |
@@ -82,7 +83,8 @@ flowchart TD
 
 - One long-lived `BuyerJourneyWorkflow` exists per BuyerJourney.
 - Provider events signal the workflow after durable event admission.
-- Temporal owns signals, timers, activity leases, retries, compensation, recovery, and child lifecycle.
+- Habitat owns the autonomous loop, work selection, semantic progression, replanning, and run lifecycle.
+- Temporal supplies durable signals, timers, activity leases, retries, compensation, recovery, replay, and child execution for Habitat; it does not independently own buyer-journey semantics.
 - Temporal search attributes are execution indexes, not business truth.
 - Workflow code reads/writes canonical state through versioned activities and never stores the only copy of a fact or commitment.
 

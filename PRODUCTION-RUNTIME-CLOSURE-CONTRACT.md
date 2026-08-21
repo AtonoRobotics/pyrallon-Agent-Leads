@@ -115,9 +115,23 @@ An activation may use accessibility evidence only when an AccessibilityBinding r
 
 A missing or expired binding blocks that surface. Waivers require explicit scope, compensating control, approver authority, and expiry.
 
-## 7. Temporal production worker
+## 7. Habitat autonomous runtime and Temporal substrate
 
-Worker behavior is fully configuration-driven but structurally fixed.
+Habitat is the autonomous runtime. It owns the semantic buyer-operations loop:
+observation, work selection, context compilation, cognitive invocation, proposal
+evaluation, policy/authority admission, effect dispatch, receipt interpretation,
+state progression, replanning, and continuation or sleep. The loop is one visible
+Buyer Operations Agent even when multiple journeys execute concurrently.
+
+Temporal is an internal durability substrate selected by Habitat. It supplies
+durable timers, signals, retries, replay, cancellation, crash recovery, activity
+execution, and worker replacement for Habitat runs. Temporal does not independently
+select work, interpret buyer state, make policy decisions, grant authority, or own
+business truth. Its workflow history is execution evidence, not canonical state.
+
+Worker behavior is fully configuration-driven but structurally fixed. Habitat owns
+the runtime contract; the Temporal adapter implements the durable execution parts
+of that contract.
 
 A WorkerConfiguration must declare task queue, workflow types, activity types, concurrency limits, cache size, graceful shutdown, deployment digest, and effective interval. The worker rejects an incomplete configuration.
 
@@ -129,7 +143,11 @@ The production worker inventory is:
 - ConsultationChildWorkflow;
 - ConnectorReconciliationWorkflow.
 
-Temporal owns timers, signals, retries, leases, recovery, compensation, and lifecycle. PostgreSQL owns business truth. Habitat is re-entered before every external effect.
+Habitat owns autonomous-loop semantics, run lifecycle, work selection, and
+replanning. Temporal provides the durable implementation of timers, signals,
+retries, leases, recovery, compensation, and worker lifecycle. PostgreSQL owns
+business truth. Habitat is re-entered before every external effect, including
+effects initiated by a Temporal activity.
 
 ## 8. Qualification and booking
 
