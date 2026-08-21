@@ -1,0 +1,2 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://pyrallon.local/contracts/representation-concurrency/v2","type":"object","required":["tenant_id","subject_key","record_version","status"],"properties":{"tenant_id":{"type":"string"},"subject_key":{"type":"string"},"record_version":{"type":"integer","minimum":0},"status":{"enum":["active","representation_conflict","resolved","superseded"]}},"additionalProperties":false}
+
