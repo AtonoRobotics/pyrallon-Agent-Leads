@@ -3,7 +3,7 @@
 **Status:** Governing architecture contract, Revision 1.1  
 **Applies to:** Autonomous Buyer Agent Operations System PRD Revision 7.1  
 **Contract owner:** Product architecture  
-**Authority boundary:** Cognitive runtimes propose; Habitat admits effects; Temporal executes durable workflows; PostgreSQL owns business truth
+**Authority boundary:** Habitat runs the autonomous loop; cognitive runtimes propose; Habitat admits effects; Temporal durably executes Habitat runs; PostgreSQL owns business truth
 
 ## 1. Purpose
 
@@ -21,7 +21,7 @@ The gateway is not an orchestrator, memory system, context compiler, connector g
 6. No route transition occurs unless the tenant/action-class route policy explicitly authorizes it.
 7. A model response becomes a `CognitiveProposal` only after schema, provenance, grounding, context-sufficiency, recipient, policy, and output-safety validation.
 8. A valid proposal is still not executable authority or canonical fact.
-9. Temporal owns durable retries, deadlines, and recovery. Provider retry libraries may perform only bounded transport retries inside one recorded attempt.
+9. Habitat owns autonomous-loop progression, run lifecycle, work selection, replanning, and continuation. Temporal is Habitat's replaceable durability substrate for timers, deadlines, retries, cancellation, replay, and recovery. Provider retry libraries may perform only bounded transport retries inside one recorded attempt.
 10. PostgreSQL owns work state, routing configuration, credential references, evaluation qualification, and evidence correlation. Provider threads and local files do not.
 11. Authentication failure, capacity exhaustion, unavailable providers, and schema failure are durable typed states; none permits false completion.
 12. Raw Codex App Server is not a product dependency.

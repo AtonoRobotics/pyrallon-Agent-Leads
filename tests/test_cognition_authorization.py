@@ -28,10 +28,10 @@ class _Cursor:
         if "INSERT INTO cognitive_oauth_sessions" in statement:
             self.store["sessions"][str(parameters[1])] = {
                 "actor_id": parameters[2],
-                "device_code": parameters[4],
-                "code_verifier": parameters[5],
-                "user_code": parameters[6],
-                "expires_at": parameters[9],
+                "device_code": parameters[3],
+                "code_verifier": parameters[4],
+                "user_code": parameters[5],
+                "expires_at": parameters[8],
                 "consumed_at": None,
             }
         elif "FROM cognitive_oauth_sessions" in statement:
@@ -121,9 +121,9 @@ class _Http:
         return 500, {"error": "unexpected"}
 
 
-def _auth(http: _Http) -> CognitionAuthorization:
+def _auth(http: _Http, connection: _Connection | None = None) -> CognitionAuthorization:
     return CognitionAuthorization(
-        _Connection(),
+        connection or _Connection(),
         tenant_id="1",
         permit_secret=SECRET,
         actor_id="actor-1",
@@ -139,7 +139,7 @@ def test_chatgpt_device_start_fails_before_provider_call_without_identity_admiss
         _auth(http).start_chatgpt_device()
 
     assert raised.value.code == "configuration_incomplete"
-    assert raised.value.detail == "credential_identity_admission_unavailable"
+    assert raised.value.detail == "OPENAI_CHATGPT_DEVICE_CODE_URL is required"
     assert http.calls == []
 
 
@@ -149,25 +149,94 @@ def test_claude_subscription_oauth_is_refused() -> None:
         auth.refuse_unsupported("claude.subscription")
 
 
-def test_metered_binding_fails_before_provider_call_without_identity_admission() -> None:
+def test_metered_binding_rejects_a_provider_without_models() -> None:
     http = _Http({"api.openai.com/v1/models": (200, {"data": []})})
     auth = _auth(http)
 
     with pytest.raises(SetupRejected) as raised:
         auth.bind_metered(connector_id="openai.api", api_key="sk-test-metered-key")
 
-    assert raised.value.code == "configuration_incomplete"
-    assert raised.value.detail == "credential_identity_admission_unavailable"
-    assert http.calls == []
+    assert raised.value.code == "provider_rejected"
+    assert http.calls == [("GET", "https://api.openai.com/v1/models")]
 
 
-def test_local_binding_fails_before_provider_call_without_identity_admission() -> None:
+def test_local_binding_rejects_a_model_not_advertised_by_endpoint() -> None:
     http = _Http({"/models": (200, {"data": []})})
     auth = _auth(http)
 
     with pytest.raises(SetupRejected) as raised:
         auth.bind_local(base_url="http://model-runtime", model_id="owner-model")
 
-    assert raised.value.code == "configuration_incomplete"
-    assert raised.value.detail == "credential_identity_admission_unavailable"
-    assert http.calls == []
+    assert raised.value.code == "provider_rejected"
+    assert http.calls == [("GET", "http://model-runtime/models")]
+
+
+def test_metered_binding_health_checks_and_encrypts_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_ACTION_CLASSES", "qualification,acknowledgment")
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_CONCURRENCY", "2")
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_DATA_POLICY_VERSION", "data-policy-1")
+    http = _Http({"api.openai.com/v1/models": (200, {"data": [{"id": "gpt-4o-mini"}]})})
+    connection = _Connection()
+    result = _auth(http, connection).bind_metered(
+        connector_id="openai.api", api_key="sk-test-metered-key"
+    )
+    assert result["providerId"] == "openai"
+    assert result["state"] == "active"
+    assert connection.store["credentials"]
+    stored = next(iter(connection.store["credentials"].values()))
+    assert stored["identity"]["allowedActionClasses"] == ["qualification", "acknowledgment"]
+    assert stored["identity"]["allowedModelFamilies"] == ["gpt-4o-mini"]
+
+
+def test_local_binding_health_checks_selected_model_and_encrypts_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_ACTION_CLASSES", "qualification")
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_CONCURRENCY", "1")
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_DATA_POLICY_VERSION", "data-policy-1")
+    http = _Http({"/models": (200, {"data": [{"id": "local-model"}]})})
+    connection = _Connection()
+    result = _auth(http, connection).bind_local(
+        base_url="http://model-runtime", model_id="local-model", token="local-secret"
+    )
+    assert result["authClass"] == "local_endpoint"
+    assert result["providerAccountRef"] == "http://model-runtime"
+    assert connection.store["credentials"]
+
+
+def test_chatgpt_device_flow_persists_session_then_binds_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_CHATGPT_DEVICE_CODE_URL", "https://auth.example/device")
+    monkeypatch.setenv("OPENAI_CHATGPT_DEVICE_TOKEN_URL", "https://auth.example/token")
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_ACTION_CLASSES", "qualification")
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_CONCURRENCY", "1")
+    monkeypatch.setenv("BUYER_OPS_COGNITIVE_DATA_POLICY_VERSION", "data-policy-1")
+    http = _Http(
+        {
+            "auth.example/device": (
+                200,
+                {
+                    "device_auth_id": "device-1",
+                    "user_code": "ABCD-EFGH",
+                    "verification_url": "https://auth.example/verify",
+                    "expires_in": 600,
+                    "interval": 5,
+                },
+            ),
+            "auth.example/token": (
+                200,
+                {"access_token": "subscription-secret", "account_id": "acct-1"},
+            ),
+        }
+    )
+    connection = _Connection()
+    auth = _auth(http, connection)
+    started = auth.start_chatgpt_device()
+    assert started["userCode"] == "ABCD-EFGH"
+    bound = auth.poll_chatgpt_device(str(started["sessionId"]))
+    assert bound["state"] == "bound"
+    assert bound["providerId"] == "openai"
+    assert connection.store["credentials"]

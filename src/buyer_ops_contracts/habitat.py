@@ -3,8 +3,9 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
+from .digest import sha256_digest
 from .errors import ContractViolation, Violation
 from .structural import validate_record
 
@@ -22,6 +23,13 @@ class HabitatState:
     agreement_qualification: dict[str, Any] | None = None
     agreement: dict[str, Any] | None = None
     iabs_delivery: dict[str, Any] | None = None
+    release_activation: dict[str, Any] | None = None
+    release_activation_verified: bool = False
+    capability_inventory: dict[str, Any] | None = None
+    capability_inventory_verified: bool = False
+    effect_draft_preview: dict[str, Any] | None = None
+    effect_policy: dict[str, Any] | None = None
+    effect_context_loaded: bool = False
 
 
 class HabitatStateReader(Protocol):
@@ -183,13 +191,35 @@ class HabitatKernel:
                 return HabitatDecision(
                     False, "payload_changed", versions, policy.policy_id, policy.policy_version
                 )
+        if state.effect_context_loaded and not _effect_context_matches(intent, state, evaluated_at):
+            return HabitatDecision(
+                False, "effect_context_mismatch", versions, policy.policy_id, policy.policy_version
+            )
         connector = state.connector_grant
+        connector_id = (
+            None
+            if connector is None
+            else connector.get("connectorBindingId", connector.get("connectorId"))
+        )
+        connector_principal = (
+            None
+            if connector is None
+            else connector.get("principalId", connector.get("delegatedPrincipalId"))
+        )
+        connector_state = (
+            None if connector is None else connector.get("state", connector.get("grantState"))
+        )
+        connector_classes = (
+            []
+            if connector is None
+            else connector.get("actionClasses", connector.get("capabilities", []))
+        )
         if (
             connector is None
-            or connector.get("state") != "active"
-            or connector.get("connectorBindingId") != intent["connector_binding_id"]
-            or connector.get("principalId") != intent["principal_id"]
-            or intent["action_class"] not in connector.get("actionClasses", [])
+            or connector_state != "active"
+            or connector_id != intent["connector_binding_id"]
+            or connector_principal != intent["principal_id"]
+            or intent["action_class"] not in connector_classes
         ):
             return HabitatDecision(
                 False, "connector_unavailable", versions, policy.policy_id, policy.policy_version
@@ -285,6 +315,133 @@ class HabitatKernel:
 
 def _timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+
+
+def _effect_context_matches(
+    intent: dict[str, Any], state: HabitatState, evaluated_at: datetime
+) -> bool:
+    """Check the exact closure authorities bound by an EffectIntent.
+
+    This is deliberately a narrow binding check. It does not derive a capability,
+    connector, channel, or action class from another field.
+    """
+    context = intent.get("effect_context")
+    activation = state.release_activation
+    inventory = state.capability_inventory
+    preview = state.effect_draft_preview
+    grant = state.connector_grant
+    if not all((isinstance(context, dict), activation, inventory, preview, grant)):
+        return False
+    if not state.capability_inventory_verified or not state.release_activation_verified:
+        return False
+    assert isinstance(context, dict)
+    assert isinstance(activation, dict)
+    assert isinstance(inventory, dict)
+    assert isinstance(preview, dict)
+    assert isinstance(grant, dict)
+
+    activation_id = context["activation_id"]
+    if activation.get("messageType") == "activation_decision":
+        activation_ok = (
+            activation.get("decisionId") == activation_id
+            and activation.get("decision") == "activate"
+            and activation.get("tenantId") == intent["tenant_id"]
+            and activation.get("capabilityId") == context["capability_id"]
+        )
+    else:
+        activation_ok = (
+            activation.get("recordId") == activation_id
+            and activation.get("recordType") == "ReleaseActivation"
+            and activation.get("status") == "active"
+            and activation.get("tenantId") == intent["tenant_id"]
+            and context["capability_id"] in activation.get("enabledCapabilities", [])
+        )
+    if not activation_ok or sha256_digest(activation) != context["activation_digest"]:
+        return False
+
+    if (
+        inventory.get("recordType") != "CapabilityInventory"
+        or inventory.get("tenantId") != intent["tenant_id"]
+        or inventory.get("connectorId") != intent["connector_binding_id"]
+        or inventory.get("recordId") != context["inventory_record_id"]
+        or int(inventory.get("recordVersion", 0)) != context["inventory_record_version"]
+        or inventory.get("inventoryDigest") != context["inventory_digest"]
+        or inventory.get("status") != "current"
+        or context["capability_id"] not in inventory.get("capabilities", [])
+        or _timestamp(inventory.get("effectiveFrom", "9999-01-01T00:00:00Z"))
+        > evaluated_at.astimezone(UTC)
+        or _timestamp(inventory.get("expiresAt", "1970-01-01T00:00:00Z"))
+        <= evaluated_at.astimezone(UTC)
+    ):
+        return False
+    mappings = [
+        mapping
+        for mapping in inventory.get("capabilityEffects", [])
+        if mapping.get("capability") == context["capability_id"]
+    ]
+    if (
+        len(mappings) != 1
+        or intent["action_class"] not in mappings[0].get("actionClasses", [])
+        or mappings[0].get("constraintDigest") != context["constraint_digest"]
+    ):
+        return False
+
+    if (
+        preview.get("recordType") != "EffectDraftPreview"
+        or preview.get("tenantId") != intent["tenant_id"]
+        or preview.get("recordId") != context["draft_preview_record_id"]
+        or int(preview.get("recordVersion", 0)) != context["draft_preview_record_version"]
+        or preview.get("status") != "current"
+        or sha256_digest(preview) != context["draft_preview_digest"]
+        or preview.get("connectorId") != intent["connector_binding_id"]
+        or preview.get("inventoryRecordId") != context["inventory_record_id"]
+        or preview.get("inventoryRecordVersion") != context["inventory_record_version"]
+        or preview.get("inventoryDigest") != context["inventory_digest"]
+        or preview.get("grantId") != context["grant_id"]
+        or preview.get("grantVersion") != context["grant_version"]
+        or preview.get("delegatedPrincipalId") != context["delegated_principal_id"]
+        or preview.get("capability") != context["capability_id"]
+        or preview.get("actionClass") != intent["action_class"]
+        or preview.get("payloadDigest") != intent["payload_digest"]
+        or preview.get("idempotencyKey") != intent["idempotency_key"]
+        or intent["target_resource"]["resource_id"] not in preview.get("targetRefs", [])
+        or intent["recipient"]["recipient_id"] not in preview.get("recipientRefs", [])
+    ):
+        return False
+    window = preview.get("requestedExecutionWindow", {})
+    if _timestamp(window.get("notBefore", "9999-01-01T00:00:00Z")) > evaluated_at.astimezone(
+        UTC
+    ) or _timestamp(window.get("expiresAt", "1970-01-01T00:00:00Z")) <= evaluated_at.astimezone(
+        UTC
+    ):
+        return False
+    connector_classes = cast(
+        list[str], grant.get("actionClasses", grant.get("capabilities", [])) or []
+    )
+    grant_version = grant.get("version", grant.get("grantVersion", 0)) or 0
+    granted_at = grant.get("grantedAt")
+    expires_at = grant.get("expiresAt")
+    return (
+        grant.get("id", grant.get("grantId")) == context["grant_id"]
+        and int(grant_version) == context["grant_version"]
+        and grant.get("tenantId") == intent["tenant_id"]
+        and grant.get("connectorBindingId", grant.get("connectorId"))
+        == intent["connector_binding_id"]
+        and grant.get("principalId", grant.get("delegatedPrincipalId"))
+        == context["delegated_principal_id"]
+        and grant.get("state", grant.get("grantState")) == "active"
+        and (
+            context["capability_id"] in connector_classes
+            or intent["action_class"] in connector_classes
+        )
+        and (
+            not isinstance(granted_at, str)
+            or _timestamp(granted_at) <= evaluated_at.astimezone(UTC)
+        )
+        and (
+            not isinstance(expires_at, str) or _timestamp(expires_at) > evaluated_at.astimezone(UTC)
+        )
+    )
 
 
 def validate_effect_intent(

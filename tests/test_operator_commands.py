@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -8,6 +9,7 @@ import pytest
 from buyer_ops_contracts.operator_commands import (
     OperatorCommandError,
     OperatorCommandService,
+    TemporalWorkflowSignalDispatcher,
     command_payload_digest,
 )
 
@@ -145,6 +147,12 @@ def _command(command_type: str, target: dict[str, Any]) -> dict[str, Any]:
             "prior_approval_update": {"recordType": "Approval"},
             "revoked_approval_record": {"recordType": "Approval"},
         }
+    elif command_type in {"approve", "deny"}:
+        command["mutation"] = {
+            "kind": "approval_decision",
+            "prior_approval_update": {"recordType": "Approval"},
+            "decided_approval_record": {"recordType": "Approval"},
+        }
     command["payload_digest"] = command_payload_digest(command)
     return command
 
@@ -171,13 +179,74 @@ def test_incomplete_canonical_mutation_fails_before_repository_write(
 
     with pytest.raises(OperatorCommandError) as raised:
         service.dispatch(_command(command_type, target), actor_id="agent-1")
-
     assert raised.value.code == "validation_failed"
     assert repository.save_called is False
 
 
+class _SignalHandle:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+    async def signal(self, name: str, *args: object) -> None:
+        self.calls.append((name, args))
+
+
+class _TemporalClient:
+    def __init__(self, handle: _SignalHandle) -> None:
+        self.handle = handle
+        self.request: tuple[str, str] | None = None
+
+    def get_workflow_handle(self, workflow_id: str, *, run_id: str) -> _SignalHandle:
+        self.request = (workflow_id, run_id)
+        return self.handle
+
+
+def test_temporal_dispatcher_delivers_signal_with_exact_workflow_run_binding() -> None:
+    handle = _SignalHandle()
+    client = _TemporalClient(handle)
+    dispatcher = TemporalWorkflowSignalDispatcher(client)  # type: ignore[arg-type]
+
+    receipt = asyncio.run(
+        dispatcher.dispatch(
+            workflow_id="workflow-1",
+            run_id="run-1",
+            signal_name="canonical_changed",
+            signal_id="event-1",
+            payload={"event_id": "event-1"},
+        )
+    )
+
+    assert client.request == ("workflow-1", "run-1")
+    assert handle.calls == [("canonical_changed", ({"event_id": "event-1"},))]
+    assert receipt == "temporal:workflow-1:run-1:event-1"
+
+
+def test_temporal_dispatcher_rejects_untyped_or_malformed_signal() -> None:
+    dispatcher = TemporalWorkflowSignalDispatcher(_TemporalClient(_SignalHandle()))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="unsupported"):
+        asyncio.run(
+            dispatcher.dispatch(
+                workflow_id="workflow-1",
+                run_id="run-1",
+                signal_name="stop",
+                signal_id="event-1",
+                payload={},
+            )
+        )
+    with pytest.raises(ValueError, match="does not accept"):
+        asyncio.run(
+            dispatcher.dispatch(
+                workflow_id="workflow-1",
+                run_id="run-1",
+                signal_name="pause",
+                signal_id="event-1",
+                payload={"unexpected": True},
+            )
+        )
+
+
 @pytest.mark.parametrize("command_type", ["approve", "deny"])
-def test_unpublished_approval_transition_fails_before_policy_or_canonical_write(
+def test_incomplete_approval_transition_fails_before_policy_or_canonical_write(
     command_type: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     target = {"id": "target-1", "recordType": "Approval", "version": 1}
@@ -210,7 +279,6 @@ def test_unpublished_approval_transition_fails_before_policy_or_canonical_write(
         service.dispatch(command, actor_id="agent-1")
 
     assert raised.value.code == "validation_failed"
-    assert raised.value.detail == "operator command semantics are unavailable"
     assert repository.save_called is False
 
 

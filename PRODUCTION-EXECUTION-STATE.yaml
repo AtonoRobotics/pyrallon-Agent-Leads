@@ -1,0 +1,41 @@
+version: 1
+objective: complete_and_release_the_entire_repository_in_production
+scope_mode: whole_repository_production
+
+# This is the only permitted execution cursor. Workstreams may not be skipped,
+# removed, renamed, or marked complete without their ledger evidence becoming
+# complete first.
+canonical_sequence:
+  - calendar_and_esignature
+  - cognitive_production_routing
+  - connectors_and_webhooks
+  - deployment_and_release_operations
+  - domain_and_workflows
+  - ios_client_and_offline_contract
+  - nurture_and_transaction_operations
+  - operator_api_and_web_ui
+  - postgres_backup_and_restore
+  - provider_ingress_and_senders
+  - security_observability_and_evaluations
+  - temporal_replay_and_recovery
+
+completed_workstreams: []
+current_workstream: calendar_and_esignature
+remaining_workstreams:
+  - calendar_and_esignature
+  - cognitive_production_routing
+  - connectors_and_webhooks
+  - deployment_and_release_operations
+  - domain_and_workflows
+  - ios_client_and_offline_contract
+  - nurture_and_transaction_operations
+  - operator_api_and_web_ui
+  - postgres_backup_and_restore
+  - provider_ingress_and_senders
+  - security_observability_and_evaluations
+  - temporal_replay_and_recovery
+
+# Every cursor update must leave a concrete next action and a production proof
+# requirement. Empty placeholders are rejected by the execution gate.
+next_action: calendar_and_esignature — complete Google/Microsoft calendar and DocuSign authorization, publish signer-bound calendar/e-signature records, redeem one Habitat permit per effect, execute availability snapshot booking reconciliation and e-signature lifecycle through the deployed control plane with scripts/run_live_calendar_esignature_e2e.py
+required_proof: real provider-backed deployed end-to-end evidence from scripts/run_live_calendar_esignature_e2e.py, automated verification, OAuth callback evidence, signer-resolution evidence, and durable replay/idempotency evidence for calendar_and_esignature

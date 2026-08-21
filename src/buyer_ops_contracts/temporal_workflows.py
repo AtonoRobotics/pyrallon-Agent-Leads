@@ -19,11 +19,36 @@ from temporalio.exceptions import ApplicationError
 from temporalio.worker import Worker
 from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner, SandboxRestrictions
 
+from .errors import ContractViolation
 from .structural import validate_record
 
 
 class JourneyStateRepository(Protocol):
     async def load_current(self, tenant_id: str, journey_id: str) -> dict[str, Any]: ...
+
+
+class EffectReconciliationRepository(Protocol):
+    async def reconcile_unknown_effect(self, request: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class QualificationEvaluationRepository(Protocol):
+    async def evaluate_qualification(self, request: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class NurtureEvaluationRepository(Protocol):
+    async def evaluate_nurture(self, request: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class TransactionEvaluationRepository(Protocol):
+    async def evaluate_transaction(self, request: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class ConsultationEvaluationRepository(Protocol):
+    async def evaluate_consultation(self, request: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class RepresentationEvaluationRepository(Protocol):
+    async def evaluate_representation(self, request: dict[str, Any]) -> dict[str, Any]: ...
 
 
 class CompensationExecutor(Protocol):
@@ -63,8 +88,13 @@ class CompensationActivities:
 class ReconciliationActivities:
     """Activity boundary that reads canonical PostgreSQL state without owning it."""
 
-    def __init__(self, repository: JourneyStateRepository) -> None:
+    def __init__(
+        self,
+        repository: JourneyStateRepository,
+        effect_repository: EffectReconciliationRepository | None = None,
+    ) -> None:
         self._repository = repository
+        self._effect_repository = effect_repository
 
     @activity.defn(name="reconcile_journey_state")
     async def reconcile_journey_state(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -92,6 +122,246 @@ class ReconciliationActivities:
                 non_retryable=True,
             )
         return state
+
+    @activity.defn(name="reconcile_unknown_effect")
+    async def reconcile_unknown_effect(self, request: dict[str, Any]) -> dict[str, Any]:
+        if set(request) != {"tenant_id", "journey_id", "effect_attempt_id"} or any(
+            not isinstance(request.get(field), str) or not request[field] for field in request
+        ):
+            raise ApplicationError(
+                "effect reconciliation request failed tenant scope admission",
+                type="reconciliation_request_invalid",
+                non_retryable=True,
+            )
+        if self._effect_repository is None:
+            raise ApplicationError(
+                "production effect reconciliation repository is not configured",
+                type="reconciliation_unavailable",
+                non_retryable=True,
+            )
+        result = await self._effect_repository.reconcile_unknown_effect(request)
+        if not isinstance(result, dict):
+            raise ApplicationError(
+                "effect reconciliation returned a non-object",
+                type="canonical_state_invalid",
+                non_retryable=True,
+            )
+        return result
+
+
+class QualificationActivities:
+    """Activity boundary for policy-owned progressive qualification evaluation."""
+
+    def __init__(self, repository: QualificationEvaluationRepository) -> None:
+        self._repository = repository
+
+    @activity.defn(name="evaluate_qualification")
+    async def evaluate_qualification(self, request: dict[str, Any]) -> dict[str, Any]:
+        if (
+            set(request) != {"tenant_id", "journey_id"}
+            or not isinstance(request.get("tenant_id"), str)
+            or not request["tenant_id"]
+            or not isinstance(request.get("journey_id"), str)
+            or not request["journey_id"]
+        ):
+            raise ApplicationError(
+                "qualification evaluation request failed scope admission",
+                type="qualification_request_invalid",
+                non_retryable=True,
+            )
+        result = await self._repository.evaluate_qualification(request)
+        if not isinstance(result, dict) or set(result) != {
+            "input_set",
+            "next_question",
+            "readiness",
+        }:
+            raise ApplicationError(
+                "qualification evaluation returned an invalid result",
+                type="qualification_result_invalid",
+                non_retryable=True,
+            )
+        try:
+            validate_record(result["input_set"], "qualification_readiness")
+            validate_record(result["next_question"], "qualification_readiness")
+            validate_record(result["readiness"], "qualification_readiness")
+        except (KeyError, TypeError, ContractViolation) as exc:
+            raise ApplicationError(
+                "qualification evaluation returned malformed contract records",
+                type="qualification_result_invalid",
+                non_retryable=True,
+            ) from exc
+        if (
+            any(
+                item.get("tenantId") != request["tenant_id"]
+                for item in result.values()
+                if isinstance(item, dict)
+            )
+            or result["readiness"].get("journeyRef", {}).get("recordId") != request["journey_id"]
+        ):
+            raise ApplicationError(
+                "qualification evaluation crossed its workflow scope",
+                type="qualification_result_conflict",
+                non_retryable=True,
+            )
+        return result
+
+
+class NurtureActivities:
+    """Activity boundary for policy-owned contextual nurture planning."""
+
+    def __init__(self, repository: NurtureEvaluationRepository) -> None:
+        self._repository = repository
+
+    @activity.defn(name="evaluate_nurture")
+    async def evaluate_nurture(self, request: dict[str, Any]) -> dict[str, Any]:
+        if (
+            set(request) != {"tenant_id", "journey_id"}
+            or not isinstance(request.get("tenant_id"), str)
+            or not request["tenant_id"]
+            or not isinstance(request.get("journey_id"), str)
+            or not request["journey_id"]
+        ):
+            raise ApplicationError(
+                "nurture evaluation request failed scope admission",
+                type="nurture_request_invalid",
+                non_retryable=True,
+            )
+        result = await self._repository.evaluate_nurture(request)
+        if not isinstance(result, dict):
+            raise ApplicationError(
+                "nurture evaluation returned a non-object",
+                type="nurture_result_invalid",
+                non_retryable=True,
+            )
+        try:
+            validate_record(result, "nurture_plan")
+        except ContractViolation as exc:
+            raise ApplicationError(
+                "nurture evaluation returned a malformed plan",
+                type="nurture_result_invalid",
+                non_retryable=True,
+            ) from exc
+        if (
+            result.get("tenantId") != request["tenant_id"]
+            or result.get("journeyId") != request["journey_id"]
+        ):
+            raise ApplicationError(
+                "nurture evaluation crossed its workflow scope",
+                type="nurture_result_conflict",
+                non_retryable=True,
+            )
+        return result
+
+
+class TransactionActivities:
+    """Activity boundary for confirmed-date transaction coordination."""
+
+    def __init__(self, repository: TransactionEvaluationRepository) -> None:
+        self._repository = repository
+
+    @activity.defn(name="evaluate_transaction")
+    async def evaluate_transaction(self, request: dict[str, Any]) -> dict[str, Any]:
+        if set(request) != {"tenant_id", "journey_id", "transaction_id"} or any(
+            not isinstance(request.get(field), str) or not request[field] for field in request
+        ):
+            raise ApplicationError(
+                "transaction evaluation request failed scope admission",
+                type="transaction_request_invalid",
+                non_retryable=True,
+            )
+        result = await self._repository.evaluate_transaction(request)
+        try:
+            validate_record(result, "transaction_coordination")
+        except ContractViolation as exc:
+            raise ApplicationError(
+                "transaction evaluation returned a malformed plan",
+                type="transaction_result_invalid",
+                non_retryable=True,
+            ) from exc
+        if (
+            result.get("journeyId") != request["journey_id"]
+            or result.get("transactionId") != request["transaction_id"]
+        ):
+            raise ApplicationError(
+                "transaction evaluation crossed its workflow scope",
+                type="transaction_result_conflict",
+                non_retryable=True,
+            )
+        return result
+
+
+class ConsultationActivities:
+    """Activity boundary for consultation criteria, pre-meeting, and briefing state."""
+
+    def __init__(self, repository: ConsultationEvaluationRepository) -> None:
+        self._repository = repository
+
+    @activity.defn(name="evaluate_consultation")
+    async def evaluate_consultation(self, request: dict[str, Any]) -> dict[str, Any]:
+        if set(request) != {"tenant_id", "journey_id"} or any(
+            not isinstance(request.get(field), str) or not request[field] for field in request
+        ):
+            raise ApplicationError(
+                "consultation evaluation request failed scope admission",
+                type="consultation_request_invalid",
+                non_retryable=True,
+            )
+        result = await self._repository.evaluate_consultation(request)
+        try:
+            validate_record(result, "consultation_operation")
+        except ContractViolation as exc:
+            raise ApplicationError(
+                "consultation evaluation returned a malformed decision",
+                type="consultation_result_invalid",
+                non_retryable=True,
+            ) from exc
+        if (
+            result.get("tenantId") != request["tenant_id"]
+            or result.get("journeyId") != request["journey_id"]
+        ):
+            raise ApplicationError(
+                "consultation evaluation crossed its workflow scope",
+                type="consultation_result_conflict",
+                non_retryable=True,
+            )
+        return result
+
+
+class RepresentationActivities:
+    """Activity boundary for agent-approved representation onboarding state."""
+
+    def __init__(self, repository: RepresentationEvaluationRepository) -> None:
+        self._repository = repository
+
+    @activity.defn(name="evaluate_representation")
+    async def evaluate_representation(self, request: dict[str, Any]) -> dict[str, Any]:
+        if set(request) != {"tenant_id", "journey_id"} or any(
+            not isinstance(request.get(field), str) or not request[field] for field in request
+        ):
+            raise ApplicationError(
+                "representation evaluation request failed scope admission",
+                type="representation_request_invalid",
+                non_retryable=True,
+            )
+        result = await self._repository.evaluate_representation(request)
+        try:
+            validate_record(result, "representation_operation")
+        except ContractViolation as exc:
+            raise ApplicationError(
+                "representation evaluation returned a malformed decision",
+                type="representation_result_invalid",
+                non_retryable=True,
+            ) from exc
+        if (
+            result.get("tenantId") != request["tenant_id"]
+            or result.get("journeyId") != request["journey_id"]
+        ):
+            raise ApplicationError(
+                "representation evaluation crossed its workflow scope",
+                type="representation_result_conflict",
+                non_retryable=True,
+            )
+        return result
 
 
 def buyer_journey_workflow_runner() -> SandboxedWorkflowRunner:
@@ -151,6 +421,8 @@ def create_temporal_worker(
             QualificationChildWorkflow,
             NurtureChildWorkflow,
             ConsultationChildWorkflow,
+            RepresentationOnboardingWorkflow,
+            TransactionCoordinationWorkflow,
             ConnectorReconciliationWorkflow,
         ],
         activities=activities,
@@ -473,10 +745,12 @@ class ConnectorReconciliationWorkflow:
 class _DomainChildCore:
     """Shared deterministic machinery; subclasses expose distinct Temporal workflow types."""
 
-    def __init__(self, child_type: str) -> None:
+    def __init__(self, child_type: str, decision_activity: str | None = None) -> None:
         self.child_type = child_type
+        self.decision_activity = decision_activity
         self.workflow_input: dict[str, Any] | None = None
         self.state: dict[str, Any] | None = None
+        self.decision: dict[str, Any] | None = None
         self.requested_epoch = 1
         self.reconciled_epoch = 0
         self.seen_event_ids: set[str] = set()
@@ -490,6 +764,30 @@ class _DomainChildCore:
                 requested_epoch = self.requested_epoch
                 state = await self._reconcile()
                 self._accept_state(state)
+                if self.decision_activity is not None:
+                    self.decision = await workflow.execute_activity(
+                        self.decision_activity,
+                        {
+                            "tenant_id": workflow_input["tenant_id"],
+                            "journey_id": workflow_input["journey_id"],
+                        },
+                        result_type=dict,
+                        start_to_close_timeout=timedelta(
+                            seconds=workflow_input["runtime_policy"]["start_to_close_seconds"]
+                        ),
+                        retry_policy=RetryPolicy(
+                            initial_interval=timedelta(
+                                seconds=workflow_input["runtime_policy"]["initial_retry_seconds"]
+                            ),
+                            backoff_coefficient=workflow_input["runtime_policy"][
+                                "backoff_coefficient"
+                            ],
+                            maximum_interval=timedelta(
+                                seconds=workflow_input["runtime_policy"]["maximum_retry_seconds"]
+                            ),
+                            maximum_attempts=workflow_input["runtime_policy"]["maximum_attempts"],
+                        ),
+                    )
                 self.reconciled_epoch = requested_epoch
                 continue
             await workflow.wait_condition(
@@ -626,7 +924,7 @@ class _DomainChildCore:
 @workflow.defn(name="QualificationChildWorkflow", versioning_behavior=VersioningBehavior.PINNED)
 class QualificationChildWorkflow:
     def __init__(self) -> None:
-        self._core = _DomainChildCore("qualification")
+        self._core = _DomainChildCore("qualification", "evaluate_qualification")
 
     @workflow.run
     async def run(self, workflow_input: dict[str, Any]) -> dict[str, Any]:
@@ -643,12 +941,16 @@ class QualificationChildWorkflow:
     @workflow.query
     def current_state(self) -> dict[str, Any] | None:
         return self._core.state
+
+    @workflow.query
+    def current_decision(self) -> dict[str, Any] | None:
+        return self._core.decision
 
 
 @workflow.defn(name="NurtureChildWorkflow", versioning_behavior=VersioningBehavior.PINNED)
 class NurtureChildWorkflow:
     def __init__(self) -> None:
-        self._core = _DomainChildCore("nurture")
+        self._core = _DomainChildCore("nurture", "evaluate_nurture")
 
     @workflow.run
     async def run(self, workflow_input: dict[str, Any]) -> dict[str, Any]:
@@ -665,12 +967,16 @@ class NurtureChildWorkflow:
     @workflow.query
     def current_state(self) -> dict[str, Any] | None:
         return self._core.state
+
+    @workflow.query
+    def current_decision(self) -> dict[str, Any] | None:
+        return self._core.decision
 
 
 @workflow.defn(name="ConsultationChildWorkflow", versioning_behavior=VersioningBehavior.PINNED)
 class ConsultationChildWorkflow:
     def __init__(self) -> None:
-        self._core = _DomainChildCore("consultation")
+        self._core = _DomainChildCore("consultation", "evaluate_consultation")
 
     @workflow.run
     async def run(self, workflow_input: dict[str, Any]) -> dict[str, Any]:
@@ -687,3 +993,133 @@ class ConsultationChildWorkflow:
     @workflow.query
     def current_state(self) -> dict[str, Any] | None:
         return self._core.state
+
+    @workflow.query
+    def current_decision(self) -> dict[str, Any] | None:
+        return self._core.decision
+
+
+@workflow.defn(
+    name="RepresentationOnboardingWorkflow", versioning_behavior=VersioningBehavior.PINNED
+)
+class RepresentationOnboardingWorkflow:
+    """Durable representation state; provider execution remains separately governed."""
+
+    def __init__(self) -> None:
+        self._decision: dict[str, Any] | None = None
+        self._stopping = False
+
+    @workflow.run
+    async def run(self, workflow_input: dict[str, Any]) -> dict[str, Any]:
+        if (
+            set(workflow_input)
+            != {"message_type", "schema_version", "tenant_id", "journey_id", "runtime_policy"}
+            or workflow_input.get("message_type") != "representation_workflow_input"
+            or workflow_input.get("schema_version") != "representation-operation/1.0.0"
+            or any(
+                not isinstance(workflow_input.get(field), str) or not workflow_input[field]
+                for field in ("tenant_id", "journey_id")
+            )
+            or not isinstance(workflow_input.get("runtime_policy"), dict)
+        ):
+            raise ApplicationError(
+                "representation workflow input failed schema admission",
+                type="workflow_input_invalid",
+                non_retryable=True,
+            )
+        policy = workflow_input["runtime_policy"]
+        self._decision = await workflow.execute_activity(
+            "evaluate_representation",
+            {"tenant_id": workflow_input["tenant_id"], "journey_id": workflow_input["journey_id"]},
+            result_type=dict,
+            start_to_close_timeout=timedelta(seconds=policy["start_to_close_seconds"]),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=policy["initial_retry_seconds"]),
+                backoff_coefficient=policy["backoff_coefficient"],
+                maximum_interval=timedelta(seconds=policy["maximum_retry_seconds"]),
+                maximum_attempts=policy["maximum_attempts"],
+            ),
+        )
+        await workflow.wait_condition(lambda: self._stopping)
+        return self._decision
+
+    @workflow.signal
+    def stop(self) -> None:
+        self._stopping = True
+
+    @workflow.query
+    def current_decision(self) -> dict[str, Any] | None:
+        return self._decision
+
+
+@workflow.defn(
+    name="TransactionCoordinationWorkflow", versioning_behavior=VersioningBehavior.PINNED
+)
+class TransactionCoordinationWorkflow:
+    """Long-lived transaction plan that never treats model output as contract truth."""
+
+    def __init__(self) -> None:
+        self._plan: dict[str, Any] | None = None
+        self._stopping = False
+
+    @workflow.run
+    async def run(self, workflow_input: dict[str, Any]) -> dict[str, Any]:
+        self._validate_input(workflow_input)
+        self._plan = await workflow.execute_activity(
+            "evaluate_transaction",
+            {
+                "tenant_id": workflow_input["tenant_id"],
+                "journey_id": workflow_input["journey_id"],
+                "transaction_id": workflow_input["transaction_id"],
+            },
+            result_type=dict,
+            start_to_close_timeout=timedelta(
+                seconds=workflow_input["runtime_policy"]["start_to_close_seconds"]
+            ),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(
+                    seconds=workflow_input["runtime_policy"]["initial_retry_seconds"]
+                ),
+                backoff_coefficient=workflow_input["runtime_policy"]["backoff_coefficient"],
+                maximum_interval=timedelta(
+                    seconds=workflow_input["runtime_policy"]["maximum_retry_seconds"]
+                ),
+                maximum_attempts=workflow_input["runtime_policy"]["maximum_attempts"],
+            ),
+        )
+        await workflow.wait_condition(lambda: self._stopping)
+        return self._plan
+
+    @workflow.signal
+    def stop(self) -> None:
+        self._stopping = True
+
+    @workflow.query
+    def current_plan(self) -> dict[str, Any] | None:
+        return self._plan
+
+    @staticmethod
+    def _validate_input(value: dict[str, Any]) -> None:
+        if (
+            set(value)
+            != {
+                "message_type",
+                "schema_version",
+                "tenant_id",
+                "journey_id",
+                "transaction_id",
+                "runtime_policy",
+            }
+            or value.get("message_type") != "transaction_workflow_input"
+            or value.get("schema_version") != "transaction-coordination/1.0.0"
+            or any(
+                not isinstance(value.get(field), str) or not value[field]
+                for field in ("tenant_id", "journey_id", "transaction_id")
+            )
+            or not isinstance(value.get("runtime_policy"), dict)
+        ):
+            raise ApplicationError(
+                "transaction workflow input failed schema admission",
+                type="workflow_input_invalid",
+                non_retryable=True,
+            )

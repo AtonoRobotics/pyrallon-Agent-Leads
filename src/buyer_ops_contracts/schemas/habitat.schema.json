@@ -7,6 +7,7 @@
   "required": [
     "schema_version", "intent_id", "tenant_id", "principal_id", "buyer_journey_id",
     "workflow_id", "activity_id", "action_class", "connector_binding_id",
+    "effect_context",
     "target_resource", "recipient", "payload_digest", "canonical_version_vector",
     "proposal_id", "proposal_expires_at", "idempotency_key", "purpose", "trace_id",
     "evidence_correlation_ids"
@@ -21,6 +22,7 @@
     "activity_id": { "$ref": "#/$defs/Id" },
     "action_class": { "$ref": "#/$defs/Id" },
     "connector_binding_id": { "$ref": "#/$defs/Id" },
+    "effect_context": { "$ref": "#/$defs/EffectContext" },
     "target_resource": { "$ref": "#/$defs/TargetResource" },
     "recipient": { "$ref": "#/$defs/Recipient" },
     "payload_digest": { "$ref": "#/$defs/Digest" },
@@ -64,6 +66,31 @@
       "properties": {
         "recipient_type": { "$ref": "#/$defs/Id" },
         "recipient_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "EffectContext": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "activation_id", "activation_digest", "capability_id",
+        "inventory_record_id", "inventory_record_version", "inventory_digest",
+        "constraint_digest", "grant_id", "grant_version",
+        "draft_preview_record_id", "draft_preview_record_version", "draft_preview_digest",
+        "delegated_principal_id"
+      ],
+      "properties": {
+        "activation_id": { "$ref": "#/$defs/Id" },
+        "activation_digest": { "$ref": "#/$defs/Digest" },
+        "capability_id": { "$ref": "#/$defs/Id" },
+        "inventory_record_id": { "$ref": "#/$defs/Id" },
+        "inventory_record_version": { "type": "integer", "minimum": 1 },
+        "inventory_digest": { "$ref": "#/$defs/Digest" },
+        "constraint_digest": { "$ref": "#/$defs/Digest" },
+        "grant_id": { "$ref": "#/$defs/Id" },
+        "grant_version": { "type": "integer", "minimum": 1 },
+        "draft_preview_record_id": { "$ref": "#/$defs/Id" },
+        "draft_preview_record_version": { "type": "integer", "minimum": 1 },
+        "draft_preview_digest": { "$ref": "#/$defs/Digest" },
+        "delegated_principal_id": { "$ref": "#/$defs/Id" }
       }
     }
   }

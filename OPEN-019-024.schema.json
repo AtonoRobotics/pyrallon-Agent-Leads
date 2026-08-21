@@ -8,10 +8,12 @@
     { "$ref": "#/$defs/EffectDraftPreview" },
     { "$ref": "#/$defs/ContextSourceFreshness" },
     { "$ref": "#/$defs/OutputClassMapping" },
+    { "$ref": "#/$defs/EffectPolicy" },
     { "$ref": "#/$defs/MetricDefinition" },
     { "$ref": "#/$defs/MetricObservation" },
     { "$ref": "#/$defs/ReleaseEvidence" },
-    { "$ref": "#/$defs/AccessibilityEvidence" }
+    { "$ref": "#/$defs/AccessibilityEvidence" },
+    { "$ref": "#/$defs/AccessibilityBinding" }
   ],
   "$defs": {
     "Id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._:/-]+$" },
@@ -88,6 +90,15 @@
         "recordType": { "const": "OutputClassMapping" }, "actionClass": { "$ref": "#/$defs/Id" }, "outputClass": { "$ref": "#/$defs/Id" }, "policyVersion": { "$ref": "#/$defs/Version" }, "allowedArtifactTypes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "requiredAuthorityClasses": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "allowedEpistemicTypes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["evidence", "assertion", "verified_fact", "inference", "memory"] } }, "staleEvidencePolicy": { "enum": ["reject", "allow_labeled"] }, "staleLabel": { "$ref": "#/$defs/Id" }, "groundingMode": { "enum": ["all_claims_grounded", "bounded_unknowns_allowed", "acknowledgment_only"] }, "effectEligibility": { "enum": ["none", "draft_only", "permit_eligible"] }
       }}, { "if": { "properties": { "staleEvidencePolicy": { "const": "allow_labeled" } } }, "then": { "required": ["staleLabel"] }, "else": { "not": { "required": ["staleLabel"] } } }], "unevaluatedProperties": false
     },
+    "EffectPolicy": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "policyId", "policyVersion", "rules", "expiresAt"], "properties": {
+        "recordType": { "const": "EffectPolicy" },
+        "policyId": { "$ref": "#/$defs/Id" },
+        "policyVersion": { "$ref": "#/$defs/Version" },
+        "rules": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "object", "additionalProperties": false, "required": ["actionClass", "disposition"], "properties": { "actionClass": { "$ref": "#/$defs/Id" }, "disposition": { "enum": ["allowed", "prohibited", "approval_required"] } } } },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      }}], "unevaluatedProperties": false
+    },
     "MetricDefinition": {
       "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "metricId", "unit", "numeratorEvent", "denominatorEvent", "correlationKey", "dimensions", "window", "minimumDenominator", "zeroDenominatorBehavior"], "properties": {
         "recordType": { "const": "MetricDefinition" }, "metricId": { "$ref": "#/$defs/Id" }, "unit": { "enum": ["ratio", "count", "duration_ms", "percentage"] }, "numeratorEvent": { "$ref": "#/$defs/Id" }, "denominatorEvent": { "$ref": "#/$defs/Id" }, "correlationKey": { "$ref": "#/$defs/Id" }, "dimensions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "window": { "$ref": "#/$defs/Id" }, "minimumDenominator": { "type": "integer", "minimum": 0 }, "zeroDenominatorBehavior": { "enum": ["unknown", "not_applicable", "zero"] }
@@ -107,6 +118,19 @@
       "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "standard", "suiteVersion", "surface", "buildDigest", "releaseDigest", "assistiveTechnologies", "knownExceptions", "outcome", "ownerId", "expiresAt"], "properties": {
         "recordType": { "const": "AccessibilityEvidence" }, "standard": { "const": "WCAG 2.2 AA" }, "suiteVersion": { "$ref": "#/$defs/Version" }, "surface": { "$ref": "#/$defs/Id" }, "buildDigest": { "$ref": "#/$defs/Digest" }, "releaseDigest": { "$ref": "#/$defs/Digest" }, "assistiveTechnologies": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "knownExceptions": { "type": "array", "items": { "type": "string" } }, "outcome": { "enum": ["current", "expired", "superseded", "failed", "waived"] }, "ownerId": { "$ref": "#/$defs/Id" }, "expiresAt": { "$ref": "#/$defs/Timestamp" }, "waiverScope": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "affectedObligations": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }, "waiverReason": { "type": "string", "minLength": 1 }, "compensatingControl": { "type": "string", "minLength": 1 }, "legalBasis": { "type": "string", "minLength": 1 }, "waiverApproverAuthorityClass": { "$ref": "#/$defs/Id" }, "waiverApproverId": { "$ref": "#/$defs/Id" }
       }}, { "if": { "properties": { "outcome": { "const": "waived" } } }, "then": { "required": ["waiverScope", "affectedObligations", "waiverReason", "compensatingControl", "waiverApproverAuthorityClass", "waiverApproverId"] } }], "unevaluatedProperties": false
+    },
+    "AccessibilityBinding": {
+      "allOf": [{ "$ref": "#/$defs/Base" }, { "type": "object", "required": ["recordType", "operatorAcceptanceRecordId", "operatorAcceptanceDigest", "closureEvidenceRecordId", "closureEvidenceDigest", "surface", "buildDigest", "releaseDigest", "bindingDigest", "expiresAt"], "properties": {
+        "recordType": { "const": "AccessibilityBinding" },
+        "operatorAcceptanceRecordId": { "$ref": "#/$defs/Id" },
+        "operatorAcceptanceDigest": { "$ref": "#/$defs/Digest" },
+        "closureEvidenceRecordId": { "$ref": "#/$defs/Id" },
+        "closureEvidenceDigest": { "$ref": "#/$defs/Digest" },
+        "surface": { "$ref": "#/$defs/Id" },
+        "buildDigest": { "$ref": "#/$defs/Digest" },
+        "releaseDigest": { "$ref": "#/$defs/Digest" },
+        "bindingDigest": { "$ref": "#/$defs/Digest" }
+      }}], "unevaluatedProperties": false
     }
   }
 }

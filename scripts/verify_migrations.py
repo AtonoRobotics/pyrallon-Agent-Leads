@@ -213,6 +213,24 @@ def main() -> None:
             raise SystemExit(f"Operator Surface 1.1 migration missing: {fragment}")
     if "rollback refused" not in operator_11_rollback.read_text():
         raise SystemExit("Operator Surface 1.1 rollback must refuse policy/evidence loss")
+    workflow_outbox = ROOT / "migrations" / "0022_operator_workflow_outbox.sql"
+    workflow_outbox_rollback = ROOT / "migrations" / "0022_operator_workflow_outbox.rollback.sql"
+    if not workflow_outbox.is_file() or not workflow_outbox_rollback.is_file():
+        raise SystemExit("missing operator workflow outbox migration or rollback refusal")
+    workflow_sql = workflow_outbox.read_text()
+    for fragment in (
+        "CREATE TABLE operator_workflow_outbox",
+        "CREATE TABLE operator_workflow_signal_receipts",
+        "UNIQUE (tenant_id, command_id)",
+        "dispatching_at timestamptz",
+        "UNIQUE (tenant_id, outbox_id, attempt)",
+        "operator_workflow_signal_receipts_append_only",
+        "FORCE ROW LEVEL SECURITY",
+    ):
+        if fragment not in workflow_sql:
+            raise SystemExit(f"operator workflow outbox migration missing: {fragment}")
+    if "rollback refused" not in workflow_outbox_rollback.read_text():
+        raise SystemExit("operator workflow outbox rollback must refuse signal-evidence loss")
     acknowledgment = ROOT / "migrations" / "0012_ot01_acknowledgment.sql"
     acknowledgment_rollback = ROOT / "migrations" / "0012_ot01_acknowledgment.rollback.sql"
     if not acknowledgment.is_file() or not acknowledgment_rollback.is_file():
@@ -319,6 +337,18 @@ def main() -> None:
             raise SystemExit(f"Twilio platform OAuth migration missing: {fragment}")
     if "rollback refused" not in twilio_oauth_rollback.read_text():
         raise SystemExit("Twilio platform OAuth rollback must refuse client evidence loss")
+    docusign_oauth = ROOT / "migrations" / "0028_platform_oauth_docusign.sql"
+    docusign_oauth_rollback = ROOT / "migrations" / "0028_platform_oauth_docusign.rollback.sql"
+    if not docusign_oauth.is_file() or not docusign_oauth_rollback.is_file():
+        raise SystemExit("missing DocuSign platform OAuth migration or rollback refusal")
+    for fragment in (
+        "DROP CONSTRAINT IF EXISTS platform_oauth_clients_issuer_check",
+        "'docusign'",
+    ):
+        if fragment not in docusign_oauth.read_text():
+            raise SystemExit(f"DocuSign platform OAuth migration missing: {fragment}")
+    if "rollback refused" not in docusign_oauth_rollback.read_text():
+        raise SystemExit("DocuSign platform OAuth rollback must refuse client evidence loss")
     cognitive_credentials = ROOT / "migrations" / "0019_cognitive_credentials.sql"
     cognitive_credentials_rollback = ROOT / "migrations" / "0019_cognitive_credentials.rollback.sql"
     if not cognitive_credentials.is_file() or not cognitive_credentials_rollback.is_file():
@@ -359,11 +389,27 @@ def main() -> None:
             raise SystemExit(f"derived contract-family migration missing: {fragment}")
     if "rollback refused" not in derived_contracts_rollback.read_text():
         raise SystemExit("derived contract-family rollback must refuse admitted record loss")
+    esignature = ROOT / "migrations" / "0025_esignature_operation_records.sql"
+    esignature_rollback = ROOT / "migrations" / "0025_esignature_operation_records.rollback.sql"
+    if not esignature.is_file() or not esignature_rollback.is_file():
+        raise SystemExit("missing e-signature operation storage migration or rollback")
+    esignature_sql = esignature.read_text()
+    for fragment in (
+        "CREATE TABLE IF NOT EXISTS esignature_operation_records",
+        "PRIMARY KEY (tenant_id, operation_id)",
+        "FORCE ROW LEVEL SECURITY",
+        "esignature_operation_records_append_only",
+    ):
+        if fragment not in esignature_sql:
+            raise SystemExit(f"e-signature operation migration missing: {fragment}")
+    if "rollback refused" not in esignature_rollback.read_text():
+        raise SystemExit("e-signature operation rollback must refuse operation evidence loss")
     print(
         "canonical, evidence, identity, ontology 0.2/0.3, Habitat, inbound, operator 1.0/1.1, "
         "OT01 acknowledgment, OPEN-025 authorization, OPEN-026 activation, Release Activation "
-        "1.1 concurrency, connector credentials, platform OAuth clients, Twilio OAuth, cognitive "
-        "credentials, OAuth return origin, derived contract-family storage, and control-plane "
+        "1.1 concurrency, connector credentials, platform OAuth clients, Twilio/DocuSign OAuth, cognitive "
+        "credentials, OAuth return origin, derived contract-family storage, e-signature operation "
+        "storage, and control-plane "
         "migration integrity verified"
     )
 

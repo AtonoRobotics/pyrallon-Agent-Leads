@@ -62,6 +62,10 @@ def main() -> None:
         "release_activation": ROOT / "RELEASE-ACTIVATION.schema.json",
         "qualification_readiness": ROOT / "QUALIFICATION-READINESS.schema.json",
         "availability_booking": ROOT / "AVAILABILITY-BOOKING.schema.json",
+        "nurture_plan": ROOT / "NURTURE-PLAN.schema.json",
+        "transaction_coordination": ROOT / "TRANSACTION-COORDINATION.schema.json",
+        "consultation_operation": ROOT / "CONSULTATION-OPERATION.schema.json",
+        "representation_operation": ROOT / "REPRESENTATION-OPERATION.schema.json",
     }
     manifest_names = {entry["name"] for entry in manifest["contracts"]}
     if manifest_names != set(sources):

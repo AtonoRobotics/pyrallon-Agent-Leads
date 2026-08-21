@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buyer-ops.example/schemas/nurture-plan/1.0.0",
+  "title": "NurturePlanContract",
+  "oneOf": [
+    {"$ref": "#/$defs/NurturePolicy"},
+    {"$ref": "#/$defs/NurturePlan"}
+  ],
+  "$defs": {
+    "Id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "Time": {"type": "string", "format": "date-time"},
+    "Digest": {"type": "string", "pattern": "^[A-Za-z0-9_-]+:[A-Fa-f0-9]{32,}$"},
+    "NurturePolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "policyId", "version", "lifecycle", "effectiveFrom", "channels", "approvedActionTypes", "stalledAfterSeconds", "maxFrequencySeconds", "sourceEvidenceIds"],
+      "properties": {
+        "messageType": {"const": "nurture_policy"}, "schemaVersion": {"const": "nurture-plan/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "policyId": {"$ref": "#/$defs/Id"}, "version": {"type": "integer", "minimum": 1}, "lifecycle": {"enum": ["draft", "active", "superseded", "retired"]}, "effectiveFrom": {"$ref": "#/$defs/Time"}, "effectiveTo": {"oneOf": [{"$ref": "#/$defs/Time"}, {"type": "null"}]},
+        "channels": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["email", "sms", "phone"]}}, "approvedActionTypes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "stalledAfterSeconds": {"type": "integer", "minimum": 60}, "maxFrequencySeconds": {"type": "integer", "minimum": 60}, "sourceEvidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    },
+    "NextAction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["actionId", "actionType", "channel", "dueAt", "reasonCodes", "evidenceIds"],
+      "properties": {"actionId": {"$ref": "#/$defs/Id"}, "actionType": {"$ref": "#/$defs/Id"}, "channel": {"enum": ["email", "sms", "phone", "agent_task"]}, "dueAt": {"$ref": "#/$defs/Time"}, "reasonCodes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "evidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}}
+    },
+    "NurturePlan": {
+      "type": "object", "additionalProperties": false,
+      "required": ["messageType", "schemaVersion", "tenantId", "journeyId", "planId", "policyId", "policyVersion", "planState", "stalled", "unresolvedCommitmentIds", "stopReasons", "nextAction", "derivedAt", "inputDigest", "evidenceIds"],
+      "properties": {
+        "messageType": {"const": "nurture_plan"}, "schemaVersion": {"const": "nurture-plan/1.0.0"}, "tenantId": {"$ref": "#/$defs/Id"}, "journeyId": {"$ref": "#/$defs/Id"}, "planId": {"$ref": "#/$defs/Id"}, "policyId": {"$ref": "#/$defs/Id"}, "policyVersion": {"type": "integer", "minimum": 1}, "planState": {"enum": ["active", "paused", "blocked", "completed"]}, "stalled": {"type": "boolean"}, "unresolvedCommitmentIds": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}, "stopReasons": {"type": "array", "items": {"$ref": "#/$defs/Id"}}, "nextAction": {"oneOf": [{"$ref": "#/$defs/NextAction"}, {"type": "null"}]}, "derivedAt": {"$ref": "#/$defs/Time"}, "inputDigest": {"$ref": "#/$defs/Digest"}, "evidenceIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    }
+  }
+}

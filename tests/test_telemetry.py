@@ -72,6 +72,8 @@ def _duration_observation() -> dict[str, Any]:
         "metricId": "capture_latency_seconds",
         "value": 12,
         "unit": "seconds",
+        "startEventType": "ingress_received",
+        "endEventType": "canonical_capture_committed",
         "eventStartedAt": "2030-01-01T00:00:00Z",
         "eventEndedAt": "2030-01-01T00:00:12Z",
         "observedAt": "2030-01-01T00:00:13Z",
@@ -101,6 +103,7 @@ def test_metric_observation_binds_catalog_unit_retention_and_elapsed_time() -> N
         ("unit", "count", "METRIC_UNIT_MISMATCH"),
         ("retentionClass", "audit_7y", "METRIC_RETENTION_MISMATCH"),
         ("value", 11, "METRIC_DURATION_MISMATCH"),
+        ("startEventType", "wrong_event", "METRIC_EVENT_IDENTITY_MISMATCH"),
         ("eventEndedAt", "2029-12-31T23:59:59Z", "METRIC_EVENT_ORDER"),
     ],
 )
@@ -118,6 +121,8 @@ def test_count_metric_requires_a_non_negative_integer() -> None:
             "metricId": "duplicate_suppression_total",
             "unit": "count",
             "value": 1.5,
+            "startEventType": "duplicate_suppression_committed",
+            "endEventType": "duplicate_suppression_committed",
             "eventEndedAt": observation["eventStartedAt"],
         }
     )
@@ -216,16 +221,17 @@ def test_latency_slo_rejects_window_and_source_drift() -> None:
         _evaluate([wrong_metric])
 
 
-def test_ratio_slo_remains_fail_closed_without_published_observation_binding() -> None:
-    with pytest.raises(ValueError, match="do not bind this SLO input shape"):
-        LatencySloEvaluator().evaluate(
-            "provider_unknown_ratio",
-            [],
-            evaluation_id="ratio-evaluation",
-            window_started_at="2030-01-01T00:00:00Z",
-            window_ended_at="2030-01-02T00:00:00Z",
-            evaluated_at="2030-01-02T00:00:01Z",
-        )
+def test_ratio_slo_without_bound_event_sets_is_insufficient_data() -> None:
+    evaluation = LatencySloEvaluator().evaluate(
+        "provider_unknown_ratio",
+        [],
+        evaluation_id="ratio-evaluation",
+        window_started_at="2030-01-01T00:00:00Z",
+        window_ended_at="2030-01-02T00:00:00Z",
+        evaluated_at="2030-01-02T00:00:01Z",
+    )
+    assert evaluation["status"] == "insufficient_data"
+    assert evaluation["actual"] is None
 
 
 def _dashboard() -> dict[str, Any]:

@@ -1,0 +1,1 @@
+{"capability_id":"google:gmail.send","provider":"google","adapter_id":"gmail","adapter_version":"1","channel":"email","effect_class":"send","scopes":["gmail.send"],"activation_id":"act1"}

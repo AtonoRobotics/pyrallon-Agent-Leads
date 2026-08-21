@@ -1,6 +1,7 @@
 import hashlib
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib.resources import files
 from typing import Any
 
@@ -48,3 +49,14 @@ class ContractRegistry:
     @property
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self._contracts))
+
+
+@lru_cache(maxsize=1)
+def default_contract_registry() -> ContractRegistry:
+    """Return the process-wide immutable registry used by normal validation.
+
+    Contract files are hash-pinned by the manifest and the resulting registry is
+    read-only after construction. Rebuilding every validator for every canonical
+    projection made the production workspace latency scale with journey count.
+    """
+    return ContractRegistry()

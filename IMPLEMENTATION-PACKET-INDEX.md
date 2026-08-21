@@ -153,7 +153,7 @@ effective-time, revocation-evidence, version, and transactionally re-read admiss
 - `AgreementQualification` predicate and showing/offer hard stop;
 - authority-decision evidence.
 
-**Prohibited:** Signals, wakes, timers, workflow leases, retries, compensation, worker lifecycle, model calls, provider invocation.
+**Prohibited:** Provider invocation, model authority, canonical business truth, and bypassing Habitat's autonomous runtime. Durable execution primitives may be supplied by Temporal, but Habitat owns the semantic loop and run lifecycle.
 
 **Gates:** GATE-004, GATE-006, GATE-018, GATE-029, GATE-033.
 
@@ -187,14 +187,15 @@ an injected compensation executor, validates the published result, and rejects c
 mismatches. Connector-specific compensation behavior, retry disposition, and operational thresholds
 remain owned by their governing downstream contracts and configuration; Temporal does not invent them.
 
-**Objective:** Implement exclusive durable workflow ownership without business-truth or authority leakage.
+**Objective:** Implement Habitat's autonomous buyer-journey loop with Temporal as its replaceable durable execution substrate, without business-truth or authority leakage.
 
 **Dependencies:** PKT-01.
 
 **Must implement:**
 
 - BuyerJourneyWorkflow and child workflow skeletons;
-- signals, wakes, timers, workflow/activity leases, retry/compensation/recovery, worker lifecycle;
+- Habitat loop progression, work selection, replanning, run lifecycle, and continuation/sleep;
+- Temporal-backed signals, wakes, timers, workflow/activity leases, retry/compensation/recovery, replay, and worker lifecycle;
 - versioned workflow code and deterministic replay;
 - canonical-state reconciliation activities;
 - narrow concurrency keys and unknown-outcome states;

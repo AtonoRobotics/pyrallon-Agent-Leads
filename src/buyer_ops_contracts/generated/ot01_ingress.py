@@ -33,6 +33,7 @@ class Channel(Enum):
     form = 'form'
     email = 'email'
     sms = 'sms'
+    phone = 'phone'
 
 
 class Locale(RootModel[constr(pattern=r'^[a-z]{2}(-[A-Z]{2})?$')]):
@@ -192,7 +193,7 @@ class AcknowledgmentRule(BaseModel):
         extra='forbid',
     )
     ruleId: Id
-    channels: list[Channel] = Field(..., min_length=1)
+    channels: list[Channel1] = Field(..., min_length=1)
     locales: list[Locale] = Field(..., min_length=1)
     operatingHourStates: list[OperatingHourState] = Field(..., min_length=1)
     contactabilityStates: list[ContactabilityState] = Field(..., min_length=1)

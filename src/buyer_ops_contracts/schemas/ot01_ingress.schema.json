@@ -15,7 +15,7 @@
     "Id": { "type": "string", "minLength": 1 },
     "Time": { "type": "string", "format": "date-time" },
     "Digest": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+:[a-fA-F0-9]{32,}$" },
-    "Channel": { "enum": ["form", "email", "sms"] },
+    "Channel": { "enum": ["form", "email", "sms", "phone"] },
     "Locale": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$" },
     "RecordRef": {
       "type": "object", "additionalProperties": false,
@@ -86,7 +86,7 @@
       "required": ["ruleId", "channels", "locales", "operatingHourStates", "contactabilityStates", "inboundPurposes", "optOutStates", "templateArtifactId", "templateVersion", "templateDigest", "templateSyntax", "senderPrincipalId", "senderEndpointId", "allowedSubstitutionKeys", "effectPurpose", "expiresInSeconds"],
       "properties": {
         "ruleId": { "$ref": "#/$defs/Id" },
-        "channels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Channel" } },
+        "channels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["email", "sms"] } },
         "locales": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Locale" } },
         "operatingHourStates": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["open", "closed", "holiday"] } },
         "contactabilityStates": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["unknown", "contactable", "temporarily_unavailable", "suppressed", "invalid"] } },

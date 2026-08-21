@@ -260,7 +260,12 @@ _DECLARED_TRANSITIONS: dict[tuple[str, str], dict[str, set[str]]] = {
         "active": {"expired", "revoked", "superseded", "disputed"},
         "disputed": {"active", "revoked"},
     },
-    ("Approval", "decision"): {"approved": set(), "denied": set(), "revoked": set()},
+    ("Approval", "decision"): {
+        "pending": {"approved", "denied", "revoked"},
+        "approved": set(),
+        "denied": set(),
+        "revoked": set(),
+    },
     ("Appointment", "appointmentState"): {
         "proposed": {"held", "cancelled"},
         "held": {"provider_pending", "cancelled", "no_show"},

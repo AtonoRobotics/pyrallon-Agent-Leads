@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import base64
+import binascii
+import hashlib
 import json
+import mimetypes
 import os
 import secrets
+from collections.abc import Callable
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,30 +25,227 @@ from .activation import (
     Ed25519ActivationDecisionSignatureVerifier,
     PostgresCapabilityDisablementVerifier,
 )
-from .actor_authorization import ActorTenantAuthorizationRepository
+from .actor_authorization import ActorTenantAuthorizationRepository, admit_published_record
+from .calendar_operations import CalendarOperationService, ConnectorCalendarProvider
 from .canonical_habitat import CanonicalLockedHabitatStateReader, PlatformPolicyEvaluator
 from .canonical_repository import CanonicalRepository, Connection
 from .capture import CaptureIncomplete
 from .cognition_authorization import CognitionAuthorization
+from .cognitive_credentials_runtime import PostgresCognitiveCredentialResolver
+from .cognitive_service import CognitiveRuntimeService, configuration_from_environment
 from .connector_authorization import (
     ConnectorAuthorization,
     PlatformOAuthStore,
     oauth_clients_from_env,
     parse_oauth_state,
 )
+from .connector_gateway import ConnectorRejected
+from .connector_runtime import (
+    ConnectorRuntimeError,
+    PostgresConnectorRuntime,
+    configured_adapters_from_environment,
+)
 from .connector_service import ConnectorDenied, ConnectorGateway
+from .derived_contract_repository import (
+    BookingOutcomeRepository,
+    DerivedContractReader,
+    SlotSetRepository,
+)
 from .errors import ContractViolation, SetupRejected
+from .esignature_operations import ConnectorESignatureProvider, ESignatureOperationService
+from .esignature_repository import ESignatureOperationRepository
 from .habitat import HabitatKernel, HabitatState
 from .habitat_repository import PostgresHabitatRepository, PostgresVersionLockedStateReader
 from .ingress import IngressRejected
+from .ingress_runtime import ConfiguredIngressError, ConfiguredIngressRuntimeFactory
 from .ingress_service import IngressProviderRuntime, IngressService
 from .operator_commands import OperatorCommandError, OperatorCommandService
+from .operator_policy import OperatorPolicyRepository
+from .operator_projection import JourneyViewDerivationPolicy, OperatorProjection
 from .release_evidence import ReleaseEvidenceEvaluator, load_gate_registry
 from .telemetry import TelemetryRecorder
+from .voice_repository import VoiceCallRepository
+
+_JOURNEY_VIEW_CATEGORIES = {
+    "identity",
+    "representation",
+    "consent",
+    "connector",
+    "cognition",
+    "workflow",
+    "calendar",
+    "policy",
+    "authority",
+    "evidence",
+}
+_JOURNEY_VIEW_RECOVERY_OWNERS = {
+    "system",
+    "agent",
+    "brokerage",
+    "deployment_operator",
+    "buyer",
+}
 
 
 def connect(dsn: str) -> Any:
     return psycopg.connect(dsn)
+
+
+@contextmanager
+def _database_context(dsn: str) -> Any:
+    connection = connect(dsn)
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
+class _UnavailableCalendarProvider:
+    """Sentinel provider for the availability-only operation."""
+
+    def book(self, command: dict[str, Any], slot: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("calendar provider is unavailable for availability derivation")
+
+    def reschedule(self, command: dict[str, Any], slot: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("calendar provider is unavailable for availability derivation")
+
+    def cancel(self, command: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("calendar provider is unavailable for availability derivation")
+
+    def reconcile(self, prior_result: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("calendar provider is unavailable for availability derivation")
+
+    def snapshot(
+        self, binding: dict[str, Any], *, range_start: str, range_end: str
+    ) -> dict[str, Any]:
+        raise RuntimeError("calendar provider is unavailable for availability derivation")
+
+
+class _PostgresCalendarInvoker:
+    def __init__(self, runtime: PostgresConnectorRuntime) -> None:
+        self._runtime = runtime
+
+    def __call__(
+        self,
+        request: dict[str, Any],
+        payload: bytes,
+        *,
+        permit_digest: str,
+        preview: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        return self._runtime.invoke(
+            request,
+            payload,
+            permit_digest=permit_digest,
+            preview=preview,
+        )
+
+    def reconcile(
+        self,
+        request: dict[str, Any],
+        provider_receipt_id: str,
+        *,
+        permit_digest: str,
+    ) -> dict[str, Any]:
+        del permit_digest
+        return self._runtime.reconcile(request, provider_receipt_id)
+
+
+def _calendar_records(
+    payload: dict[str, Any], *, include_availability: bool = True, include_booking: bool = False
+) -> dict[str, dict[str, Any]]:
+    required = {"binding": "binding"}
+    if include_availability:
+        required.update(
+            {
+                "policy": "policy",
+                "readiness": "readiness",
+                "snapshot": "snapshot",
+            }
+        )
+    records: dict[str, dict[str, Any]] = {}
+    for field, label in required.items():
+        value = payload.get(field)
+        if not isinstance(value, dict):
+            raise ValueError(f"{label} record is required")
+        records[field] = value
+    if payload.get("command") is not None:
+        command = payload.get("command")
+        if not isinstance(command, dict):
+            raise ValueError("command record must be an object")
+        records["command"] = command
+    if include_booking:
+        if "command" not in records:
+            raise ValueError("command record is required")
+        prior_result = payload.get("priorResult")
+        if not isinstance(prior_result, dict):
+            raise ValueError("priorResult record is required")
+        records["priorResult"] = prior_result
+    if payload.get("slotSet") is not None:
+        slot_set = payload.get("slotSet")
+        if not isinstance(slot_set, dict):
+            raise ValueError("slotSet record must be an object")
+        records["slotSet"] = slot_set
+    return records
+
+
+def _connector_capability(provider_action: str) -> str:
+    """Map provider verbs to the governed connector capability vocabulary."""
+    if provider_action in {"calendar.book", "esign.create"}:
+        return "create"
+    if provider_action in {"calendar.reschedule", "calendar.cancel", "esign.void"}:
+        return "update"
+    return "read"
+
+
+def _published_calendar_records(
+    connection_factory: Callable[[], Any],
+    tenant_id: str,
+    records: dict[str, dict[str, Any]],
+    *,
+    fields: tuple[str, ...],
+) -> dict[str, dict[str, Any]]:
+    identity_fields = {
+        "availability_policy": "policyId",
+        "calendar_provider_binding": "bindingId",
+        "calendar_snapshot": "snapshotId",
+        "slot_set": "slotSetId",
+        "booking_command": "commandId",
+        "booking_result": "resultId",
+        "booking_reconciliation": "reconciliationId",
+        "readiness_decision": "decisionId",
+    }
+    reader = DerivedContractReader(connection_factory, tenant_id=tenant_id)
+    authoritative = dict(records)
+    for field in fields:
+        record = records.get(field)
+        if not isinstance(record, dict):
+            raise ValueError(f"{field} record is required")
+        message_type = record.get("messageType")
+        if not isinstance(message_type, str) or message_type not in identity_fields:
+            raise ValueError(f"{field} record has an unsupported message type")
+        family = (
+            "qualification_readiness"
+            if message_type == "readiness_decision"
+            else "availability_booking"
+        )
+        identity_field = identity_fields[message_type]
+        record_id = record.get(identity_field)
+        if not isinstance(record_id, str) or not record_id:
+            raise ValueError(f"{field} record identity is required")
+        version = record.get("version", 1)
+        if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+            raise ValueError(f"{field} record version is invalid")
+        stored = reader.get(
+            contract_family=family,
+            message_type=message_type,
+            record_id=record_id,
+            record_version=version,
+        )
+        if stored is None:
+            raise ValueError(f"{field} record is not published")
+        authoritative[field] = stored
+    return authoritative
 
 
 class _LockedStateOnly:
@@ -57,6 +259,41 @@ class IngressProviderRuntimeFactory(Protocol):
     def __call__(self, *, connection: Connection, tenant_id: str) -> IngressProviderRuntime: ...
 
 
+def load_journey_view_policy(raw: str | None = None) -> JourneyViewDerivationPolicy:
+    """Load deployment-owned JourneyView bindings without supplying runtime defaults."""
+    encoded = raw if raw is not None else os.environ.get("BUYER_OPS_JOURNEY_VIEW_POLICY_JSON", "")
+    if not encoded.strip():
+        raise ValueError("BUYER_OPS_JOURNEY_VIEW_POLICY_JSON is required")
+    payload = json.loads(encoded)
+    if not isinstance(payload, dict):
+        raise ValueError("JourneyView policy must be an object")
+    compiler_version = payload.get("compiler_version")
+    bindings = payload.get("blocker_bindings")
+    if not isinstance(compiler_version, str) or not compiler_version:
+        raise ValueError("JourneyView policy compiler_version is required")
+    if not isinstance(bindings, dict) or not bindings:
+        raise ValueError("JourneyView policy blocker_bindings are required")
+    normalized: dict[str, tuple[str, str]] = {}
+    for code, binding in bindings.items():
+        if (
+            not isinstance(code, str)
+            or not code
+            or not isinstance(binding, list)
+            or len(binding) != 2
+            or not all(isinstance(value, str) and value for value in binding)
+            or binding[0] not in _JOURNEY_VIEW_CATEGORIES
+            or binding[1] not in _JOURNEY_VIEW_RECOVERY_OWNERS
+        ):
+            raise ValueError(
+                "JourneyView policy bindings must map codes to [category, recovery_owner]"
+            )
+        normalized[code] = (binding[0], binding[1])
+    return JourneyViewDerivationPolicy(
+        compiler_version=compiler_version,
+        blocker_bindings=normalized,
+    )
+
+
 class ControlPlane:
     def __init__(
         self,
@@ -67,6 +304,11 @@ class ControlPlane:
         release_public_keys: dict[str, Ed25519PublicKey],
         gate_registry_path: Path,
         ingress_provider_runtime_factory: IngressProviderRuntimeFactory | None = None,
+        ingress_webhook_factory: ConfiguredIngressRuntimeFactory | None = None,
+        capability_inventory_verifier: Callable[[dict[str, Any]], bool] | None = None,
+        journey_view_policy: JourneyViewDerivationPolicy | None = None,
+        connector_adapters: dict[str, Any] | None = None,
+        cognitive_runtime: CognitiveRuntimeService | None = None,
     ) -> None:
         if len(permit_secret) < 32:
             raise ValueError("permit_secret must contain at least 32 bytes")
@@ -78,17 +320,48 @@ class ControlPlane:
         self._permit_secret = permit_secret
         self._control_token = control_token
         self._release_public_keys = release_public_keys
+        self._capability_inventory_verifier = capability_inventory_verifier
+        self._activation_verifier = Ed25519ActivationDecisionSignatureVerifier(release_public_keys)
+        self._journey_view_policy = journey_view_policy
+        self._connector_adapters = connector_adapters
+        self._cognitive_runtime = cognitive_runtime
         self._gate_registry, self._gate_registry_digest = load_gate_registry(gate_registry_path)
         self._oauth_clients = oauth_clients_from_env()
         self._ingress_provider_runtime_factory = ingress_provider_runtime_factory
+        self._ingress_webhook_factory = ingress_webhook_factory
 
     def handle(
         self, method: str, path: str, headers: dict[str, str], body: bytes
     ) -> tuple[int, dict[str, Any]]:
-        if headers.get("x-buyer-ops-token") != self._control_token:
-            return 401, _error("authentication_required", "control token required")
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
+        if route.startswith("/v1/ingress/webhook/"):
+            provider_id = unquote(route.removeprefix("/v1/ingress/webhook/")).strip("/")
+            if method != "POST":
+                return 405, _error("validation_failed", "webhook endpoint only accepts POST")
+            if self._ingress_webhook_factory is None:
+                return 422, _error(
+                    "configuration_incomplete",
+                    "configured ingress webhook adapters are unavailable",
+                )
+            connection = self._connection()
+            try:
+                return 200, self._ingress_webhook_factory.handle_webhook(
+                    connection, provider_id, headers, body
+                )
+            except ConfiguredIngressError as exc:
+                code = (
+                    "ingress_authentication_failed"
+                    if "signature" in str(exc).lower()
+                    else "validation_failed"
+                )
+                return (403 if code == "ingress_authentication_failed" else 422), _error(
+                    code, str(exc)
+                )
+            finally:
+                connection.close()
+        if headers.get("x-buyer-ops-token") != self._control_token:
+            return 401, _error("authentication_required", "control token required")
         tenant_id = headers.get("x-buyer-ops-tenant", "")
         actor_id = headers.get("x-buyer-ops-actor", "")
         try:
@@ -137,54 +410,102 @@ class ControlPlane:
                         "authority_denied",
                         "admit brokerage identity before registering this application's OAuth clients",
                     )
-                return 422, _error(
-                    "configuration_incomplete",
-                    "platform OAuth client owner admission semantics are not published",
-                )
+                return 200, self._save_platform_oauth_client(actor_id, payload)
             if not tenant_id:
                 return 403, _error("authority_denied", "tenant header required")
             if method == "GET" and route == "/v1/journeys":
                 self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "governed operator projection rules are not published",
-                )
+                if self._journey_view_policy is None:
+                    return 422, _error(
+                        "configuration_incomplete",
+                        "governed operator projection rules are not published",
+                    )
+                return 200, self._journeys(tenant_id, actor_id)
             if method == "GET" and route.startswith("/v1/journeys/"):
                 self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "governed operator projection rules are not published",
-                )
+                if self._journey_view_policy is None:
+                    return 422, _error(
+                        "configuration_incomplete",
+                        "governed operator projection rules are not published",
+                    )
+                journey_id = unquote(route.removeprefix("/v1/journeys/")).strip("/")
+                return 200, self._journeys(tenant_id, actor_id, journey_id=journey_id)
             if method == "GET" and route == "/v1/workspace":
                 self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "governed operator projection rules are not published",
-                )
+                if self._journey_view_policy is None:
+                    return 422, _error(
+                        "configuration_incomplete",
+                        "governed operator projection rules are not published",
+                    )
+                return 200, self._journeys(tenant_id, actor_id)
+            if method == "POST" and route == "/v1/cognition/invoke":
+                self._require_actor(tenant_id, actor_id)
+                if self._cognitive_runtime is None:
+                    return 422, _error(
+                        "configuration_incomplete",
+                        "governed cognitive runtime is not configured",
+                    )
+                work_request = payload.get("workRequest")
+                if not isinstance(work_request, dict):
+                    return 422, _error("validation_failed", "workRequest must be an object")
+                if work_request.get("tenantId") != tenant_id:
+                    return 403, _error("blocked_policy", "work request tenant mismatch")
+                return 200, self._cognitive_runtime.invoke(work_request)
             if method == "GET" and route.startswith("/v1/workspace/journeys/"):
                 self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "governed operator projection rules are not published",
-                )
+                if self._journey_view_policy is None:
+                    return 422, _error(
+                        "configuration_incomplete",
+                        "governed operator projection rules are not published",
+                    )
+                journey_id = unquote(route.removeprefix("/v1/workspace/journeys/")).strip("/")
+                return 200, self._journeys(tenant_id, actor_id, journey_id=journey_id)
             if method == "POST" and route == "/v1/workspace/appointments":
+                return 200, self._command(tenant_id, actor_id, payload)
+            if method == "POST" and route == "/v1/calendar/availability":
                 self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "appointment mutation must use a published operator command",
+                return 200, self._calendar_availability(tenant_id, payload)
+            if method == "POST" and route == "/v1/calendar/snapshot":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._calendar_snapshot(
+                    tenant_id, payload, headers.get("x-buyer-ops-permit", "")
                 )
+            if method == "POST" and route == "/v1/calendar/booking":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._calendar_booking(
+                    tenant_id, payload, headers.get("x-buyer-ops-permit", "")
+                )
+            if method == "POST" and route == "/v1/calendar/reconcile":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._calendar_reconcile(
+                    tenant_id, payload, headers.get("x-buyer-ops-permit", "")
+                )
+            if method == "POST" and route == "/v1/representation/esign/present":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._esign_present(
+                    tenant_id, payload, headers.get("x-buyer-ops-permit", "")
+                )
+            if method == "POST" and route == "/v1/representation/esign/reconcile":
+                self._require_actor(tenant_id, actor_id)
+                return 200, self._esign_reconcile(
+                    tenant_id, payload, headers.get("x-buyer-ops-permit", "")
+                )
+            if route.startswith("/v1/voice/calls/"):
+                self._require_actor(tenant_id, actor_id)
+                voice_route = route.removeprefix("/v1/voice/calls/").strip("/")
+                if voice_route.endswith("/recording-consent") and method == "POST":
+                    call_sid = unquote(voice_route.removesuffix("/recording-consent")).strip("/")
+                    return 200, self._voice_recording_consent(tenant_id, call_sid, payload)
+                if voice_route.endswith("/recording-revoke") and method == "POST":
+                    call_sid = unquote(voice_route.removesuffix("/recording-revoke")).strip("/")
+                    return 200, self._voice_recording_revoke(tenant_id, call_sid, payload)
+                if method == "GET":
+                    return 200, self._voice_current(tenant_id, unquote(voice_route))
+                return 405, _error("validation_failed", "unsupported voice call operation")
             if method == "POST" and route == "/v1/workspace/assertions":
-                self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "assertion mutation must use a published operator command",
-                )
+                return 200, self._command(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/workspace/suppressions":
-                self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "suppression mutation must use a published operator command",
-                )
+                return 200, self._command(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/commands":
                 return 200, self._command(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/habitat/evaluate-authority":
@@ -243,16 +564,10 @@ class ControlPlane:
                 )
             if method == "POST" and route == "/v1/actor-authorizations":
                 self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "actor authorization owner admission semantics are not published",
-                )
+                return 200, self._admit_actor_authorization(tenant_id, actor_id, payload)
             if method == "POST" and route == "/v1/operator-policies":
                 self._require_actor(tenant_id, actor_id)
-                return 422, _error(
-                    "configuration_incomplete",
-                    "operator policy owner admission semantics are not published",
-                )
+                return 200, self._admit_operator_policy(tenant_id, actor_id, payload)
             return 404, _error("validation_failed", "unknown route")
         except KeyError as exc:
             return 404, _error("evidence_unavailable", str(exc))
@@ -280,6 +595,24 @@ class ControlPlane:
                 "version_conflict": 409,
             }.get(exc.code, 403)
             return status, _error(exc.code, exc.detail)
+        except ConnectorRejected as exc:
+            status = {
+                "connector_unavailable": 503,
+                "capability_inventory_required": 422,
+                "capability_inventory_signature_invalid": 403,
+                "effect_draft_preview_required": 422,
+                "effect_permit_required": 403,
+                "permit_mismatch": 403,
+                "connector_response_mismatch": 502,
+            }.get(exc.code, 403)
+            return status, _error(exc.code, str(exc))
+        except ConnectorRuntimeError as exc:
+            status = (
+                503 if exc.code in {"connector_unavailable", "provider_response_invalid"} else 502
+            )
+            return status, _error(exc.code, exc.detail)
+        except PermissionError as exc:
+            return 403, _error("authority_denied", str(exc))
         except ContractViolation as exc:
             return 422, {
                 "code": "validation_failed",
@@ -313,10 +646,585 @@ class ControlPlane:
         finally:
             connection.close()
 
+    def _voice_current(self, tenant_id: str, call_sid: str) -> dict[str, Any]:
+        if not call_sid:
+            raise ValueError("call sid is required")
+        connection = self._connection()
+        try:
+            current = VoiceCallRepository(connection, tenant_id=tenant_id).get_current(call_sid)
+            if current is None:
+                raise KeyError(call_sid)
+            return {"call": current}
+        finally:
+            connection.close()
+
+    def _voice_recording_consent(
+        self, tenant_id: str, call_sid: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        affirmative = payload.get("affirmative")
+        evidence_id = payload.get("evidenceId")
+        event_id = payload.get("eventId")
+        if not isinstance(affirmative, bool) or not all(
+            isinstance(value, str) and value for value in (evidence_id, event_id)
+        ):
+            raise ValueError("affirmative, evidenceId, and eventId are required")
+        evidence_id_value = str(evidence_id)
+        event_id_value = str(event_id)
+        connection = self._connection()
+        try:
+            state = VoiceCallRepository(connection, tenant_id=tenant_id).set_recording_consent(
+                call_sid=call_sid,
+                evidence_id=evidence_id_value,
+                affirmative=affirmative,
+                observed_at=_voice_observed_at(payload),
+                event_id=event_id_value,
+            )
+            connection.commit()
+            return {"callSid": call_sid, "recordingState": state}
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _voice_recording_revoke(
+        self, tenant_id: str, call_sid: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        evidence_id = payload.get("evidenceId")
+        event_id = payload.get("eventId")
+        if not all(isinstance(value, str) and value for value in (evidence_id, event_id)):
+            raise ValueError("evidenceId and eventId are required")
+        evidence_id_value = str(evidence_id)
+        event_id_value = str(event_id)
+        connection = self._connection()
+        try:
+            VoiceCallRepository(connection, tenant_id=tenant_id).revoke_recording(
+                call_sid=call_sid,
+                evidence_id=evidence_id_value,
+                observed_at=_voice_observed_at(payload),
+                event_id=event_id_value,
+            )
+            connection.commit()
+            return {"callSid": call_sid, "recordingState": "revoked"}
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _calendar_availability(self, tenant_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        records = _calendar_records(payload)
+
+        def connection_factory() -> Any:
+            return _database_context(self._dsn)
+
+        records = _published_calendar_records(
+            connection_factory,
+            tenant_id,
+            records,
+            fields=("policy", "readiness", "binding", "snapshot"),
+        )
+        slot_sets = SlotSetRepository(
+            connection_factory,
+            tenant_id=tenant_id,
+        )
+        # Availability has no provider effect; the service's provider is used only by booking.
+        service = CalendarOperationService(
+            _UnavailableCalendarProvider(),
+            slot_sets=slot_sets,
+            outcomes=BookingOutcomeRepository(connection_factory, tenant_id=tenant_id),
+        )
+        locations = payload.get("locationOptions")
+        if not isinstance(locations, list):
+            raise ValueError("locationOptions must be a list")
+        normalized_locations: list[tuple[str, tuple[str, ...]]] = []
+        for item in locations:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("locationId"), str)
+                or not isinstance(item.get("resourceIds"), list)
+                or not all(isinstance(value, str) for value in item["resourceIds"])
+            ):
+                raise ValueError("locationOptions entries are invalid")
+            normalized_locations.append((item["locationId"], tuple(item["resourceIds"])))
+        return {
+            "slotSet": service.availability(
+                policy=records["policy"],
+                readiness=records["readiness"],
+                binding=records["binding"],
+                snapshot=records["snapshot"],
+                principal_id=str(payload.get("principalId") or ""),
+                location_options=tuple(normalized_locations),
+                blocked_intervals=tuple(payload.get("blockedIntervals") or ()),
+            )
+        }
+
+    def _calendar_booking(
+        self, tenant_id: str, payload: dict[str, Any], permit_digest: str
+    ) -> dict[str, Any]:
+        if not permit_digest:
+            raise ConnectorRejected("effect_permit_required")
+        records = _calendar_records(payload, include_availability=False)
+        request = payload.get("request")
+        if not isinstance(request, dict):
+            raise ValueError("request is required")
+        request = dict(request)
+        if request.get("tenantId") != tenant_id:
+            raise PermissionError("calendar connector request tenant mismatch")
+
+        def published_connection_factory() -> Any:
+            return _database_context(self._dsn)
+
+        records = _published_calendar_records(
+            published_connection_factory,
+            tenant_id,
+            records,
+            fields=tuple(field for field in ("binding", "slotSet", "snapshot") if field in records),
+        )
+        connection = self._connection()
+        try:
+            runtime = PostgresConnectorRuntime(
+                connection,
+                tenant_id=tenant_id,
+                activation=self._activation_controller(connection, tenant_id),
+                adapters=self._connector_adapters or {},
+                permit_secret=self._permit_secret,
+            )
+            provider = ConnectorCalendarProvider(
+                _PostgresCalendarInvoker(runtime),
+                request_for=lambda _record, action, raw: {
+                    **request,
+                    "capability": _connector_capability(action),
+                    "payloadDigest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+                },
+                permit_digest=permit_digest,
+            )
+
+            def connection_factory() -> Any:
+                return _database_context(self._dsn)
+
+            service = CalendarOperationService(
+                provider,
+                slot_sets=SlotSetRepository(connection_factory, tenant_id=tenant_id),
+                outcomes=BookingOutcomeRepository(connection_factory, tenant_id=tenant_id),
+            )
+            result = service.booking(
+                command=records["command"],
+                binding=records["binding"],
+                slot_set=records.get("slotSet"),
+                current_snapshot=records.get("snapshot"),
+                current_provider_watermark=str(payload.get("currentProviderWatermark") or ""),
+                current_appointment_version=(
+                    int(payload["currentAppointmentVersion"])
+                    if payload.get("currentAppointmentVersion") is not None
+                    else None
+                ),
+                # The permit is issued only by Habitat admission and is required by the runtime.
+                authority_active=True,
+            )
+            return {"bookingResult": result}
+        finally:
+            connection.close()
+
+    def _calendar_snapshot(
+        self, tenant_id: str, payload: dict[str, Any], permit_digest: str
+    ) -> dict[str, Any]:
+        if not permit_digest:
+            raise ConnectorRejected("effect_permit_required")
+        records = _calendar_records(payload, include_availability=False)
+        request = payload.get("request")
+        range_start = payload.get("rangeStart")
+        range_end = payload.get("rangeEnd")
+        if (
+            not isinstance(request, dict)
+            or request.get("tenantId") != tenant_id
+            or not isinstance(range_start, str)
+            or not isinstance(range_end, str)
+        ):
+            raise ValueError("tenant-scoped request and snapshot range are required")
+
+        def published_connection_factory() -> Any:
+            return _database_context(self._dsn)
+
+        records = _published_calendar_records(
+            published_connection_factory, tenant_id, records, fields=("binding",)
+        )
+        connection = self._connection()
+        try:
+            runtime = PostgresConnectorRuntime(
+                connection,
+                tenant_id=tenant_id,
+                activation=self._activation_controller(connection, tenant_id),
+                adapters=self._connector_adapters or {},
+                permit_secret=self._permit_secret,
+            )
+            provider = ConnectorCalendarProvider(
+                _PostgresCalendarInvoker(runtime),
+                request_for=lambda _source, action, raw: {
+                    **request,
+                    "capability": _connector_capability(action),
+                    "payloadDigest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+                },
+                permit_digest=permit_digest,
+            )
+
+            def factory() -> Any:
+                return _database_context(self._dsn)
+
+            service = CalendarOperationService(
+                provider,
+                slot_sets=SlotSetRepository(factory, tenant_id=tenant_id),
+                outcomes=BookingOutcomeRepository(factory, tenant_id=tenant_id),
+            )
+            return {
+                "calendarSnapshot": service.snapshot(
+                    binding=records["binding"],
+                    range_start=range_start,
+                    range_end=range_end,
+                )
+            }
+        finally:
+            connection.close()
+
+    def _calendar_reconcile(
+        self, tenant_id: str, payload: dict[str, Any], permit_digest: str
+    ) -> dict[str, Any]:
+        if not permit_digest:
+            raise ConnectorRejected("effect_permit_required")
+        records = _calendar_records(payload, include_availability=False, include_booking=True)
+        request = payload.get("request")
+        if not isinstance(request, dict):
+            raise ValueError("request is required")
+        if request.get("tenantId") != tenant_id:
+            raise PermissionError("calendar connector request tenant mismatch")
+
+        def published_connection_factory() -> Any:
+            return _database_context(self._dsn)
+
+        records = _published_calendar_records(
+            published_connection_factory,
+            tenant_id,
+            records,
+            fields=("command", "binding", "priorResult"),
+        )
+        connection = self._connection()
+        try:
+            runtime = PostgresConnectorRuntime(
+                connection,
+                tenant_id=tenant_id,
+                activation=self._activation_controller(connection, tenant_id),
+                adapters=self._connector_adapters or {},
+                permit_secret=self._permit_secret,
+            )
+            provider = ConnectorCalendarProvider(
+                _PostgresCalendarInvoker(runtime),
+                request_for=lambda _record, action, raw: {
+                    **request,
+                    "capability": _connector_capability(action),
+                    "providerAction": action,
+                    "payloadDigest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+                },
+                permit_digest=permit_digest,
+            )
+
+            def connection_factory() -> Any:
+                return _database_context(self._dsn)
+
+            service = CalendarOperationService(
+                provider,
+                slot_sets=SlotSetRepository(connection_factory, tenant_id=tenant_id),
+                outcomes=BookingOutcomeRepository(connection_factory, tenant_id=tenant_id),
+            )
+            reconciliation = service.reconciliation(
+                command=records["command"],
+                binding=records["binding"],
+                prior_result=records["priorResult"],
+            )
+            return {"bookingReconciliation": reconciliation}
+        finally:
+            connection.close()
+
+    def _esign_present(
+        self, tenant_id: str, payload: dict[str, Any], permit_digest: str
+    ) -> dict[str, Any]:
+        request = payload.get("request")
+        if not isinstance(request, dict) or request.get("tenantId") != tenant_id:
+            raise ValueError("tenant-scoped connector request is required")
+        connection = self._connection()
+        try:
+            agreement, approval = self._load_esign_inputs(connection, tenant_id, payload)
+            request = dict(request)
+            request["recipients"] = self._resolve_esign_recipients(connection, tenant_id, agreement)
+            operations = ESignatureOperationRepository(connection, tenant_id=tenant_id)
+            prior = operations.latest(agreement_id=str(agreement["id"]))
+            if prior is not None and prior.get("state") == "presented":
+                if agreement.get("executionState") == "agent_approved":
+                    repaired = dict(agreement)
+                    repaired["version"] = int(agreement["version"]) + 1
+                    repaired["executionState"] = "presented"
+                    repaired["updatedAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+                    agreement = CanonicalRepository(connection, tenant_id=tenant_id).save(
+                        repaired, expected_version=int(agreement["version"])
+                    )
+                return {"eSignature": prior, "duplicate": True}
+            if not permit_digest:
+                raise ConnectorRejected("effect_permit_required")
+            runtime = PostgresConnectorRuntime(
+                connection,
+                tenant_id=tenant_id,
+                activation=self._activation_controller(connection, tenant_id),
+                adapters=self._connector_adapters or {},
+                permit_secret=self._permit_secret,
+            )
+            provider = ConnectorESignatureProvider(
+                _PostgresCalendarInvoker(runtime),
+                request_for=lambda _source, action, raw: {
+                    **request,
+                    "capability": _connector_capability(action),
+                    "providerAction": action,
+                    "payloadDigest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+                },
+                permit_digest=permit_digest,
+            )
+            result = ESignatureOperationService(provider).present(
+                agreement,
+                agent_approved=True,
+                approval_digest=str(approval["payloadDigest"]),
+            )
+            operation = {"tenantId": tenant_id, "agreementId": str(agreement["id"]), **result}
+            operations.append(operation_id=f"esign:present:{agreement['id']}", record=operation)
+            if agreement.get("executionState") == "agent_approved":
+                presented = dict(agreement)
+                presented["version"] = int(agreement["version"]) + 1
+                presented["executionState"] = "presented"
+                presented["updatedAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+                CanonicalRepository(connection, tenant_id=tenant_id).save(
+                    presented, expected_version=int(agreement["version"])
+                )
+            return {"eSignature": operation, "duplicate": False}
+        finally:
+            connection.close()
+
+    def _esign_reconcile(
+        self, tenant_id: str, payload: dict[str, Any], permit_digest: str
+    ) -> dict[str, Any]:
+        request = payload.get("request")
+        envelope_id = payload.get("providerEnvelopeId")
+        if (
+            not isinstance(request, dict)
+            or request.get("tenantId") != tenant_id
+            or not isinstance(envelope_id, str)
+            or not envelope_id
+        ):
+            raise ValueError("tenant-scoped request and providerEnvelopeId are required")
+        connection = self._connection()
+        try:
+            agreement, _approval = self._load_esign_inputs(
+                connection, tenant_id, payload, approval_required=False
+            )
+            prior_operation = ESignatureOperationRepository(connection, tenant_id=tenant_id).latest(
+                agreement_id=str(agreement["id"])
+            )
+            if (
+                prior_operation is not None
+                and prior_operation.get("providerEnvelopeId") == envelope_id
+                and prior_operation.get("state") == "completed"
+            ):
+                return {"eSignature": prior_operation, "duplicate": True}
+            if not permit_digest:
+                raise ConnectorRejected("effect_permit_required")
+            if (
+                agreement.get("executionState") == "agent_approved"
+                and prior_operation
+                and prior_operation.get("state") == "presented"
+            ):
+                repaired = dict(agreement)
+                repaired["version"] = int(agreement["version"]) + 1
+                repaired["executionState"] = "presented"
+                repaired["updatedAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+                agreement = CanonicalRepository(connection, tenant_id=tenant_id).save(
+                    repaired, expected_version=int(agreement["version"])
+                )
+            if agreement.get("executionState") not in {"presented", "partially_signed"}:
+                raise ValueError("agreement must be presented before provider reconciliation")
+            runtime = PostgresConnectorRuntime(
+                connection,
+                tenant_id=tenant_id,
+                activation=self._activation_controller(connection, tenant_id),
+                adapters=self._connector_adapters or {},
+                permit_secret=self._permit_secret,
+            )
+            provider = ConnectorESignatureProvider(
+                _PostgresCalendarInvoker(runtime),
+                request_for=lambda _source, action, raw: {
+                    **request,
+                    "capability": _connector_capability(action),
+                    "providerAction": action,
+                    "payloadDigest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+                },
+                permit_digest=permit_digest,
+            )
+            result = ESignatureOperationService(provider).reconcile(
+                agreement,
+                provider_envelope_id=envelope_id,
+            )
+            operation = {"tenantId": tenant_id, "agreementId": str(agreement["id"]), **result}
+            completed_agreement = result.get("agreement")
+            if result.get("state") == "completed" and isinstance(completed_agreement, dict):
+                repository = CanonicalRepository(connection, tenant_id=tenant_id)
+                executed = dict(completed_agreement)
+                executed["version"] = int(agreement["version"]) + 1
+                executed["executionState"] = "executed"
+                executed["updatedAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+                saved_executed = repository.save(
+                    executed, expected_version=int(agreement["version"])
+                )
+                effective = dict(saved_executed)
+                effective["version"] = int(saved_executed["version"]) + 1
+                effective["executionState"] = "effective"
+                effective["updatedAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+                saved_effective = repository.save(
+                    effective, expected_version=int(saved_executed["version"])
+                )
+                operation["agreement"] = saved_effective
+            ESignatureOperationRepository(connection, tenant_id=tenant_id).append(
+                operation_id=f"esign:reconcile:{agreement['id']}:{envelope_id}:{result['state']}",
+                record=operation,
+            )
+            return {"eSignature": operation}
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _load_esign_inputs(
+        connection: Any,
+        tenant_id: str,
+        payload: dict[str, Any],
+        *,
+        approval_required: bool = True,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        repository = CanonicalRepository(connection, tenant_id=tenant_id)
+        agreement_id = payload.get("agreementId")
+        approval_id = payload.get("approvalId")
+        if not isinstance(agreement_id, str) or not agreement_id:
+            raise ValueError("agreementId is required")
+        agreement = repository.get(agreement_id)
+        if agreement is None or agreement.get("recordType") != "WrittenBuyerAgreement":
+            raise ValueError("published WrittenBuyerAgreement is required")
+        if approval_required:
+            if not isinstance(approval_id, str) or not approval_id:
+                raise ValueError("approvalId is required")
+            approval = repository.get(approval_id)
+            if (
+                approval is None
+                or approval.get("recordType") != "Approval"
+                or approval.get("decision") != "approved"
+                or approval.get("actionIntentId") != agreement_id
+            ):
+                raise PermissionError("published approval for agreement is required")
+            return agreement, approval
+        return agreement, {}
+
+    @staticmethod
+    def _resolve_esign_recipients(
+        connection: Any, tenant_id: str, agreement: dict[str, Any]
+    ) -> list[dict[str, str]]:
+        """Resolve approved signer roles from canonical parties and contact endpoints."""
+        party_ids = agreement.get("buyerPartyIds")
+        if not isinstance(party_ids, list) or not party_ids:
+            raise ValueError("e-signature agreement has no buyer party")
+        repository = CanonicalRepository(connection, tenant_id=tenant_id)
+        parties = {
+            str(record.get("id")): record
+            for record in repository.list_by_type("BuyingParty")
+            if isinstance(record, dict)
+        }
+        persons = {
+            str(record.get("id")): record
+            for record in repository.list_by_type("Person")
+            if isinstance(record, dict)
+        }
+        endpoints = [
+            record
+            for record in repository.list_by_type("ContactEndpoint")
+            if isinstance(record, dict)
+            and record.get("endpointType") == "email"
+            and record.get("ownershipState") in {"asserted", "authorized"}
+            and record.get("verificationState") in {"provider_observed", "verified"}
+            and record.get("contactabilityState") == "contactable"
+        ]
+        by_owner: dict[str, list[dict[str, Any]]] = {}
+        for endpoint in endpoints:
+            by_owner.setdefault(str(endpoint.get("ownerId")), []).append(endpoint)
+        roles = {
+            "buyer": "Buyer",
+            "co_buyer": "CoBuyer",
+            "decision_participant": "DecisionParticipant",
+            "observer": "Observer",
+        }
+        recipients: list[dict[str, str]] = []
+        for party_id in party_ids:
+            party = parties.get(str(party_id))
+            if party is None:
+                raise ValueError("e-signature buyer party is not canonical")
+            members = party.get("members")
+            if not isinstance(members, list) or not members:
+                raise ValueError("e-signature buyer party has no members")
+            for member in members:
+                if not isinstance(member, dict):
+                    raise ValueError("e-signature buyer party member is invalid")
+                person_id = str(member.get("personId") or "")
+                person = persons.get(person_id)
+                choices = sorted(by_owner.get(person_id, []), key=lambda item: str(item.get("id")))
+                if person is None or not choices:
+                    raise ValueError("e-signature signer email endpoint is unavailable")
+                email = str(choices[0]["normalizedValue"])
+                recipients.append(
+                    {
+                        "roleName": roles.get(str(member.get("role")), "Buyer"),
+                        "name": str(person.get("displayName") or "").strip(),
+                        "email": email,
+                    }
+                )
+        if not recipients or any(not item["name"] for item in recipients):
+            raise ValueError("e-signature signer identity is incomplete")
+        return recipients
+
+    def _journeys(
+        self, tenant_id: str, principal_id: str, *, journey_id: str | None = None
+    ) -> dict[str, Any]:
+        connection = self._connection()
+        try:
+            repository = CanonicalRepository(connection, tenant_id=tenant_id)
+            projection = OperatorProjection(
+                repository,
+                tenant_id=tenant_id,
+                derivation_policy=self._journey_view_policy,
+            )
+            snapshot = repository.current_records()
+            if journey_id is not None:
+                return projection.journey_view(
+                    journey_id=journey_id, principal_id=principal_id, records=snapshot
+                )
+            return {
+                "journeys": [
+                    projection.journey_view(
+                        journey_id=str(item["id"]), principal_id=principal_id, records=snapshot
+                    )
+                    for item in snapshot
+                    if item.get("recordType") == "BuyerJourney" and isinstance(item.get("id"), str)
+                ]
+            }
+        finally:
+            connection.close()
+
     def _evaluate(self, tenant_id: str, intent: dict[str, Any]) -> dict[str, Any]:
         connection = self._connection()
         try:
-            reader = CanonicalLockedHabitatStateReader()
+            reader = CanonicalLockedHabitatStateReader(
+                inventory_verifier=self._capability_inventory_verifier,
+                activation_verifier=self._activation_verifier.verify,
+            )
             kernel = HabitatKernel(_LockedStateOnly(), PlatformPolicyEvaluator())
             with connection.cursor() as cursor:
                 cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
@@ -341,7 +1249,10 @@ class ControlPlane:
     def _admit(self, tenant_id: str, intent: dict[str, Any]) -> dict[str, Any]:
         connection = self._connection()
         try:
-            reader = CanonicalLockedHabitatStateReader()
+            reader = CanonicalLockedHabitatStateReader(
+                inventory_verifier=self._capability_inventory_verifier,
+                activation_verifier=self._activation_verifier.verify,
+            )
             kernel = HabitatKernel(_LockedStateOnly(), PlatformPolicyEvaluator())
             repo = PostgresHabitatRepository(
                 connection,
@@ -480,8 +1391,61 @@ class ControlPlane:
             connection,
             tenant_id=tenant_id,
             permit_secret=self._permit_secret,
-            oauth_clients=self._oauth_clients,
+            oauth_clients=PlatformOAuthStore(
+                connection, permit_secret=self._permit_secret
+            ).material(),
         )
+
+    def _save_platform_oauth_client(self, actor_id: str, payload: dict[str, Any]) -> dict[str, str]:
+        del actor_id
+        connection = self._connection()
+        try:
+            return PlatformOAuthStore(connection, permit_secret=self._permit_secret).save(
+                issuer=str(payload.get("issuer") or ""),
+                client_id=str(payload.get("clientId") or ""),
+                client_secret=str(payload.get("clientSecret") or ""),
+                directory_id=(
+                    str(payload.get("directoryId"))
+                    if payload.get("directoryId") is not None
+                    else None
+                ),
+            )
+        finally:
+            connection.close()
+
+    def _admit_actor_authorization(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        if payload.get("recordType") != "ActorTenantAuthorization":
+            raise ValueError("recordType must be ActorTenantAuthorization")
+        if payload.get("tenantId") != tenant_id or payload.get("actorId") != actor_id:
+            raise PermissionError("actor authorization tenant or actor mismatch")
+        connection = self._connection()
+        try:
+            return admit_published_record(connection, payload)
+        finally:
+            connection.close()
+
+    def _admit_operator_policy(
+        self, tenant_id: str, actor_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        del actor_id
+        if payload.get("message_type") != "operator_policy":
+            raise ValueError("message_type must be operator_policy")
+        if payload.get("tenant_id") != tenant_id:
+            raise PermissionError("operator policy tenant mismatch")
+        connection = self._connection()
+        try:
+            return OperatorPolicyRepository(connection, tenant_id=tenant_id).admit(
+                payload,
+                expected_version=(
+                    int(payload["expected_version"])
+                    if payload.get("expected_version") is not None
+                    else None
+                ),
+            )
+        finally:
+            connection.close()
 
     def _connectors(self, tenant_id: str) -> list[dict[str, Any]]:
         connection = self._connection()
@@ -531,6 +1495,37 @@ class ControlPlane:
     def _invoke(self, tenant_id: str, request: dict[str, Any], permit: str) -> dict[str, Any]:
         connection = self._connection()
         try:
+            if self._connector_adapters is not None:
+                encoded_payload = request.get("payloadBase64")
+                governed_request = request.get("request")
+                if (
+                    not isinstance(governed_request, dict)
+                    or not isinstance(encoded_payload, str)
+                    or not encoded_payload
+                ):
+                    raise ConnectorDenied(
+                        "validation_failed",
+                        "configured connector runtime requires request and payloadBase64",
+                    )
+                try:
+                    payload = base64.b64decode(encoded_payload, validate=True)
+                except (ValueError, binascii.Error) as exc:
+                    raise ConnectorDenied("validation_failed", "payloadBase64 is invalid") from exc
+                response = PostgresConnectorRuntime(
+                    connection,
+                    tenant_id=tenant_id,
+                    activation=self._activation_controller(connection, tenant_id),
+                    adapters=self._connector_adapters,
+                    permit_secret=self._permit_secret,
+                ).invoke(
+                    governed_request,
+                    payload,
+                    permit_digest=permit,
+                    preview=request.get("preview")
+                    if isinstance(request.get("preview"), dict)
+                    else None,
+                )
+                return response
             repo = CanonicalRepository(connection, tenant_id=tenant_id)
             return ConnectorGateway(repo, tenant_id=tenant_id).invoke(request, permit_digest=permit)
         finally:
@@ -649,6 +1644,21 @@ def _error(code: str, detail: str) -> dict[str, Any]:
     return {"code": code, "detail": detail}
 
 
+def _voice_observed_at(payload: dict[str, Any]) -> datetime:
+    value = payload.get("observedAt")
+    if value is None:
+        return datetime.now(UTC)
+    if not isinstance(value, str):
+        raise ValueError("observedAt must be an RFC 3339 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("observedAt must be an RFC 3339 timestamp") from exc
+    if parsed.utcoffset() is None:
+        raise ValueError("observedAt must include a timezone")
+    return parsed.astimezone(UTC)
+
+
 def _operator_error(exc: OperatorCommandError, tenant_id: str) -> dict[str, Any]:
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
@@ -662,6 +1672,24 @@ def _operator_error(exc: OperatorCommandError, tenant_id: str) -> dict[str, Any]
         "correlation_id": f"corr-{secrets.token_hex(8)}",
         "safe_detail": exc.detail,
     }
+
+
+def _ui_asset(path: str) -> tuple[bytes, str] | None:
+    """Resolve only the packaged UI shell; never expose arbitrary filesystem paths."""
+    root = Path(os.environ.get("BUYER_OPS_UI_ROOT", Path(__file__).resolve().parents[2] / "ui"))
+    root = root.resolve()
+    route = urlparse(path).path
+    if route in {"/", "/api/connectors/callback"}:
+        relative = Path("index.html")
+    elif route.startswith("/assets/"):
+        relative = Path("assets") / unquote(route.removeprefix("/assets/"))
+    else:
+        return None
+    candidate = (root / relative).resolve()
+    if not candidate.is_relative_to(root) or not candidate.is_file():
+        return None
+    content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+    return candidate.read_bytes(), content_type
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -678,14 +1706,35 @@ class _Handler(BaseHTTPRequestHandler):
         return self.rfile.read(length) if length else b""
 
     def _send(self, status: int, payload: dict[str, Any]) -> None:
-        raw = json.dumps(payload).encode()
+        if payload.get("_httpContentType") == "application/xml":
+            raw = str(payload.get("_httpBody") or "").encode()
+            content_type = "application/xml; charset=utf-8"
+        else:
+            raw = json.dumps(payload).encode()
+            content_type = "application/json"
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
 
+    def _send_asset(self, asset: tuple[bytes, str]) -> None:
+        raw, content_type = asset
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(raw)
+
     def do_GET(self) -> None:
+        asset = _ui_asset(self.path)
+        if asset is not None:
+            self._send_asset(asset)
+            return
+        if urlparse(self.path).path.startswith("/assets/"):
+            self.send_error(404)
+            return
         status, payload = self.plane.handle("GET", self.path, self._headers(), b"")
         self._send(status, payload)
 
@@ -719,6 +1768,28 @@ def main() -> int:
             "BUYER_OPS_RELEASE_PUBLIC_KEYS_JSON are required"
         )
     release_public_keys = _parse_release_public_keys(release_keys_json)
+    journey_view_policy = load_journey_view_policy()
+    ingress_factory = ConfiguredIngressRuntimeFactory.from_environment()
+    connector_adapters = configured_adapters_from_environment()
+    cognitive_runtime = None
+    cognitive_configured = all(
+        os.environ.get(name, "").strip()
+        for name in (
+            "BUYER_OPS_COGNITIVE_ROUTE_POLICY_JSON",
+            "BUYER_OPS_COGNITIVE_IDENTITIES_JSON",
+            "BUYER_OPS_COGNITIVE_PROFILES_JSON",
+            "BUYER_OPS_COGNITIVE_RUNTIMES_JSON",
+        )
+    )
+    if cognitive_configured:
+        credential_resolver = PostgresCognitiveCredentialResolver(
+            dsn,
+            permit_secret=secret.encode(),
+        )
+        cognitive_runtime = CognitiveRuntimeService(
+            configuration_from_environment(credential_resolver),
+            credential_context=credential_resolver,
+        )
     host = os.environ.get("BUYER_OPS_CONTROL_HOST", "0.0.0.0")
     port = int(os.environ.get("BUYER_OPS_CONTROL_PORT", "8090"))
     plane = ControlPlane(
@@ -727,6 +1798,11 @@ def main() -> int:
         control_token=token,
         release_public_keys=release_public_keys,
         gate_registry_path=Path(registry_path),
+        ingress_provider_runtime_factory=ingress_factory,
+        ingress_webhook_factory=ingress_factory,
+        journey_view_policy=journey_view_policy,
+        connector_adapters=connector_adapters,
+        cognitive_runtime=cognitive_runtime,
     )
     server = serve(host, port, plane)
     print(f"buyer-ops control plane listening on {host}:{port}", flush=True)

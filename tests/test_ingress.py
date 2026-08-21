@@ -98,6 +98,11 @@ def test_inbound_envelope_rejects_unpublished_fields_and_invalid_nested_contract
     with pytest.raises(ValueError):
         InboundEnvelope.from_mapping({**_envelope().to_mapping(), "tenantId": "untrusted"})
 
+
+def test_phone_inbound_envelope_is_admitted_as_a_phone_conversation_channel() -> None:
+    envelope = InboundEnvelope.from_mapping({**_envelope().to_mapping(), "channel": "phone"})
+    assert envelope.channel == "phone"
+
     invalid = _envelope().to_mapping()
     invalid["attribution"] = {
         "messageType": "attribution_input",

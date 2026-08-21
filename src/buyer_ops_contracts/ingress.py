@@ -48,7 +48,7 @@ class InboundEnvelope:
     schema_version: Literal["ot01.inbound/1"]
     provider_event_id: str
     provider_account_ref: str
-    channel: Literal["form", "email", "sms"]
+    channel: Literal["form", "email", "sms", "phone"]
     received_at: str
     sender_endpoint: str
     recipient_endpoint: str
@@ -67,7 +67,7 @@ class InboundEnvelope:
             raise ValueError("inbound envelope has missing or unpublished fields")
         if value["schemaVersion"] != "ot01.inbound/1":
             raise ValueError("unsupported inbound envelope version")
-        if value["channel"] not in {"form", "email", "sms"}:
+        if value["channel"] not in {"form", "email", "sms", "phone"}:
             raise ValueError("unsupported inbound channel")
         if value["signatureVerification"] not in {"verified", "not_supported"}:
             raise ValueError("invalid signature verification disposition")

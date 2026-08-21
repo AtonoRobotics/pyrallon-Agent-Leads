@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from .digest import sha256_digest
 from .errors import ContractViolation, Violation
 
 
@@ -166,6 +167,41 @@ def validate_closure_semantics(record: dict[str, Any], *, now: datetime | None =
                     "ACCESSIBILITY_WAIVER_LEGAL_BASIS",
                     "$.legalBasis",
                     "protected WCAG obligations require explicit legal basis",
+                )
+            )
+    if record_type == "AccessibilityBinding":
+        expected = sha256_digest(
+            {
+                key: record[key]
+                for key in (
+                    "tenantId",
+                    "recordId",
+                    "recordVersion",
+                    "operatorAcceptanceRecordId",
+                    "operatorAcceptanceDigest",
+                    "closureEvidenceRecordId",
+                    "closureEvidenceDigest",
+                    "surface",
+                    "buildDigest",
+                    "releaseDigest",
+                    "expiresAt",
+                )
+            }
+        )
+        if record["bindingDigest"] != expected:
+            violations.append(
+                Violation(
+                    "ACCESSIBILITY_BINDING_DIGEST",
+                    "$.bindingDigest",
+                    "bindingDigest must bind the exact acceptance, evidence, surface, build, and release",
+                )
+            )
+        if _timestamp(record["expiresAt"]) <= current:
+            violations.append(
+                Violation(
+                    "ACCESSIBILITY_BINDING_EXPIRED",
+                    "$.expiresAt",
+                    "accessibility binding is expired",
                 )
             )
     if violations:

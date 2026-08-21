@@ -4,21 +4,51 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from buyer_ops_contracts.connector_authorization import (
     ConnectorAuthorization,
     PlatformOAuthStore,
     _pkce_challenge,
     _pkce_verifier,
+    _platform_key,
+    _provider_for_connector,
     _return_origin_allowed,
     canonical_connector_redirect,
+    load_connector_credential,
     oauth_clients_from_env,
     parse_oauth_state,
+    refresh_connector_credential,
 )
 from buyer_ops_contracts.errors import SetupRejected
 
 NOW = datetime(2026, 8, 19, 18, 0, tzinfo=UTC)
 SECRET = b"x" * 32
+
+
+class _CredentialCursor:
+    def __init__(self, row: tuple[object, ...] | None) -> None:
+        self.row = row
+
+    def __enter__(self) -> _CredentialCursor:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(self, statement: str, parameters: tuple[object, ...] = ()) -> None:
+        del statement, parameters
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self.row
+
+
+class _CredentialConnection:
+    def __init__(self, row: tuple[object, ...] | None) -> None:
+        self.cursor_instance = _CredentialCursor(row)
+
+    def cursor(self) -> _CredentialCursor:
+        return self.cursor_instance
 
 
 class _Cursor:
@@ -65,8 +95,14 @@ class _Cursor:
                     session["consumed_at"],
                     session.get("return_origin") or "",
                 )
+        elif "FROM canonical_records_current" in statement:
+            self._many = [
+                (grant,)
+                for grant in self.store.get("grants", [])
+                if grant.get("connectorId") == parameters[1]
+            ]
         elif "UPDATE connector_oauth_sessions" in statement:
-            session = self.store["sessions"].get(str(parameters[1]))
+            session = self.store["sessions"].get(str(parameters[2]))
             if session is not None:
                 session["consumed_at"] = NOW
         elif "INSERT INTO connector_credentials" in statement:
@@ -215,6 +251,23 @@ def test_platform_oauth_store_accepts_google_and_twilio() -> None:
     assert saved == {"issuer": "twilio", "clientId": "CNconnectapp", "configured": "true"}
 
 
+def test_docusign_oauth_provider_is_first_class_and_uses_signature_scopes() -> None:
+    provider = _provider_for_connector(
+        "esign.docusign",
+        {"docusign": {"client_id": "integration-key", "client_secret": "secret"}},
+    )
+
+    assert provider.issuer == "docusign"
+    assert provider.scopes == ("signature", "impersonation")
+    assert provider.authorize_url.endswith("/oauth/auth")
+    assert provider.token_url.endswith("/oauth/token")
+
+
+def test_docusign_redirect_requires_https_or_localhost() -> None:
+    with pytest.raises(SetupRejected, match="http OAuth redirects"):
+        canonical_connector_redirect("docusign", "http://192.168.1.10/callback")
+
+
 def test_microsoft_environment_has_no_implicit_directory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -250,13 +303,7 @@ def test_platform_oauth_readiness_requires_microsoft_directory(
     assert store.material()["microsoft"] == {}
 
 
-@pytest.mark.parametrize(
-    "connector_id",
-    ["google.workspace", "microsoft.365", "twilio.sms"],
-)
-def test_start_oauth_fails_closed_without_governing_admission(
-    connector_id: str,
-) -> None:
+def test_start_oauth_requires_a_current_actor_bound_grant() -> None:
     http = _Http({})
     connection = _Connection()
     auth = ConnectorAuthorization(
@@ -279,20 +326,59 @@ def test_start_oauth_fails_closed_without_governing_admission(
     with pytest.raises(SetupRejected) as raised:
         auth.start_oauth(
             actor_id="actor-1",
-            connector_id=connector_id,
+            connector_id="google.workspace",
             redirect_uri="http://127.0.0.1/api/connectors/callback",
         )
 
-    assert raised.value.code == "configuration_incomplete"
+    assert raised.value.code == "authority_denied"
     assert connection.store == {"sessions": {}, "credentials": {}}
-    assert connection.cursor_instance.sql == ""
-    assert connection.commits == 0
-    assert connection.rollbacks == 0
+    assert "canonical_records_current" in connection.cursor_instance.sql
+    assert connection.commits == 1
     assert http.calls == []
 
 
-def test_complete_oauth_fails_closed_without_consuming_existing_session() -> None:
+def test_start_oauth_persists_pkce_session_and_returns_provider_url() -> None:
     http = _Http({})
+    connection = _Connection()
+    connection.store["grants"] = [
+        {
+            "id": "grant-google",
+            "connectorId": "google.workspace",
+            "grantState": "pending",
+            "grantorId": "actor-1",
+        }
+    ]
+    auth = ConnectorAuthorization(
+        connection,
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={"google": {"client_id": "google-client", "client_secret": "google-secret"}},
+        http=http,
+        clock=lambda: NOW,
+    )
+    result = auth.start_oauth(
+        actor_id="actor-1",
+        connector_id="google.workspace",
+        redirect_uri="http://127.0.0.1/api/connectors/callback",
+        return_origin="http://127.0.0.1:8090",
+    )
+    assert result["connectorId"] == "google.workspace"
+    assert "accounts.google.com/o/oauth2/v2/auth" in result["authorizationUrl"]
+    assert "code_challenge_method=S256" in result["authorizationUrl"]
+    assert len(connection.store["sessions"]) == 1
+    assert connection.commits == 2
+
+
+def test_complete_oauth_exchanges_code_and_encrypts_credential() -> None:
+    http = _Http(
+        {
+            "oauth2.googleapis.com/token": (
+                200,
+                {"access_token": "provider-secret", "expires_in": 3600},
+            ),
+            "openidconnect.googleapis.com": (200, {"email": "agent@example.com"}),
+        }
+    )
     connection = _Connection()
     auth = ConnectorAuthorization(
         connection,
@@ -314,16 +400,50 @@ def test_complete_oauth_fails_closed_without_consuming_existing_session() -> Non
     }
     state = auth._sign_state("session-existing", expires)
 
-    with pytest.raises(SetupRejected) as raised:
-        auth.complete_oauth(code="provider-code", state=state, actor_id="actor-1")
+    result = auth.complete_oauth(code="provider-code", state=state, actor_id="actor-1")
+    assert result["providerAccountRef"] == "agent@example.com"
+    assert result["authorization"] == "bound"
+    assert connection.store["sessions"]["session-existing"]["consumed_at"] == NOW
+    assert connection.store["credentials"]["grant-existing"]["account"] == "agent@example.com"
+    assert connection.store["credentials"]["grant-existing"]["status"] == "bound"
+    assert http.calls == [
+        ("POST", "https://oauth2.googleapis.com/token"),
+        ("GET", "https://openidconnect.googleapis.com/v1/userinfo"),
+    ]
 
-    assert raised.value.code == "configuration_incomplete"
-    assert connection.store["sessions"]["session-existing"]["consumed_at"] is None
-    assert connection.store["credentials"] == {}
-    assert connection.cursor_instance.sql == ""
-    assert connection.commits == 0
-    assert connection.rollbacks == 0
-    assert http.calls == []
+
+def test_docusign_identity_resolves_account_id_from_userinfo_accounts() -> None:
+    http = _Http(
+        {
+            "account-d.docusign.com/oauth/userinfo": (
+                200,
+                {
+                    "accounts": [
+                        {"account_id": "docusign-account-1", "base_uri": "https://www.docusign.net"}
+                    ]
+                },
+            )
+        }
+    )
+    auth = ConnectorAuthorization(
+        _Connection(),
+        tenant_id="brokerage-live-1",
+        permit_secret=SECRET,
+        oauth_clients={
+            "docusign": {
+                "client_id": "docusign-client",
+                "client_secret": "docusign-secret",
+            }
+        },
+        http=http,
+        clock=lambda: NOW,
+    )
+
+    provider = _provider_for_connector(
+        "esign.docusign",
+        {"docusign": {"client_id": "docusign-client", "client_secret": "docusign-secret"}},
+    )
+    assert auth._provider_identity(provider, "access-token", {}) == "docusign-account-1"
 
 
 def test_existing_connector_binding_remains_readable_without_mutation() -> None:
@@ -354,3 +474,140 @@ def test_existing_connector_binding_remains_readable_without_mutation() -> None:
     assert connection.commits == 1
     assert connection.rollbacks == 0
     assert http.calls == []
+
+
+def test_load_connector_credential_decrypts_only_the_bound_tenant_grant() -> None:
+    nonce = b"0123456789ab"
+    ciphertext = AESGCM(_platform_key(SECRET)).encrypt(
+        nonce, b"provider-access-token", b"calendar-google"
+    )
+    row = (
+        "calendar-google",
+        "google_calendar",
+        "google-account-1",
+        ciphertext,
+        nonce,
+        NOW + timedelta(hours=1),
+        "bound",
+    )
+
+    credential = load_connector_credential(
+        _CredentialConnection(row),
+        tenant_id="tenant-1",
+        grant_id="grant-1",
+        connector_id="calendar-google",
+        permit_secret=SECRET,
+        now=NOW,
+    )
+
+    assert credential == (
+        "calendar-google",
+        "google_calendar",
+        "google-account-1",
+        "provider-access-token",
+    )
+
+
+class _RefreshCursor:
+    def __init__(self, row: tuple[object, ...]) -> None:
+        self.row = row
+        self.updated: tuple[object, ...] | None = None
+
+    def __enter__(self) -> _RefreshCursor:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(self, statement: str, parameters: tuple[object, ...] = ()) -> None:
+        if "UPDATE connector_credentials" in statement:
+            self.updated = parameters
+
+    def fetchone(self) -> tuple[object, ...]:
+        return self.row
+
+
+class _RefreshConnection:
+    def __init__(self, row: tuple[object, ...]) -> None:
+        self.cursor_instance = _RefreshCursor(row)
+        self.commits = 0
+
+    def cursor(self) -> _RefreshCursor:
+        return self.cursor_instance
+
+    def commit(self) -> None:
+        self.commits += 1
+
+
+class _RefreshHttp:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, bytes | None]] = []
+
+    def request(
+        self, method: str, url: str, *, headers: dict[str, str], data: bytes | None, timeout: float
+    ):
+        del headers, timeout
+        self.calls.append((method, url, data))
+        return 200, {"access_token": "refreshed-access", "expires_in": 3600}
+
+
+def test_expired_google_oauth_credential_refreshes_without_exposing_refresh_material() -> None:
+    connector_id = "google.workspace.calendar"
+    refresh_nonce = b"refreshnonce1"
+    refresh_ciphertext = AESGCM(_platform_key(SECRET)).encrypt(
+        refresh_nonce, b"provider-refresh-token", connector_id.encode()
+    )
+    connection = _RefreshConnection(
+        (connector_id, "google", "google-account-1", refresh_ciphertext, refresh_nonce, "bound")
+    )
+    http = _RefreshHttp()
+
+    credential = refresh_connector_credential(
+        connection,
+        tenant_id="tenant-1",
+        grant_id="grant-1",
+        connector_id=connector_id,
+        permit_secret=SECRET,
+        now=NOW,
+        oauth_clients={"google": {"client_id": "client", "client_secret": "secret"}},
+        http=http,
+    )
+
+    assert credential == (connector_id, "google", "google-account-1", "refreshed-access")
+    assert connection.commits == 1
+    assert http.calls[0][0] == "POST"
+    assert http.calls[0][1] == "https://oauth2.googleapis.com/token"
+    assert b"grant_type=refresh_token" in (http.calls[0][2] or b"")
+    assert connection.cursor_instance.updated is not None
+    assert b"provider-refresh-token" not in connection.cursor_instance.updated
+
+
+@pytest.mark.parametrize("status", ["revoked", "expired"])
+def test_load_connector_credential_fails_closed_for_inactive_or_expired_binding(
+    status: str,
+) -> None:
+    nonce = b"0123456789ab"
+    ciphertext = AESGCM(_platform_key(SECRET)).encrypt(
+        nonce, b"provider-access-token", b"calendar-google"
+    )
+    row = (
+        "calendar-google",
+        "google_calendar",
+        "google-account-1",
+        ciphertext,
+        nonce,
+        NOW - timedelta(hours=1) if status == "expired" else NOW + timedelta(hours=1),
+        "bound" if status == "expired" else "revoked",
+    )
+
+    assert (
+        load_connector_credential(
+            _CredentialConnection(row),
+            tenant_id="tenant-1",
+            grant_id="grant-1",
+            connector_id="calendar-google",
+            permit_secret=SECRET,
+            now=NOW,
+        )
+        is None
+    )

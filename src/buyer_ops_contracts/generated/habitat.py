@@ -45,6 +45,25 @@ class Recipient(BaseModel):
     recipient_id: Id
 
 
+class EffectContext(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    activation_id: Id
+    activation_digest: Digest
+    capability_id: Id
+    inventory_record_id: Id
+    inventory_record_version: conint(ge=1)
+    inventory_digest: Digest
+    constraint_digest: Digest
+    grant_id: Id
+    grant_version: conint(ge=1)
+    draft_preview_record_id: Id
+    draft_preview_record_version: conint(ge=1)
+    draft_preview_digest: Digest
+    delegated_principal_id: Id
+
+
 class HabitatEffectIntent(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -58,6 +77,7 @@ class HabitatEffectIntent(BaseModel):
     activity_id: Id
     action_class: Id
     connector_binding_id: Id
+    effect_context: EffectContext
     target_resource: TargetResource
     recipient: Recipient
     payload_digest: Digest

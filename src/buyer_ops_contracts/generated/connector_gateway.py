@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, RootModel, conint, constr
 
@@ -65,6 +65,7 @@ class Response(Base):
     outcome: Outcome
     providerVersion: str | None = None
     payloadDigest: Digest
+    providerResponse: dict[str, Any] | None = None
 
 
 class ChangeType(Enum):

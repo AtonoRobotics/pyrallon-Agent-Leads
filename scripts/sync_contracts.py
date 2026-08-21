@@ -54,6 +54,19 @@ MAPPINGS = {
         "AVAILABILITY-BOOKING.schema.json",
         "availability_booking.schema.json",
     ),
+    "nurture_plan": ("NURTURE-PLAN.schema.json", "nurture_plan.schema.json"),
+    "transaction_coordination": (
+        "TRANSACTION-COORDINATION.schema.json",
+        "transaction_coordination.schema.json",
+    ),
+    "consultation_operation": (
+        "CONSULTATION-OPERATION.schema.json",
+        "consultation_operation.schema.json",
+    ),
+    "representation_operation": (
+        "REPRESENTATION-OPERATION.schema.json",
+        "representation_operation.schema.json",
+    ),
 }
 
 

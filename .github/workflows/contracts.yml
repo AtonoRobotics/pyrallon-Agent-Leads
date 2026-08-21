@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
@@ -39,19 +39,62 @@ jobs:
           cache: pip
       - run: python -m pip install uv==0.11.16
       - run: uv sync --locked --extra dev
+      - name: Run mandatory whole-repository production guard
+        run: uv run python scripts/production_guard.py
+      - name: Cache Temporal test server
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ runner.temp }}/temporal-test-server
+          key: temporal-test-server-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('uv.lock') }}
+      - name: Provision Temporal test server
+        env:
+          TEMPORAL_TEST_SERVER_DIR: ${{ runner.temp }}/temporal-test-server
+        run: |
+          set -euo pipefail
+          mkdir -p "$TEMPORAL_TEST_SERVER_DIR"
+          if ! find "$TEMPORAL_TEST_SERVER_DIR" -type f -perm -u+x -print -quit | grep -q .; then
+            uv run python - <<'PY'
+          import asyncio
+          import os
+
+          from temporalio.testing import WorkflowEnvironment
+
+
+          async def main() -> None:
+              environment = await WorkflowEnvironment.start_time_skipping(
+                  download_dest_dir=os.environ["TEMPORAL_TEST_SERVER_DIR"]
+              )
+              await environment.shutdown()
+
+
+          asyncio.run(main())
+          PY
+          fi
+          server_path="$(find "$TEMPORAL_TEST_SERVER_DIR" -type f -perm -u+x -print -quit)"
+          test -n "$server_path"
+          echo "TEMPORAL_TEST_SERVER_PATH=$server_path" >> "$GITHUB_ENV"
       - name: Verify governing gate registry
         run: uv run python scripts/verify_gate_registry.py
       - name: Verify OT-01 completion ledger
         run: uv run python scripts/verify_completion_ledger.py
+      - name: Verify production completion ledger
+        run: uv run python scripts/verify_production_ledger.py --check
+      - name: Verify whole-repository production scope
+        run: uv run python scripts/verify_production_scope.py
+      - name: Verify whole-repository production execution cursor
+        run: uv run python scripts/verify_production_execution.py
       - name: Verify canonical migration integrity
         run: uv run python scripts/verify_migrations.py
       - name: Verify contract synchronization without writes
         run: uv run python scripts/sync_contracts.py --check
+      - name: Verify specification closure package
+        run: uv run python scripts/verify_spec_closure.py
       - run: uv run python scripts/verify_contracts.py
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - run: uv run pytest
+      - name: Run tests with an explicit timeout
+        run: timeout --signal=TERM --kill-after=30s 20m uv run pytest -vv --durations=25
       - name: Build source and wheel distributions
         run: |
           uv build --sdist --wheel --out-dir dist
@@ -65,3 +108,9 @@ jobs:
             "from buyer_ops_contracts.telemetry import load_metric_catalog; catalog = load_metric_catalog(); assert catalog['catalogVersion'] == 'telemetry-slo-catalog/1.0.0'"
       - name: Scan for committed credential material
         run: uv run python scripts/scan_secrets.py
+      - name: Verify native iOS client
+        run: uv run python scripts/verify_ios_surface.py
+      - name: Verify PostgreSQL backup tooling
+        run: uv run pytest -q tests/test_postgres_backup_restore.py
+      - name: Run production evaluation contract tests
+        run: uv run pytest -q tests/test_evaluations.py

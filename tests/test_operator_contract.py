@@ -160,3 +160,67 @@ def test_complete_correction_authorization_and_approval_mutations_are_admitted()
         command["payload_digest"] = command_payload_digest(command)
         validate_record(command, "operator_surface")
         validate_operator_semantics(command)
+
+
+@pytest.mark.parametrize("command_type, decision", [("approve", "approved"), ("deny", "denied")])
+def test_approval_decision_creates_an_immutable_successor(command_type: str, decision: str) -> None:
+    prior = _ontology("Approval", "approval-pending-1")
+    prior.update(
+        version=2,
+        status="superseded",
+        decision="pending",
+        decidedAt="2029-01-01T00:00:00Z",
+        expiresAt="2031-01-01T00:00:00Z",
+        effectiveTo="2030-01-01T00:00:00Z",
+    )
+    successor = _ontology("Approval", f"approval-{decision}-1")
+    successor.update(
+        version=1,
+        status="active",
+        decision=decision,
+        decidedAt="2030-01-01T00:00:00Z",
+        expiresAt="2031-01-01T00:00:00Z",
+        effectiveFrom="2030-01-01T00:00:00Z",
+        supersedesId=prior["id"],
+    )
+    command = _mutation_command(command_type, "Approval", prior["id"])
+    command["mutation"] = {
+        "kind": "approval_decision",
+        "prior_approval_update": prior,
+        "decided_approval_record": successor,
+    }
+    command["payload_digest"] = command_payload_digest(command)
+    validate_record(command, "operator_surface")
+    validate_operator_semantics(command)
+
+
+def test_workflow_command_binds_reference_successor_and_signal() -> None:
+    workflow = _ontology("WorkflowReference", "workflow-reference-1")
+    workflow.update(
+        tenantId="tenant-1",
+        version=2,
+        updatedAt="2030-01-01T00:01:00Z",
+        subjectId="journey-1",
+        executionState="waiting",
+        observedAt="2030-01-01T00:01:00Z",
+    )
+    command = _mutation_command("pause_workflow", "WorkflowReference", workflow["id"])
+    command["tenant_id"] = "tenant-1"
+    command["journey_id"] = "journey-1"
+    command["authority"].update(resource_type="WorkflowReference", resource_id=workflow["id"])
+    command["mutation"] = {
+        "kind": "workflow_command",
+        "workflow_reference_update": workflow,
+        "workflow_reference_expected_version": 1,
+        "signal_name": "pause",
+        "signal_id": "signal-pause-1",
+        "signal_payload": {},
+    }
+    command["payload_digest"] = command_payload_digest(command)
+    validate_record(command, "operator_surface")
+    validate_operator_semantics(command)
+
+    command["mutation"]["signal_name"] = "resume"
+    command["payload_digest"] = command_payload_digest(command)
+    with pytest.raises(ContractViolation, match="OPERATOR_WORKFLOW_COMMAND_BINDING"):
+        validate_operator_semantics(command)

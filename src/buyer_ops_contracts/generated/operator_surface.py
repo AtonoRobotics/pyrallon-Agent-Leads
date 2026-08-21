@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import (
     AwareDatetime,
@@ -268,17 +268,48 @@ class ApprovalRevocationMutation(BaseModel):
     revoked_approval_record: CanonicalRecordPayload
 
 
+class ApprovalDecisionMutation(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['approval_decision']
+    prior_approval_update: CanonicalRecordPayload
+    decided_approval_record: CanonicalRecordPayload
+
+
+class SignalName(Enum):
+    pause = 'pause'
+    resume = 'resume'
+    canonical_changed = 'canonical_changed'
+
+
+class WorkflowCommandMutation(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['workflow_command']
+    workflow_reference_update: CanonicalRecordPayload
+    workflow_reference_expected_version: conint(ge=1)
+    signal_name: SignalName
+    signal_id: Id
+    signal_payload: dict[str, Any]
+
+
 class CanonicalMutation(
     RootModel[
         CorrectionMutation
         | AuthorizationRevocationMutation
         | ApprovalRevocationMutation
+        | ApprovalDecisionMutation
+        | WorkflowCommandMutation
     ]
 ):
     root: (
         CorrectionMutation
         | AuthorizationRevocationMutation
         | ApprovalRevocationMutation
+        | ApprovalDecisionMutation
+        | WorkflowCommandMutation
     )
 
 

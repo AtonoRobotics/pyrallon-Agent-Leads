@@ -134,10 +134,12 @@ def test_generated_closure_fixtures_cover_every_admitted_record_type() -> None:
         "EffectDraftPreview",
         "ContextSourceFreshness",
         "OutputClassMapping",
+        "EffectPolicy",
         "MetricDefinition",
         "MetricObservation",
         "ReleaseEvidence",
         "AccessibilityEvidence",
+        "AccessibilityBinding",
     }
     assert set(valid) == expected
     assert set(invalid) == expected

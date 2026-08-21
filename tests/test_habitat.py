@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from buyer_ops_contracts.digest import sha256_digest
 from buyer_ops_contracts.errors import ContractViolation
 from buyer_ops_contracts.habitat import (
     HabitatKernel,
@@ -22,6 +23,21 @@ def _intent() -> dict:
         "activity_id": "activity-1",
         "action_class": "send_message",
         "connector_binding_id": "connector-1",
+        "effect_context": {
+            "activation_id": "activation-1",
+            "activation_digest": "sha256:" + "b" * 64,
+            "capability_id": "send",
+            "inventory_record_id": "inventory-1",
+            "inventory_record_version": 1,
+            "inventory_digest": "sha256:" + "c" * 64,
+            "constraint_digest": "sha256:" + "d" * 64,
+            "grant_id": "grant-1",
+            "grant_version": 1,
+            "draft_preview_record_id": "proposal-1",
+            "draft_preview_record_version": 1,
+            "draft_preview_digest": "sha256:" + "e" * 64,
+            "delegated_principal_id": "principal-1",
+        },
         "target_resource": {
             "resource_type": "conversation",
             "resource_id": "conversation-1",
@@ -132,6 +148,101 @@ def _workflow_reference() -> dict:
     }
 
 
+def _bound_effect_state(intent: dict) -> HabitatState:
+    activation = {
+        "messageType": "activation_decision",
+        "decisionId": "activation-1",
+        "capabilityId": "send",
+        "decision": "activate",
+        "tenantId": "tenant-1",
+    }
+    inventory = {
+        "recordId": "inventory-1",
+        "recordVersion": 1,
+        "recordType": "CapabilityInventory",
+        "tenantId": "tenant-1",
+        "connectorId": "connector-1",
+        "status": "current",
+        "effectiveFrom": "2029-01-01T00:00:00Z",
+        "expiresAt": "2030-12-31T00:00:00Z",
+        "inventoryDigest": intent["effect_context"]["inventory_digest"],
+        "capabilities": ["send"],
+        "capabilityEffects": [
+            {
+                "capability": "send",
+                "actionClasses": ["send_message"],
+                "constraintDigest": intent["effect_context"]["constraint_digest"],
+            }
+        ],
+    }
+    preview = {
+        "recordType": "EffectDraftPreview",
+        "tenantId": "tenant-1",
+        "recordId": "proposal-1",
+        "recordVersion": 1,
+        "status": "current",
+        "connectorId": "connector-1",
+        "inventoryRecordId": "inventory-1",
+        "inventoryRecordVersion": 1,
+        "inventoryDigest": intent["effect_context"]["inventory_digest"],
+        "grantId": "grant-1",
+        "grantVersion": 1,
+        "delegatedPrincipalId": "principal-1",
+        "capability": "send",
+        "actionClass": "send_message",
+        "payloadDigest": intent["payload_digest"],
+        "idempotencyKey": intent["idempotency_key"],
+        "targetRefs": ["conversation-1"],
+        "recipientRefs": ["person-1"],
+        "requestedExecutionWindow": {
+            "notBefore": "2029-12-31T00:00:00Z",
+            "expiresAt": "2030-01-02T00:00:00Z",
+        },
+    }
+    return HabitatState(
+        records=_matching_records(),
+        principal=_principal(),
+        authorization=_authorization(),
+        workflow_reference=_workflow_reference(),
+        connector_grant={
+            "id": "grant-1",
+            "version": 1,
+            "tenantId": "tenant-1",
+            "connectorBindingId": "connector-1",
+            "principalId": "principal-1",
+            "state": "active",
+            "actionClasses": ["send_message"],
+        },
+        release_activation=activation,
+        release_activation_verified=True,
+        capability_inventory=inventory,
+        capability_inventory_verified=True,
+        effect_draft_preview=preview,
+        effect_context_loaded=True,
+    )
+
+
+def test_habitat_requires_exact_effect_context_bindings() -> None:
+    intent = _intent()
+    state = _bound_effect_state(intent)
+    intent["effect_context"]["activation_digest"] = sha256_digest(state.release_activation)
+    intent["effect_context"]["draft_preview_digest"] = sha256_digest(state.effect_draft_preview)
+    decision = HabitatKernel(_StateReader(state), _Policy()).admit(
+        intent,
+        expected_tenant_id="tenant-1",
+        evaluated_at=datetime(2030, 1, 1, 0, 4, tzinfo=UTC),
+    )
+    assert decision.allowed is True
+
+    intent["effect_context"]["constraint_digest"] = "sha256:" + "f" * 64
+    decision = HabitatKernel(_StateReader(state), _Policy()).admit(
+        intent,
+        expected_tenant_id="tenant-1",
+        evaluated_at=datetime(2030, 1, 1, 0, 4, tzinfo=UTC),
+    )
+    assert decision.reason == "effect_context_mismatch"
+
+
 def test_habitat_denies_non_current_workflow_ownership() -> None:
     state = HabitatState(
         records=_matching_records(),
@@ -231,6 +342,8 @@ def test_habitat_active_suppression_dominates_current_consent() -> None:
         "state": "active",
         "actionClasses": ["send_message"],
         "channel": "email",
+        "grantedAt": "2029-01-01T00:00:00Z",
+        "expiresAt": "2030-12-31T00:00:00Z",
         "requiresConsent": True,
     }
     consent = {

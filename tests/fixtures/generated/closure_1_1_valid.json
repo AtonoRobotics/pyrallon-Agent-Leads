@@ -140,6 +140,28 @@
     "groundingMode": "all_claims_grounded",
     "effectEligibility": "none"
   },
+  "EffectPolicy": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "effectpolicy",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "EffectPolicy",
+    "expiresAt": "2030-02-01T00:00:00Z",
+    "policyId": "effect-policy-1",
+    "policyVersion": "effect-policy/1",
+    "rules": [
+      {
+        "actionClass": "send_message",
+        "disposition": "allowed"
+      }
+    ]
+  },
   "MetricDefinition": {
     "schemaVersion": "open-019-024/1.1.0",
     "tenantId": "tenant-1",
@@ -244,5 +266,27 @@
     "knownExceptions": [],
     "outcome": "current",
     "ownerId": "accessibility-owner"
+  },
+  "AccessibilityBinding": {
+    "schemaVersion": "open-019-024/1.1.0",
+    "tenantId": "tenant-1",
+    "recordId": "accessibilitybinding",
+    "recordVersion": 1,
+    "observedAt": "2030-01-01T00:00:00Z",
+    "effectiveFrom": "2030-01-01T00:00:00Z",
+    "status": "current",
+    "evidenceRefs": [
+      "evidence-1"
+    ],
+    "recordType": "AccessibilityBinding",
+    "expiresAt": "2030-02-01T00:00:00Z",
+    "operatorAcceptanceRecordId": "acceptance-web",
+    "operatorAcceptanceDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "closureEvidenceRecordId": "accessibilityevidence",
+    "closureEvidenceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "surface": "web",
+    "buildDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "releaseDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "bindingDigest": "sha256:4907a6d014a614e0440139614e1a0bca916712c06c658021e12eb70b5006dffa"
   }
 }

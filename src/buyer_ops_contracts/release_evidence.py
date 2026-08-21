@@ -11,6 +11,8 @@ from typing import Any, Protocol
 import yaml
 
 from .closure import validate_closure_semantics
+from .digest import sha256_digest
+from .errors import ContractViolation
 from .structural import validate_record
 
 
@@ -173,6 +175,77 @@ def evaluate_accessibility_evidence(
                 f"surface {surface} requires exactly one current build-bound WCAG evidence record"
             )
         accepted.append(candidates[0]["recordId"])
+    return tuple(accepted)
+
+
+def evaluate_accessibility_bindings(
+    bindings: Iterable[dict[str, Any]],
+    evidence: Iterable[dict[str, Any]],
+    *,
+    tenant_id: str,
+    release_digest: str,
+    deployed_builds: dict[str, str],
+    acceptance_digests: dict[str, str],
+    now: datetime,
+) -> tuple[str, ...]:
+    """Require one non-expired binding from each deployed surface to exact artifacts."""
+    evaluated_at = now.astimezone(UTC)
+    evidence_by_id: dict[str, dict[str, Any]] = {}
+    for record in evidence:
+        validate_record(record, "closure")
+        if record.get("recordType") != "AccessibilityEvidence":
+            raise ReleaseEvidenceRejected("binding source must be accessibility evidence")
+        if record["tenantId"] != tenant_id:
+            raise ReleaseEvidenceRejected("accessibility evidence tenant mismatch")
+        evidence_by_id[record["recordId"]] = record
+
+    by_surface: dict[str, list[dict[str, Any]]] = {}
+    for binding in bindings:
+        try:
+            validate_record(binding, "closure")
+            validate_closure_semantics(binding, now=evaluated_at)
+        except ContractViolation as exc:
+            raise ReleaseEvidenceRejected(str(exc)) from exc
+        if binding.get("recordType") != "AccessibilityBinding":
+            raise ReleaseEvidenceRejected("non-binding record supplied")
+        if binding["tenantId"] != tenant_id:
+            raise ReleaseEvidenceRejected("accessibility binding tenant mismatch")
+        if binding["releaseDigest"] != release_digest:
+            raise ReleaseEvidenceRejected("accessibility binding release mismatch")
+        source = evidence_by_id.get(binding["closureEvidenceRecordId"])
+        if source is None or sha256_digest(source) != binding["closureEvidenceDigest"]:
+            raise ReleaseEvidenceRejected("accessibility binding evidence digest mismatch")
+        if binding["surface"] not in deployed_builds:
+            raise ReleaseEvidenceRejected("accessibility binding surface is not deployed")
+        if binding["buildDigest"] != deployed_builds[binding["surface"]]:
+            raise ReleaseEvidenceRejected("accessibility binding build mismatch")
+        if binding["operatorAcceptanceDigest"] != acceptance_digests.get(binding["surface"]):
+            raise ReleaseEvidenceRejected("accessibility binding acceptance digest mismatch")
+        by_surface.setdefault(binding["surface"], []).append(binding)
+
+    accepted: list[str] = []
+    for surface in sorted(deployed_builds):
+        candidates = by_surface.get(surface, [])
+        if len(candidates) != 1:
+            raise ReleaseEvidenceRejected(
+                f"surface {surface} requires exactly one current accessibility binding"
+            )
+        binding = candidates[0]
+        if (
+            _timestamp(binding["effectiveFrom"]) > evaluated_at
+            or _timestamp(binding["expiresAt"]) <= evaluated_at
+        ):
+            raise ReleaseEvidenceRejected(f"surface {surface} accessibility binding is expired")
+        source = evidence_by_id[binding["closureEvidenceRecordId"]]
+        if (
+            source["surface"] != surface
+            or source["buildDigest"] != deployed_builds[surface]
+            or source["releaseDigest"] != release_digest
+            or source["status"] != "current"
+            or source["outcome"] != "current"
+        ):
+            raise ReleaseEvidenceRejected(f"surface {surface} binding points to invalid evidence")
+        accepted.append(binding["recordId"])
     return tuple(accepted)
 
 

@@ -9,6 +9,7 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, Worker
 
 from buyer_ops_contracts.journey_workflow import start_captured_journey_async
+from buyer_ops_contracts.operator_commands import TemporalWorkflowSignalDispatcher
 from buyer_ops_contracts.temporal_workflows import (
     BuyerJourneyWorkflow,
     CompensationActivities,
@@ -17,6 +18,7 @@ from buyer_ops_contracts.temporal_workflows import (
     NurtureChildWorkflow,
     QualificationChildWorkflow,
     ReconciliationActivities,
+    TransactionCoordinationWorkflow,
     buyer_journey_workflow_runner,
     create_temporal_worker,
     start_buyer_journey_workflow,
@@ -284,6 +286,73 @@ def test_buyer_journey_workflow_reconciles_current_canonical_state() -> None:
     asyncio.run(scenario())
 
 
+def test_temporal_outbox_dispatcher_delivers_signals_to_the_exact_run() -> None:
+    async def scenario() -> None:
+        # Resume deliberately requests a fresh canonical reconciliation; retain the
+        # latest snapshot so the test exercises that production recovery contract.
+        snapshots = [_state(1, "captured"), _state(2, "identified"), _state(2, "identified")]
+
+        @activity.defn(name="reconcile_journey_state")
+        async def reconcile(request: dict) -> dict:
+            assert request == {"tenant_id": "tenant-1", "journey_id": "journey-1"}
+            return snapshots.pop(0)
+
+        async with (
+            await WorkflowEnvironment.start_time_skipping(**_test_server_options()) as environment,
+            create_temporal_worker(
+                environment.client,
+                _worker_configuration("outbox-dispatcher-test"),
+                activities=[reconcile],
+            ),
+        ):
+            handle = await start_buyer_journey_workflow(
+                environment.client,
+                _input(),
+                task_queue="outbox-dispatcher-test",
+            )
+            await _wait_for_version(handle, 1)
+            run_id = getattr(handle, "result_run_id", None) or getattr(
+                handle, "first_execution_run_id", None
+            )
+            assert run_id
+            dispatcher = TemporalWorkflowSignalDispatcher(environment.client)
+            canonical_receipt = await dispatcher.dispatch(
+                workflow_id=str(handle.id),
+                run_id=str(run_id),
+                signal_name="canonical_changed",
+                signal_id="event-outbox-2",
+                payload={
+                    "message_type": "canonical_changed",
+                    "schema_version": "ot01-canonical-change/1.0.0",
+                    "tenant_id": "tenant-1",
+                    "journey_id": "journey-1",
+                    "event_id": "event-outbox-2",
+                    "observed_canonical_version": 2,
+                },
+            )
+            assert canonical_receipt == f"temporal:{handle.id}:{run_id}:event-outbox-2"
+            state = await _wait_for_version(handle, 2)
+            assert state["ingress_state"] == "identified"
+            await dispatcher.dispatch(
+                workflow_id=str(handle.id),
+                run_id=str(run_id),
+                signal_name="pause",
+                signal_id="command-outbox-pause",
+                payload={},
+            )
+            await dispatcher.dispatch(
+                workflow_id=str(handle.id),
+                run_id=str(run_id),
+                signal_name="resume",
+                signal_id="command-outbox-resume",
+                payload={},
+            )
+            await handle.signal(BuyerJourneyWorkflow.stop)
+            assert await handle.result() == state
+
+    asyncio.run(scenario())
+
+
 def test_buyer_journey_workflow_survives_worker_replacement() -> None:
     async def scenario() -> None:
         snapshots = [_state(1, "captured"), _state(2, "identified")]
@@ -403,6 +472,18 @@ def test_domain_child_skeletons_hold_only_reconciled_canonical_views() -> None:
         async def reconcile(request: dict) -> dict:
             return _state(1, "identified")
 
+        @activity.defn(name="evaluate_qualification")
+        async def evaluate_qualification(request: dict) -> dict:
+            return {"input_set": {}, "next_question": {}, "readiness": {}}
+
+        @activity.defn(name="evaluate_nurture")
+        async def evaluate_nurture(request: dict) -> dict:
+            return {"messageType": "nurture_plan"}
+
+        @activity.defn(name="evaluate_consultation")
+        async def evaluate_consultation(request: dict) -> dict:
+            return {"messageType": "consultation_decision"}
+
         workflows = [
             QualificationChildWorkflow,
             NurtureChildWorkflow,
@@ -414,7 +495,12 @@ def test_domain_child_skeletons_hold_only_reconciled_canonical_views() -> None:
                 environment.client,
                 task_queue="domain-child-test",
                 workflows=workflows,
-                activities=[reconcile],
+                activities=[
+                    reconcile,
+                    evaluate_qualification,
+                    evaluate_nurture,
+                    evaluate_consultation,
+                ],
                 workflow_runner=buyer_journey_workflow_runner(),
             ),
         ):
@@ -551,5 +637,63 @@ def test_reconciliation_activity_retries_with_explicit_policy() -> None:
             assert attempts == 3
             await handle.signal(BuyerJourneyWorkflow.stop)
             assert await handle.result() == state
+
+    asyncio.run(scenario())
+
+
+def test_transaction_coordination_workflow_holds_confirmed_plan() -> None:
+    async def scenario() -> None:
+        @activity.defn(name="evaluate_transaction")
+        async def evaluate(request: dict) -> dict:
+            return {
+                "messageType": "transaction_coordination_plan",
+                "schemaVersion": "transaction-coordination/1.0.0",
+                "transactionId": "transaction-1",
+                "journeyId": "journey-1",
+                "executedArtifactId": "artifact-1",
+                "executedArtifactDigest": "sha256:" + "a" * 64,
+                "transactionState": "under_contract",
+                "milestones": [],
+                "unresolvedItems": [],
+                "legalInterpretation": False,
+            }
+
+        async with (
+            await WorkflowEnvironment.start_time_skipping(**_test_server_options()) as environment,
+            Worker(
+                environment.client,
+                task_queue="transaction-coordination-test",
+                workflows=[TransactionCoordinationWorkflow],
+                activities=[evaluate],
+                workflow_runner=buyer_journey_workflow_runner(),
+            ),
+        ):
+            handle = await environment.client.start_workflow(
+                TransactionCoordinationWorkflow.run,
+                {
+                    "message_type": "transaction_workflow_input",
+                    "schema_version": "transaction-coordination/1.0.0",
+                    "tenant_id": "tenant-1",
+                    "journey_id": "journey-1",
+                    "transaction_id": "transaction-1",
+                    "runtime_policy": _input()["runtime_policy"],
+                },
+                id="transaction-coordination:transaction-1",
+                task_queue="transaction-coordination-test",
+            )
+            for _ in range(100):
+                plan = await handle.query(TransactionCoordinationWorkflow.current_plan)
+                if plan is not None:
+                    break
+                await asyncio.sleep(0.01)
+            assert plan is not None
+            assert plan["legalInterpretation"] is False
+            await handle.signal(TransactionCoordinationWorkflow.stop)
+            assert await handle.result() == plan
+            replay = await Replayer(
+                workflows=[TransactionCoordinationWorkflow],
+                workflow_runner=buyer_journey_workflow_runner(),
+            ).replay_workflow(await handle.fetch_history())
+            assert replay.replay_failure is None
 
     asyncio.run(scenario())

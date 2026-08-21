@@ -148,6 +148,7 @@ def validate_operator_semantics(record: dict[str, Any]) -> None:
                 "authorization_update",
                 "prior_approval_update",
                 "revoked_approval_record",
+                "workflow_reference_update",
             ):
                 nested = mutation.get(field)
                 if nested is None:
@@ -241,6 +242,84 @@ def validate_operator_semantics(record: dict[str, Any]) -> None:
                             "OPERATOR_APPROVAL_REVOCATION_BINDING",
                             "$.mutation",
                             "approval revocation must atomically close the target and add its exact revoked successor",
+                        )
+                    )
+            elif kind == "approval_decision":
+                prior = mutation["prior_approval_update"]
+                decided = mutation["decided_approval_record"]
+                expected_decision = "approved" if record["command_type"] == "approve" else "denied"
+                immutable_fields = (
+                    "approverType",
+                    "approverId",
+                    "actionClass",
+                    "actionIntentId",
+                    "payloadDigest",
+                    "scope",
+                    "expiresAt",
+                )
+                if (
+                    prior["recordType"] != "Approval"
+                    or prior["id"] != record["target_record_id"]
+                    or prior["version"] != record["expected_version"] + 1
+                    or prior["status"] != "superseded"
+                    or prior["decision"] != "pending"
+                    or decided["recordType"] != "Approval"
+                    or decided["version"] != 1
+                    or decided["decision"] != expected_decision
+                    or decided.get("supersedesId") != record["target_record_id"]
+                    or prior.get("effectiveTo") != decided.get("effectiveFrom")
+                    or any(prior[field] != decided[field] for field in immutable_fields)
+                ):
+                    violations.append(
+                        Violation(
+                            "OPERATOR_APPROVAL_DECISION_BINDING",
+                            "$.mutation",
+                            "approval decision must atomically close a pending target and add its exact decided successor",
+                        )
+                    )
+            elif kind == "workflow_command":
+                workflow = mutation["workflow_reference_update"]
+                command_type = record["command_type"]
+                expected_signal = {
+                    "pause_workflow": "pause",
+                    "resume_workflow": "resume",
+                    "request_reconciliation": "canonical_changed",
+                }[command_type]
+                expected_version = (
+                    record["expected_version"]
+                    if record["target_record_type"] == "WorkflowReference"
+                    else mutation["workflow_reference_expected_version"]
+                )
+                expected_payload: dict[str, Any] = {}
+                if expected_signal == "canonical_changed":
+                    expected_payload = {
+                        "message_type": "canonical_changed",
+                        "schema_version": "ot01-canonical-change/1.0.0",
+                        "tenant_id": record["tenant_id"],
+                        "journey_id": record["journey_id"],
+                        "event_id": mutation["signal_id"],
+                        "observed_canonical_version": workflow["version"],
+                    }
+                if (
+                    record["target_record_type"] not in {"WorkflowReference", "EffectAttempt"}
+                    or workflow["recordType"] != "WorkflowReference"
+                    or (
+                        record["target_record_type"] == "WorkflowReference"
+                        and workflow["id"] != record["target_record_id"]
+                    )
+                    or workflow["tenantId"] != record["tenant_id"]
+                    or workflow["subjectId"] != record["journey_id"]
+                    or workflow["version"] != expected_version + 1
+                    or mutation["signal_name"] != expected_signal
+                    or mutation["signal_payload"] != expected_payload
+                    or (expected_signal == "pause" and workflow["executionState"] != "waiting")
+                    or (expected_signal == "resume" and workflow["executionState"] != "running")
+                ):
+                    violations.append(
+                        Violation(
+                            "OPERATOR_WORKFLOW_COMMAND_BINDING",
+                            "$.mutation",
+                            "workflow command must bind the exact successor, signal, scope, and state",
                         )
                     )
     if violations:

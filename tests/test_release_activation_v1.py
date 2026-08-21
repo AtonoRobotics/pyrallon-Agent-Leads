@@ -26,7 +26,7 @@ def _activation(**overrides: object) -> dict:
         "buildDigest": "sha256:" + "a" * 64,
         "contractManifestDigest": "sha256:" + "b" * 64,
         "policyVersion": "policy-1",
-        "enabledCapabilities": ["connector-1:send"],
+        "enabledCapabilities": ["send"],
         "requiredGateIds": ["GATE-001"],
         "gateEvidence": [
             {
@@ -206,7 +206,6 @@ def test_signer_authority_and_connector_mapping_have_no_implementation_defaults(
         connection,  # type: ignore[arg-type]
         tenant_id="tenant-1",
         authority_command="owner_declared_activation_command",
-        scope=lambda activation: str(activation["releaseId"]),
     )
     assert authority.verify(_activation(), evaluated_at=datetime(2026, 8, 19, 12, tzinfo=UTC))
     denied = _activation(policyVersion="policy-2")
@@ -215,8 +214,7 @@ def test_signer_authority_and_connector_mapping_have_no_implementation_defaults(
     connection.cursor_instance.payload = _activation()
     selected = SelectedReleaseActivationAuthority(
         _repository(connection),
-        activation_record_id=lambda request: str(request["activationRecordId"]),
-        capability_id=lambda request: f"{request['connectorId']}:{request['capability']}",
+        activation_record_id="activation-1",
     )
     assert selected.authorizes(
         {

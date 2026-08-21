@@ -87,6 +87,8 @@ class MetricObservation(BaseModel):
     metricId: Id
     value: float
     unit: Unit
+    startEventType: Id
+    endEventType: Id
     eventStartedAt: Time
     eventEndedAt: Time
     observedAt: Time

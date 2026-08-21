@@ -1,0 +1,3 @@
+# Migration and compatibility contract
+
+Closure schemas are additive under minor versions. A major version is required for a changed enum, required field, identity rule, authority rule, or state transition. Existing canonical records remain readable; migration creates a new projection/compiler version and records the old digest. Rebuilding from the same canonical watermark must preserve old bytes under the old version. Backfill is append-only, tenant-batched, resumable by cursor, and pauses on contradiction. Rollback removes only derived projections and outbox attempts; it never deletes canonical records or evidence. Each migration must provide forward fixture, rollback fixture, dual-read comparison, and a per-tenant audit report.

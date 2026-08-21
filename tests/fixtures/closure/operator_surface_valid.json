@@ -144,7 +144,12 @@
     "idempotency_key": "value",
     "issued_at": "2030-01-01T00:00:00Z",
     "expires_at": "2030-01-01T00:05:00Z",
-    "reason": "value"
+    "reason": "value",
+    "mutation": {
+      "kind": "approval_decision",
+      "prior_approval_update": {"recordType": "Approval"},
+      "decided_approval_record": {"recordType": "Approval"}
+    }
   },
   "OperatorPolicy": {
     "message_type": "operator_policy",
