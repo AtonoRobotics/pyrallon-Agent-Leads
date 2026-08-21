@@ -1,0 +1,2 @@
+{"activation_id":"act1","release_id":"r1","capability_id":"google:gmail.send","evidence_steps":["preflight","consent","permit","request","provider_receipt","reconciliation","canonical_mutation","rollback_or_retry"],"release_hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","signed_by":"op1"}
+
