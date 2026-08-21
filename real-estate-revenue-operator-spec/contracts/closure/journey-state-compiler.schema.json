@@ -1,0 +1,2 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://pyrallon.local/contracts/journey-state-compiler/v2","type":"object","required":["journey_id","compiler_version","canonical_watermark","event_cursor","state_digest"],"properties":{"journey_id":{"type":"string"},"compiler_version":{"const":"2.0"},"canonical_watermark":{"type":"string"},"event_cursor":{"type":"string"},"state_digest":{"pattern":"^[a-f0-9]{64}$","type":"string"}},"additionalProperties":false}
+
