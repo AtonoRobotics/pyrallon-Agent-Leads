@@ -1,0 +1,1 @@
+{"tenant_id":"t1","journey_id":"j1","projection_contract_version":"2.0","lifecycle":"active","attention":"none","authority":"authorized","blockers":[],"next_actions":["review_matches"],"source_watermark":"w1","etag":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}

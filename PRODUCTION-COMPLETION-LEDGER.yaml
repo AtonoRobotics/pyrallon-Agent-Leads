@@ -1,0 +1,369 @@
+version: 1
+project: buyer-operations
+specification: REAL-ESTATE-BUYER-AGENT-AI-PRD.md
+release_complete: false
+
+scope:
+  mode: whole_repository_production
+  execution_policy:
+    completion_target: whole_repository
+    allow_scope_reduction: false
+    allow_partial_release: false
+    allow_mvp_or_slice_mode: false
+    required_workstream_set: exact
+  required_documents:
+    - REAL-ESTATE-BUYER-AGENT-AI-PRD.md
+    - IMPLEMENTATION-PACKET-INDEX.md
+    - PRODUCTION-GATE-REGISTRY.yaml
+    - PRODUCTION-RUNTIME-CLOSURE-CONTRACT.md
+    - OT01-COMPLETION-LEDGER.yaml
+    - PRODUCTION-EXECUTION-MANDATE.yaml
+    - PRODUCTION-EXECUTION-STATE.yaml
+  release_requires: [all_workstreams_complete, all_ledger_items_complete, automated_verification_passes, live_end_to_end_evidence]
+  workstreams:
+    - {id: domain_and_workflows, title: Canonical domain and durable workflows, ledger_items: [FR-01, FR-04, FR-05, FR-07, FR-09, FR-10, FR-16, FR-17, FR-19, FR-20, FR-26, PKT-01, PKT-04, PKT-08], status: incomplete, blockers: [full_domain_workflow_completion]}
+    - {id: provider_ingress_and_senders, title: Provider ingress and outbound senders, ledger_items: [FR-02, FR-03, FR-15, PKT-05], status: incomplete, blockers: [provider_ingress_sender_activation]}
+    - {id: cognitive_production_routing, title: Production cognitive routing and evaluations, ledger_items: [FR-04, FR-12, FR-13, FR-17, FR-21, FR-22, FR-26, PKT-07, PKT-08], status: incomplete, blockers: [production_cognitive_routes_and_evaluations]}
+    - {id: nurture_and_transaction_operations, title: Nurture representation and transaction operations, ledger_items: [FR-05, FR-07, FR-08, FR-09, FR-12, PKT-04, PKT-08, PKT-10], status: incomplete, blockers: [nurture_transaction_runtime]}
+    - {id: calendar_and_esignature, title: Calendar and e-signature providers, ledger_items: [FR-06, FR-07, PKT-09], status: incomplete, blockers: [calendar_and_esignature_providers]}
+    - {id: connectors_and_webhooks, title: Governed connectors webhooks reconciliation and compensation, ledger_items: [FR-03, FR-08, FR-14, FR-15, FR-24, PKT-03, PKT-06], status: incomplete, blockers: [provider_connectors_and_recovery]}
+    - {id: operator_api_and_web_ui, title: Operator API and complete web workspace, ledger_items: [FR-01, FR-08, FR-11, FR-23, PKT-10, SURFACE-API, SURFACE-UI], status: incomplete, blockers: [full_operator_surface]}
+    - {id: ios_client_and_offline_contract, title: Native iOS offline and reauthentication contract, ledger_items: [FR-11], status: incomplete, blockers: [ios_client_not_implemented]}
+    - {id: postgres_backup_and_restore, title: PostgreSQL backup restore and artifact durability, ledger_items: [FR-10, FR-19, FR-21, FR-25, PKT-01, PKT-02, SURFACE-POSTGRES], status: incomplete, blockers: [backup_restore_and_artifact_evidence]}
+    - {id: temporal_replay_and_recovery, title: Temporal replay recovery and compensation, ledger_items: [PKT-04, SURFACE-TEMPORAL], status: incomplete, blockers: [temporal_replay_and_compensation_evidence]}
+    - {id: security_observability_and_evaluations, title: Security observability retention and evaluations, ledger_items: [FR-12, FR-13, FR-18, FR-21, FR-22, FR-24, FR-25, FR-26, PKT-02, PKT-03, PKT-07], status: incomplete, blockers: [full_security_observability_evaluation_suite]}
+    - {id: deployment_and_release_operations, title: Production deployment rollback and release operations, ledger_items: [FR-01, FR-10, FR-11, FR-18, FR-23, PKT-00, SURFACE-API, SURFACE-POSTGRES, SURFACE-TEMPORAL, SURFACE-CI], status: incomplete, blockers: [production_deployment_and_release_evidence]}
+
+# This is intentionally exhaustive. Every required item needs implementation,
+# focused verification, and an end-to-end proof before release_complete may be true.
+requirements:
+  - id: FR-01
+    title: Agent and brokerage configuration
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-1"
+    implementation: [src/buyer_ops_contracts]
+    tests: [tests]
+    e2e: [tests/test_control_plane.py]
+    status: incomplete
+    blockers: [configuration_and_ui]
+  - id: FR-02
+    title: Lead acquisition
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-2"
+    implementation: [src/buyer_ops_contracts/ingress.py, src/buyer_ops_contracts/ingress_runtime.py, migrations/0023_ingress_artifact_objects.sql]
+    tests: [tests/test_ingress.py, tests/test_ingress_service.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [production_ingress_adapters]
+  - id: FR-03
+    title: Inbound response
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-3"
+    implementation: [src/buyer_ops_contracts/acknowledgment.py, src/buyer_ops_contracts/ingress.py]
+    tests: [tests/test_acknowledgment.py, tests/test_ingress_service.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [production_sender_and_ingress]
+  - id: FR-04
+    title: Buyer qualification
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-4"
+    implementation: [src/buyer_ops_contracts/context_compiler.py, src/buyer_ops_contracts/qualification_runtime.py, src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py]
+    tests: [tests/test_context_compiler.py, tests/test_qualification_runtime.py, tests/test_temporal_workflow.py]
+    e2e: [tests/test_temporal_workflow.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [production_cognitive_route]
+  - id: FR-05
+    title: Autonomous nurture
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-5"
+    implementation: [NURTURE-PLAN.schema.json, src/buyer_ops_contracts/nurture_runtime.py, src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py]
+    tests: [tests/test_nurture_runtime.py, tests/test_temporal_workflow.py]
+    e2e: [tests/test_temporal_workflow.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [nurture_policy_and_runtime]
+  - id: FR-06
+    title: Consultation conversion and calendar operation
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-6"
+    implementation: [CONSULTATION-OPERATION.schema.json, src/buyer_ops_contracts/calendar_runtime.py, src/buyer_ops_contracts/calendar_operations.py, src/buyer_ops_contracts/consultation_runtime.py, src/buyer_ops_contracts/reminder_runtime.py, src/buyer_ops_contracts/contract_acceptance.py, src/buyer_ops_contracts/connector_runtime.py, src/buyer_ops_contracts/provider_adapters.py, src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py]
+    tests: [tests/test_calendar_runtime.py, tests/test_consultation_runtime.py, tests/test_reminder_runtime.py, tests/test_journey_state.py, tests/test_temporal_workflow.py]
+    e2e: [tests/test_postgres_integration.py, scripts/run_live_production_e2e.py, scripts/run_live_calendar_esignature_e2e.py]
+    status: incomplete
+    blockers: [calendar_adapter_and_policy]
+  - id: FR-07
+    title: Representation onboarding
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-7"
+    implementation: [REPRESENTATION-OPERATION.schema.json, src/buyer_ops_contracts/activation.py, src/buyer_ops_contracts/connector_authorization.py, src/buyer_ops_contracts/connector_runtime.py, src/buyer_ops_contracts/provider_adapters.py, src/buyer_ops_contracts/esignature_operations.py, src/buyer_ops_contracts/esignature_repository.py, src/buyer_ops_contracts/representation_operation_runtime.py, src/buyer_ops_contracts/representation_runtime.py, migrations/0028_platform_oauth_docusign.sql, src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py]
+    tests: [tests/test_activation.py, tests/test_provider_adapters.py, tests/test_representation_operation_runtime.py, tests/test_representation_runtime.py]
+    e2e: [tests/test_postgres_integration.py, scripts/run_live_production_e2e.py, scripts/run_live_calendar_esignature_e2e.py]
+    status: incomplete
+    blockers: [esignature_adapter_and_policy]
+  - id: FR-08
+    title: Represented-buyer operations
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-8"
+    implementation: [src/buyer_ops_contracts/canonical_repository.py]
+    tests: [tests/test_canonical_repository.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [operator_surface_and_connectors]
+  - id: FR-09
+    title: Under-contract coordination
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-9"
+    implementation: [TRANSACTION-COORDINATION.schema.json, src/buyer_ops_contracts/transaction_runtime.py, src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py]
+    tests: [tests/test_transaction_runtime.py, tests/test_temporal_workflow.py]
+    e2e: [tests/test_temporal_workflow.py, tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [transaction_workflow_contract]
+  - id: FR-10
+    title: CRM system of record behavior
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-10"
+    implementation: [src/buyer_ops_contracts/canonical_repository.py, migrations]
+    tests: [tests/test_canonical_repository.py, tests/test_postgres_integration.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [production_migration_evidence]
+  - id: FR-11
+    title: Agent control surface
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-11"
+    implementation: [ui, src/buyer_ops_contracts/control_plane.py]
+    tests: [tests/test_control_plane.py]
+    e2e: [tests/e2e]
+    status: incomplete
+    blockers: [ui_e2e_accessibility_and_full_views]
+  - id: FR-12
+    title: Continuous outcome optimization
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-12"
+    implementation: [src/buyer_ops_contracts/telemetry.py]
+    tests: [tests/test_ratio_telemetry.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [optimization_runtime_and_evidence]
+  - id: FR-13
+    title: Provider-neutral cognitive runtime gateway
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-13"
+    implementation: [src/buyer_ops_contracts/gateway_routing.py, src/buyer_ops_contracts/gateway_runtime.py, src/buyer_ops_contracts/cognition_authorization.py, src/buyer_ops_contracts/cognitive_credentials_runtime.py, src/buyer_ops_contracts/cognitive_service.py]
+    tests: [tests/test_gateway_routing.py, tests/test_gateway_runtime.py, tests/test_cognition_authorization.py, tests/test_cognitive_service.py]
+    e2e: [tests/test_temporal_workflow.py, scripts/run_live_cognitive_e2e.py]
+    status: incomplete
+    blockers: [production_credentials_and_adapters]
+  - id: FR-14
+    title: MCP and connector boundary
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-14"
+    implementation: [src/buyer_ops_contracts/connector_gateway.py, src/buyer_ops_contracts/connector_service.py, src/buyer_ops_contracts/connector_authorization.py, src/buyer_ops_contracts/connector_runtime.py, src/buyer_ops_contracts/provider_adapters.py]
+    tests: [tests/test_connector_gateway.py, tests/test_connector_service.py, tests/test_connector_authorization.py, tests/test_connector_runtime.py, tests/test_provider_adapters.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [provider_connectors]
+  - id: FR-15
+    title: Event ingestion and external application operation
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-15"
+    implementation: [src/buyer_ops_contracts/ingress.py]
+    tests: [tests/test_ingress.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [webhook_adapters]
+  - id: FR-16
+    title: Versioned real-estate ontology and semantic model
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-16"
+    implementation: [ONTOLOGY-V0.schema.json, src/buyer_ops_contracts/generated/ontology.py, src/buyer_ops_contracts/canonical_repository.py]
+    tests: [tests/test_contracts.py, tests/test_canonical_repository.py, tests/test_specification_closure.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [full_ontology_predicate_and_migration_evidence]
+  - id: FR-17
+    title: Real-estate specialization and context integrity
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-17"
+    implementation: [CONTEXT-COMPILER.schema.json, src/buyer_ops_contracts/context_compiler.py, src/buyer_ops_contracts/semantic.py]
+    tests: [tests/test_context_compiler.py, tests/test_semantic.py, tests/test_gateway_runtime.py]
+    e2e: [tests/test_temporal_workflow.py]
+    status: incomplete
+    blockers: [approved_knowledge_and_context_evidence]
+  - id: FR-18
+    title: Configuration over hard-coded product choices
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-18"
+    implementation: [src/buyer_ops_contracts/connector_authorization.py, src/buyer_ops_contracts/cognition_authorization.py, compose.production.yml, .env.production.example]
+    tests: [tests/test_connector_authorization.py, tests/test_cognition_authorization.py, tests/test_worker_configuration.py]
+    e2e: [tests/test_control_plane.py]
+    status: incomplete
+    blockers: [owner_published_configuration_and_policy]
+  - id: FR-19
+    title: Canonical parties journeys conversations and epistemic state
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-19"
+    implementation: [ONTOLOGY-V0.schema.json, src/buyer_ops_contracts/journey_state.py, src/buyer_ops_contracts/canonical_admission.py]
+    tests: [tests/test_journey_state.py, tests/test_canonical_admission.py, tests/test_canonical_repository.py]
+    e2e: [tests/test_postgres_integration.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [full_party_epistemic_and_retention_evidence]
+  - id: FR-20
+    title: One visible agent habitat kernel and durable orchestration
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-20"
+    implementation: [HABITAT-EFFECT.schema.json, TEMPORAL-WORKFLOW.schema.json, src/buyer_ops_contracts/habitat.py, src/buyer_ops_contracts/temporal_workflows.py]
+    tests: [tests/test_habitat.py, tests/test_temporal_workflow.py, tests/test_canonical_habitat.py]
+    e2e: [scripts/run_live_production_e2e.py, tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [provider_effect_replay_compensation_and_concurrency_evidence]
+  - id: FR-21
+    title: Layered memory knowledge graph and semantic retrieval
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-21"
+    implementation: [src/buyer_ops_contracts/context_compiler.py, src/buyer_ops_contracts/evidence.py, src/buyer_ops_contracts/artifacts.py]
+    tests: [tests/test_context_compiler.py, tests/test_evidence.py, tests/test_artifacts.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [memory_graph_retrieval_and_artifact_store]
+  - id: FR-22
+    title: Context sufficiency and cognitive availability degradation
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-22"
+    implementation: [COGNITIVE-RUNTIME-GATEWAY.schema.json, GATEWAY-RUNTIME-CONFIG.schema.json, src/buyer_ops_contracts/gateway_runtime.py, src/buyer_ops_contracts/cognitive_service.py]
+    tests: [tests/test_gateway_runtime.py, tests/test_cognitive_service.py, tests/test_cognition_authorization.py]
+    e2e: [tests/test_temporal_workflow.py]
+    status: incomplete
+    blockers: [live_cognitive_routes_capacity_and_degradation_evidence]
+  - id: FR-23
+    title: Deployment product surfaces and offline mobile operation
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-23"
+    implementation: [compose.production.yml, ui, ios/BuyerOpsClient, src/buyer_ops_contracts/control_plane.py]
+    tests: [tests/test_control_plane.py, tests/e2e/test_workspace_ui.py]
+    e2e: [scripts/run_live_production_e2e.py, scripts/verify_ios_surface.py]
+    status: incomplete
+    blockers: [browser_accessibility_and_native_ios_build_evidence]
+  - id: FR-24
+    title: Connector identity and delegated authority
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-24"
+    implementation: [src/buyer_ops_contracts/connector_authorization.py, src/buyer_ops_contracts/connector_gateway.py, src/buyer_ops_contracts/connector_runtime.py]
+    tests: [tests/test_connector_authorization.py, tests/test_connector_gateway.py, tests/test_connector_runtime.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [real_connector_grants_inventory_and_webhook_evidence]
+  - id: FR-25
+    title: Tamper-evident evidence and record-class retention
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-25"
+    implementation: [src/buyer_ops_contracts/evidence.py, src/buyer_ops_contracts/artifacts.py, migrations/0002_evidence_ledger.sql]
+    tests: [tests/test_evidence.py, tests/test_artifacts.py, tests/test_postgres_integration.py]
+    e2e: [scripts/postgres_backup_restore.py, tests/test_postgres_backup_restore.py]
+    status: incomplete
+    blockers: [retention_policy_object_lock_and_restore_evidence]
+  - id: FR-26
+    title: Inbound-only AI voice for the initial release
+    spec: "REAL-ESTATE-BUYER-AGENT-AI-PRD.md#FR-26"
+    implementation: [src/buyer_ops_contracts/connector_gateway.py, src/buyer_ops_contracts/connector_authorization.py, src/buyer_ops_contracts/cognitive_service.py, src/buyer_ops_contracts/voice_runtime.py, src/buyer_ops_contracts/voice_repository.py, migrations/0027_voice_call_state.sql]
+    tests: [tests/test_connector_gateway.py, tests/test_cognitive_service.py, tests/test_cognition_authorization.py, tests/test_voice_runtime.py, tests/test_ingress_runtime.py]
+    e2e: [tests/test_postgres_integration.py, scripts/run_live_cognitive_e2e.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [inbound_voice_provider_policy_consent_and_evaluation]
+
+packets:
+  - id: PKT-00
+    title: Schema generation and compatibility
+    implementation: [src/buyer_ops_contracts/generated, scripts/verify_contracts.py]
+    tests: [tests/test_generated_models.py, tests/test_contracts.py]
+    e2e: [tests/test_artifacts.py]
+    status: complete
+    blockers: []
+    verification_commands:
+      - "uv run python scripts/verify_contracts.py"
+      - "uv run pytest -q tests/test_generated_models.py tests/test_contracts.py tests/test_artifacts.py"
+  - id: PKT-01
+    title: PostgreSQL canonical CRM and ontology
+    implementation: [src/buyer_ops_contracts/canonical_repository.py, migrations]
+    tests: [tests/test_postgres_integration.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [predicate_specific_verification]
+  - id: PKT-02
+    title: Evidence ledger and artifact boundary
+    implementation: [src/buyer_ops_contracts/evidence.py, src/buyer_ops_contracts/artifacts.py, src/buyer_ops_contracts/ingress_runtime.py, migrations/0023_ingress_artifact_objects.sql]
+    tests: [tests/test_evidence.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [production_artifact_store]
+  - id: PKT-03
+    title: Habitat admission and effect-permit service
+    implementation: [src/buyer_ops_contracts/habitat.py, src/buyer_ops_contracts/habitat_repository.py, src/buyer_ops_contracts/connector_runtime.py, migrations/0024_effect_dispatch_claim.sql]
+    tests: [tests/test_habitat.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [inventory_verifier_and_live_effects]
+  - id: PKT-04
+    title: Temporal workflow foundation
+    implementation: [src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py, src/buyer_ops_contracts/qualification_runtime.py, src/buyer_ops_contracts/nurture_runtime.py, src/buyer_ops_contracts/consultation_runtime.py, src/buyer_ops_contracts/reminder_runtime.py, src/buyer_ops_contracts/representation_operation_runtime.py, src/buyer_ops_contracts/transaction_runtime.py]
+    tests: [tests/test_temporal_workflow.py, tests/test_worker_configuration.py]
+    e2e: [tests/test_temporal_workflow.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [production_replay_and_compensation]
+  - id: PKT-05
+    title: Deterministic ingress identity consent acknowledgment
+    implementation: [src/buyer_ops_contracts/ingress.py, src/buyer_ops_contracts/ingress_runtime.py, src/buyer_ops_contracts/acknowledgment.py]
+    tests: [tests/test_ingress.py, tests/test_acknowledgment.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [live_ingress_and_sender]
+  - id: PKT-06
+    title: Governed connector gateway
+    implementation: [src/buyer_ops_contracts/connector_gateway.py, src/buyer_ops_contracts/connector_runtime.py, src/buyer_ops_contracts/provider_adapters.py]
+    tests: [tests/test_connector_gateway.py, tests/test_connector_runtime.py, tests/test_connector_authorization.py, tests/test_provider_adapters.py]
+    e2e: [tests/test_postgres_integration.py]
+    status: incomplete
+    blockers: [provider_adapters]
+  - id: PKT-07
+    title: Context compiler and cognitive gateway
+    implementation: [src/buyer_ops_contracts/context_compiler.py, src/buyer_ops_contracts/gateway_routing.py, src/buyer_ops_contracts/gateway_runtime.py, src/buyer_ops_contracts/cognition_authorization.py]
+    tests: [tests/test_context_compiler.py, tests/test_gateway_routing.py, tests/test_gateway_runtime.py, tests/test_cognition_authorization.py]
+    e2e: [tests/test_temporal_workflow.py]
+    status: incomplete
+    blockers: [production_routes_credentials_capacity]
+  - id: PKT-08
+    title: Progressive qualification cognition
+    implementation: [src/buyer_ops_contracts/context_compiler.py, src/buyer_ops_contracts/qualification_runtime.py, src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py]
+    tests: [tests/test_context_compiler.py, tests/test_qualification_runtime.py, tests/test_temporal_workflow.py]
+    e2e: [tests/test_temporal_workflow.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [qualification_policy_and_cognition]
+  - id: PKT-09
+    title: Consultation scheduling and reconciliation
+    implementation: [CONSULTATION-OPERATION.schema.json, src/buyer_ops_contracts/calendar_runtime.py, src/buyer_ops_contracts/calendar_operations.py, src/buyer_ops_contracts/consultation_runtime.py, src/buyer_ops_contracts/provider_adapters.py, src/buyer_ops_contracts/esignature_operations.py, src/buyer_ops_contracts/esignature_repository.py, src/buyer_ops_contracts/temporal_workflows.py, src/buyer_ops_contracts/worker_main.py]
+    tests: [tests/test_calendar_runtime.py, tests/test_consultation_runtime.py, tests/test_derived_contract_repository.py, tests/test_provider_adapters.py]
+    e2e: [tests/test_postgres_integration.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [calendar_provider]
+  - id: PKT-10
+    title: Operator exception and decision surface
+    implementation: [src/buyer_ops_contracts/control_plane.py, ui]
+    tests: [tests/test_control_plane.py]
+    e2e: [tests/e2e]
+    status: incomplete
+    blockers: [ui_e2e_accessibility_and_full_views]
+
+surfaces:
+  - id: SURFACE-API
+    title: Authenticated control-plane API
+    implementation: [src/buyer_ops_contracts/control_plane.py]
+    tests: [tests/test_control_plane.py]
+    e2e: [tests/test_control_plane.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [production_api_deployment]
+  - id: SURFACE-UI
+    title: Agent workspace UI
+    implementation: [ui, ios/BuyerOpsClient]
+    tests: [tests/e2e, ios/BuyerOpsClient/Tests]
+    e2e: [tests/e2e, scripts/verify_ios_surface.py]
+    status: incomplete
+    blockers: [ui_e2e_accessibility_and_full_views]
+  - id: SURFACE-POSTGRES
+    title: PostgreSQL production persistence
+    implementation: [migrations, scripts/apply_migrations.py, scripts/postgres_backup_restore.py, src/buyer_ops_contracts/ingress_runtime.py, src/buyer_ops_contracts/connector_runtime.py]
+    tests: [tests/test_postgres_integration.py, tests/test_postgres_backup_restore.py]
+    e2e: [tests/test_postgres_integration.py, scripts/postgres_backup_restore.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [production_backup_and_restore_evidence]
+  - id: SURFACE-TEMPORAL
+    title: Existing shared Temporal deployment
+    implementation: [src/buyer_ops_contracts/worker_main.py, compose.production.yml]
+    tests: [tests/test_temporal_workflow.py]
+    e2e: [tests/test_temporal_workflow.py, scripts/run_live_production_e2e.py]
+    status: incomplete
+    blockers: [production_replay_and_worker_evidence]
+  - id: SURFACE-CI
+    title: Mechanical repository release gate
+    implementation: [scripts/verify_production_ledger.py, .github/workflows/contracts.yml]
+    tests: [tests/test_production_ledger.py]
+    e2e: [scripts/verify_production_ledger.py]
+    status: complete
+    blockers: []
+    verification_commands:
+      - "uv run pytest -q tests/test_production_ledger.py"
+      - "uv run python scripts/verify_production_ledger.py --check"

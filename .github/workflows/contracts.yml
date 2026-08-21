@@ -39,6 +39,8 @@ jobs:
           cache: pip
       - run: python -m pip install uv==0.11.16
       - run: uv sync --locked --extra dev
+      - name: Run mandatory whole-repository production guard
+        run: uv run python scripts/production_guard.py
       - name: Cache Temporal test server
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
@@ -75,10 +77,18 @@ jobs:
         run: uv run python scripts/verify_gate_registry.py
       - name: Verify OT-01 completion ledger
         run: uv run python scripts/verify_completion_ledger.py
+      - name: Verify production completion ledger
+        run: uv run python scripts/verify_production_ledger.py --check
+      - name: Verify whole-repository production scope
+        run: uv run python scripts/verify_production_scope.py
+      - name: Verify whole-repository production execution cursor
+        run: uv run python scripts/verify_production_execution.py
       - name: Verify canonical migration integrity
         run: uv run python scripts/verify_migrations.py
       - name: Verify contract synchronization without writes
         run: uv run python scripts/sync_contracts.py --check
+      - name: Verify specification closure package
+        run: uv run python scripts/verify_spec_closure.py
       - run: uv run python scripts/verify_contracts.py
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -98,3 +108,9 @@ jobs:
             "from buyer_ops_contracts.telemetry import load_metric_catalog; catalog = load_metric_catalog(); assert catalog['catalogVersion'] == 'telemetry-slo-catalog/1.0.0'"
       - name: Scan for committed credential material
         run: uv run python scripts/scan_secrets.py
+      - name: Verify native iOS client
+        run: uv run python scripts/verify_ios_surface.py
+      - name: Verify PostgreSQL backup tooling
+        run: uv run pytest -q tests/test_postgres_backup_restore.py
+      - name: Run production evaluation contract tests
+        run: uv run pytest -q tests/test_evaluations.py
